@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Navigate } from 'react-router-dom'
 import { PageHeader } from '../components/ui/PageHeader'
 import { Badge } from '../components/ui/Badge'
@@ -10,49 +10,9 @@ import { useLicense, useActivateLicense } from '../hooks/useLicense'
 import type { LicenseInfo } from '../hooks/useLicense'
 import { useToast } from '../hooks/useToast'
 import { formatDate } from '../lib/utils'
+import { useTranslation } from '../lib/i18n'
 
-// Human-readable labels for feature flag keys returned by the API.
-const FEATURE_LABELS: Record<string, string> = {
-  multi_org:        'Multi-org management',
-  cost_reports:     'Cost reports + budget alerts',
-  audit_logs:       'Audit logs',
-  sso_oidc:         'SSO / OIDC integration',
-  custom_roles:     'Custom roles',
-  otel_tracing:     'OpenTelemetry tracing',
-  fallback_chains:  'Model fallback chains',
-}
-
-const proFeatures = [
-  'Multi-org management',
-  'Cost reports + budget alerts',
-  'Usage export (CSV/JSON)',
-  'Cross-org analytics',
-  'Unlimited data retention',
-  'Priority email support (48h)',
-]
-
-const enterpriseFeatures = [
-  'SSO / OIDC integration',
-  'Audit logs',
-  'Custom roles',
-  'OpenTelemetry tracing',
-  'Model fallback chains',
-  'Distributed rate limiting (Redis)',
-  'Unlimited data retention',
-  'Dedicated Slack support (24h)',
-]
-
-// Community plan always-on capabilities shown regardless of feature flags.
-const communityCapabilities = [
-  'Unlimited users',
-  'Full proxy with all providers',
-  'Usage tracking + analytics',
-  'Model access control',
-  'RBAC (4 built-in roles)',
-  'Invite system',
-  'Playground',
-  'API documentation',
-]
+// Global arrays removed and redefined dynamically inside components to support localization.
 
 // ---------------------------------------------------------------------------
 // Icons
@@ -114,26 +74,26 @@ function planBadgeVariant(plan: string): 'muted' | 'default' | 'success' {
   return 'muted'
 }
 
-function planLabel(plan: string): string {
+function planLabel(plan: string, t: any): string {
   if (plan === 'enterprise') return 'Enterprise'
   if (plan === 'pro') return 'Pro'
-  return 'Community'
+  return t('license.current_plan') === 'Gói hiện tại' ? 'Bản Community' : 'Community'
 }
 
-function statusBadgeVariant(status: string): 'success' | 'error' | 'muted' {
+const statusBadgeVariant = (status: string): 'success' | 'error' | 'muted' => {
   if (status === 'active') return 'success'
   if (status === 'expired') return 'error'
   return 'muted'
 }
 
-function statusLabel(status: string): string {
-  if (status === 'active') return 'Active'
-  if (status === 'expired') return 'Expired'
-  return 'Community'
+function statusLabel(status: string, t: any): string {
+  if (status === 'active') return t('license.current_plan') === 'Gói hiện tại' ? 'Đang hoạt động' : 'Active'
+  if (status === 'expired') return t('license.current_plan') === 'Gói hiện tại' ? 'Hết hạn' : 'Expired'
+  return t('license.current_plan') === 'Gói hiện tại' ? 'Bản Community' : 'Community'
 }
 
-function limitLabel(n: number): string {
-  return n < 0 ? 'Unlimited' : String(n)
+function limitLabel(n: number, t: any): string {
+  return n < 0 ? (t('license.never') === 'Không bao giờ' ? 'Không giới hạn' : 'Unlimited') : String(n)
 }
 
 function FeatureRow({ label, enabled }: { label: string; enabled: boolean }) {
@@ -168,39 +128,74 @@ function CurrentPlanPanel({
   activating,
   activateError,
 }: CurrentPlanPanelProps) {
+  const { t, language } = useTranslation()
   const isCommunity = license.edition === 'community'
+
+  const communityCapabilities = useMemo(() => {
+    return language === 'vi' ? [
+      'Không giới hạn người dùng',
+      'Proxy đầy đủ cho tất cả nhà cung cấp',
+      'Theo dõi & phân tích lượng sử dụng',
+      'Kiểm soát quyền truy cập mô hình',
+      'Phân quyền RBAC (4 vai trò tích hợp)',
+      'Hệ thống mời thành viên',
+      'Khu vực Playground',
+      'Tài liệu API',
+    ] : [
+      'Unlimited users',
+      'Full proxy with all providers',
+      'Usage tracking + analytics',
+      'Model access control',
+      'RBAC (4 built-in roles)',
+      'Invite system',
+      'Playground',
+      'API documentation',
+    ]
+  }, [language])
+
+  const FEATURE_LABELS: Record<string, string> = useMemo(() => {
+    return {
+      multi_org:        language === 'vi' ? 'Quản lý đa tổ chức' : 'Multi-org management',
+      cost_reports:     language === 'vi' ? 'Báo cáo chi phí & cảnh báo ngân sách' : 'Cost reports + budget alerts',
+      audit_logs:       language === 'vi' ? 'Nhật ký kiểm toán (Audit logs)' : 'Audit logs',
+      sso_oidc:         language === 'vi' ? 'Tích hợp SSO / OIDC' : 'SSO / OIDC integration',
+      custom_roles:     language === 'vi' ? 'Vai trò tùy chỉnh' : 'Custom roles',
+      otel_tracing:     language === 'vi' ? 'Theo dõi OpenTelemetry' : 'OpenTelemetry tracing',
+      fallback_chains:  language === 'vi' ? 'Chuỗi dự phòng mô hình' : 'Model fallback chains',
+    }
+  }, [language])
 
   return (
     <div className="rounded-lg border border-border bg-bg-secondary p-6">
       {/* Plan heading */}
       <div className="flex items-center gap-3 mb-1">
-        <h2 className="text-lg font-semibold text-text-primary">Current Plan</h2>
-        <Badge variant={planBadgeVariant(license.edition)}>{planLabel(license.edition)}</Badge>
-        <Badge variant={statusBadgeVariant(license.valid ? 'active' : 'expired')}>{statusLabel(license.valid ? 'active' : 'expired')}</Badge>
+        <h2 className="text-lg font-semibold text-text-primary">{t('license.current_plan')}</h2>
+        <Badge variant={planBadgeVariant(license.edition)}>{planLabel(license.edition, t)}</Badge>
+        <Badge variant={statusBadgeVariant(license.valid ? 'active' : 'expired')}>{statusLabel(license.valid ? 'active' : 'expired', t)}</Badge>
       </div>
 
       {/* Expiry */}
       {license.expires_at != null && (
         <p className="text-xs text-text-tertiary mb-4">
-          {license.valid ? 'Expires' : 'Expired'} {formatDate(license.expires_at)}
+          {license.valid ? (language === 'vi' ? 'Hết hạn' : 'Expires') : (language === 'vi' ? 'Đã hết hạn' : 'Expired')} {formatDate(license.expires_at)}
         </p>
       )}
 
       {/* Limits */}
       <div className="flex gap-4 mb-6 mt-4">
         <div className="flex-1 rounded-md bg-bg-tertiary px-3 py-2">
-          <div className="text-xs text-text-tertiary mb-0.5">Max Orgs</div>
-          <div className="text-sm font-semibold text-text-primary">{limitLabel(license.max_orgs)}</div>
+          <div className="text-xs text-text-tertiary mb-0.5">{t('license.max_orgs')}</div>
+          <div className="text-sm font-semibold text-text-primary">{limitLabel(license.max_orgs, t)}</div>
         </div>
         <div className="flex-1 rounded-md bg-bg-tertiary px-3 py-2">
-          <div className="text-xs text-text-tertiary mb-0.5">Max Teams</div>
-          <div className="text-sm font-semibold text-text-primary">{limitLabel(license.max_teams)}</div>
+          <div className="text-xs text-text-tertiary mb-0.5">{t('license.max_teams')}</div>
+          <div className="text-sm font-semibold text-text-primary">{limitLabel(license.max_teams, t)}</div>
         </div>
       </div>
 
       {/* Community capabilities (always enabled) */}
       <div className="space-y-2 mb-4">
-        {communityCapabilities.map(f => (
+        {communityCapabilities.map((f: string) => (
           <div key={f} className="flex items-center gap-2 text-sm text-text-secondary">
             <span className="text-success" aria-hidden="true"><IconCheck /></span>
             {f}
@@ -224,7 +219,7 @@ function CurrentPlanPanel({
       {/* Customer ID (admin-visible) */}
       {license.customer_id != null && (
         <p className="text-xs text-text-tertiary mb-4">
-          Customer ID: <span className="font-mono text-text-secondary">{license.customer_id}</span>
+          {t('license.customer_id')}: <span className="font-mono text-text-secondary">{license.customer_id}</span>
         </p>
       )}
 
@@ -232,18 +227,18 @@ function CurrentPlanPanel({
       <div className="border-t border-border pt-4">
         {!isCommunity && (
           <p className="text-xs text-text-tertiary mb-3">
-            Active license: <span className="font-mono text-success">{planLabel(license.edition)}</span>
+            Bản quyền hoạt động: <span className="font-mono text-success">{planLabel(license.edition, t)}</span>
           </p>
         )}
         <Input
-          label={isCommunity ? 'License Key' : 'Replace License Key'}
+          label={isCommunity ? t('license.key') : t('license.key_replace')}
           type="password"
           value={licenseKey}
           onChange={(e) => onLicenseKeyChange(e.target.value)}
           placeholder="eyJhbGciOiJFZERTQSJ9..."
           description={isCommunity
-            ? 'Paste your license key to activate Pro or Enterprise features.'
-            : 'Paste a new license key to change your plan.'}
+            ? t('license.key_desc_community')
+            : t('license.key_desc_paid')}
           disabled={activating}
           error={activateError ?? undefined}
           autoComplete="off"
@@ -256,7 +251,7 @@ function CurrentPlanPanel({
           loading={activating}
           onClick={onActivate}
         >
-          Activate License
+          {t('license.activate')}
         </Button>
       </div>
     </div>
@@ -292,10 +287,51 @@ function LoadingSkeleton() {
 export default function LicensePage() {
   const { data: me } = useMe()
   const { data: license, isLoading } = useLicense()
+  const { t, language } = useTranslation()
   const [licenseKey, setLicenseKey] = useState('')
   const [activateError, setActivateError] = useState<string | null>(null)
   const activateLicense = useActivateLicense()
   const { toast } = useToast()
+
+  const proFeatures = useMemo(() => {
+    return language === 'vi' ? [
+      'Quản lý đa tổ chức',
+      'Báo cáo chi phí & cảnh báo ngân sách',
+      'Xuất dữ liệu sử dụng (CSV/JSON)',
+      'Phân tích chéo tổ chức',
+      'Lưu trữ dữ liệu không giới hạn',
+      'Hỗ trợ email ưu tiên (48h)',
+    ] : [
+      'Multi-org management',
+      'Cost reports + budget alerts',
+      'Usage export (CSV/JSON)',
+      'Cross-org analytics',
+      'Unlimited data retention',
+      'Priority email support (48h)',
+    ]
+  }, [language])
+
+  const enterpriseFeatures = useMemo(() => {
+    return language === 'vi' ? [
+      'Tích hợp SSO / OIDC',
+      'Nhật ký kiểm toán (Audit logs)',
+      'Vai trò tùy chỉnh',
+      'Theo dõi OpenTelemetry',
+      'Chuỗi dự phòng mô hình',
+      'Giới hạn tốc độ phân tán (Redis)',
+      'Lưu trữ dữ liệu không giới hạn',
+      'Hỗ trợ qua kênh Slack riêng (24h)',
+    ] : [
+      'SSO / OIDC integration',
+      'Audit logs',
+      'Custom roles',
+      'OpenTelemetry tracing',
+      'Model fallback chains',
+      'Distributed rate limiting (Redis)',
+      'Unlimited data retention',
+      'Dedicated Slack support (24h)',
+    ]
+  }, [language])
 
   if (me && !me.is_system_admin) {
     return <Navigate to="/" replace />
@@ -312,11 +348,11 @@ export default function LicensePage() {
         setLicenseKey('')
         toast({
           variant: 'success',
-          message: 'License saved. Restart VoidLLM to activate.',
+          message: t('license.restart_notice'),
         })
       },
       onError: (err) => {
-        const msg = err instanceof Error ? err.message : 'Failed to activate license'
+        const msg = err instanceof Error ? err.message : t('license.fail_notice')
         setActivateError(msg)
         toast({ variant: 'error', message: msg })
       },
@@ -326,28 +362,28 @@ export default function LicensePage() {
   return (
     <>
       <PageHeader
-        title="License"
-        description="Manage your VoidLLM license"
+        title={t('license.title')}
+        description={t('license.desc')}
       />
 
       {/* Stat row */}
       {license != null && (
         <div className="grid grid-cols-3 gap-4 mb-6">
           <StatCard
-            label="Plan"
-            value={planLabel(license.edition)}
+            label="Gói cước"
+            value={planLabel(license.edition, t)}
             icon={<IconTag />}
             iconColor="purple"
           />
           <StatCard
-            label="Status"
-            value={statusLabel(license.valid ? 'active' : 'expired')}
+            label="Trạng thái"
+            value={statusLabel(license.valid ? 'active' : 'expired', t)}
             icon={<IconCheckCircle />}
             iconColor={license.valid ? 'green' : 'red'}
           />
           <StatCard
-            label="Expires"
-            value={license.expires_at != null ? formatDate(license.expires_at) : 'Never'}
+            label="Hết hạn"
+            value={license.expires_at != null ? formatDate(license.expires_at) : (language === 'vi' ? 'Không bao giờ' : 'Never')}
             icon={<IconCalendar />}
             iconColor="blue"
           />
@@ -379,12 +415,12 @@ export default function LicensePage() {
               <div className="rounded-lg border border-accent/30 bg-bg-secondary p-6">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-lg font-semibold text-text-primary">Pro</h3>
-                  <span className="text-sm text-accent font-semibold">$299/mo</span>
+                  <span className="text-sm text-accent font-semibold">$299/tháng</span>
                 </div>
-                <p className="text-xs text-text-tertiary mb-4">$2,990/yr (save 2 months)</p>
+                <p className="text-xs text-text-tertiary mb-4">{t('license.pro.desc')}</p>
 
                 <div className="space-y-2 mb-4">
-                  {proFeatures.map(f => (
+                  {proFeatures.map((f: string) => (
                     <div key={f} className="flex items-center gap-2 text-sm text-text-secondary">
                       <span className="text-success" aria-hidden="true"><IconCheck /></span>
                       {f}
@@ -396,7 +432,7 @@ export default function LicensePage() {
                   variant="primary"
                   onClick={() => window.open('https://voidllm.ai/pricing', '_blank')}
                 >
-                  Upgrade to Pro
+                  {t('license.pro.upgrade')}
                 </Button>
               </div>
             )}
@@ -405,16 +441,16 @@ export default function LicensePage() {
             <div className="rounded-lg border border-border bg-bg-secondary p-6">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-lg font-semibold text-text-primary">Enterprise</h3>
-                <span className="text-sm text-text-secondary font-semibold">$799/mo</span>
+                <span className="text-sm text-text-secondary font-semibold">$799/tháng</span>
               </div>
               <p className="text-xs text-text-tertiary mb-4">
                 {isCommunity
-                  ? '$7,990/yr (save 2 months) · Everything in Pro, plus:'
-                  : '$7,990/yr (save 2 months) · Everything in your current plan, plus:'}
+                  ? t('license.ent.desc_community')
+                  : t('license.ent.desc_pro')}
               </p>
 
               <div className="space-y-2 mb-4">
-                {enterpriseFeatures.map(f => (
+                {enterpriseFeatures.map((f: string) => (
                   <div key={f} className="flex items-center gap-2 text-sm text-text-secondary">
                     <span className="text-success" aria-hidden="true"><IconCheck /></span>
                     {f}
@@ -426,7 +462,7 @@ export default function LicensePage() {
                 variant="secondary"
                 onClick={() => window.open('https://voidllm.ai/pricing', '_blank')}
               >
-                Contact Sales
+                {t('license.ent.contact')}
               </Button>
             </div>
           </div>

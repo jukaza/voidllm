@@ -67,69 +67,73 @@ function RequireAuth() {
   return <Shell />
 }
 
+import { TranslationProvider } from './lib/i18n.tsx'
+
 export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <ToastProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/auth/callback" element={<CallbackPage />} />
-            <Route path="/invite/:token" element={<AcceptInvitePage />} />
-            <Route element={<RequireAuth />}>
-              <Route index element={<DashboardPage />} />
-              <Route path="playground" element={<PlaygroundPage />} />
-              <Route path="keys" element={<KeysPage />} />
-              <Route path="teams" element={<TeamsPage />} />
-              <Route path="teams/:teamId" element={<TeamDetailPage />}>
-                <Route index element={<Navigate to="members" replace />} />
-                <Route path="members" element={<TeamMembersTab />} />
-                <Route path="models" element={<TeamModelsTab />} />
-                <Route path="mcp-access" element={<TeamMCPAccessTab />} />
-                <Route path="settings" element={<TeamSettingsTab />} />
+    <TranslationProvider>
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
+          <BrowserRouter>
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/auth/callback" element={<CallbackPage />} />
+              <Route path="/invite/:token" element={<AcceptInvitePage />} />
+              <Route element={<RequireAuth />}>
+                <Route index element={<DashboardPage />} />
+                <Route path="playground" element={<PlaygroundPage />} />
+                <Route path="keys" element={<KeysPage />} />
+                <Route path="teams" element={<TeamsPage />} />
+                <Route path="teams/:teamId" element={<TeamDetailPage />}>
+                  <Route index element={<Navigate to="members" replace />} />
+                  <Route path="members" element={<TeamMembersTab />} />
+                  <Route path="models" element={<TeamModelsTab />} />
+                  <Route path="mcp-access" element={<TeamMCPAccessTab />} />
+                  <Route path="settings" element={<TeamSettingsTab />} />
+                </Route>
+                <Route path="org" element={<OrganizationPage />}>
+                  <Route index element={<Navigate to="users" replace />} />
+                  <Route path="settings" element={<SettingsPage />} />
+                  <Route path="users" element={<OrgUsersPage />} />
+                  <Route path="models" element={<ModelsAccessTab />} />
+                  <Route path="mcp-access" element={<MCPAccessTab />} />
+                </Route>
+                <Route path="service-accounts" element={<ServiceAccountsPage />} />
+                <Route path="models" element={<ModelsLayout />} />
+                <Route path="usage" element={<UsageLayout />}>
+                  <Route index element={<UsageOverviewPage />} />
+                  <Route path="llm" element={<LLMUsagePage />} />
+                  <Route path="mcp" element={<MCPUsagePage />} />
+                </Route>
+                <Route path="cost-reports" element={<CostReportsPage />} />
+                <Route path="profile" element={<ProfilePage />} />
+                <Route path="license" element={<LicensePage />} />
+                <Route path="audit-log" element={<AuditLogPage />} />
+                <Route path="sso" element={<SSOConfigPage />} />
+                <Route path="orgs" element={<OrganizationsPage />} />
+                <Route path="orgs/:orgId" element={<OrgDetailPage />}>
+                  <Route index element={<Navigate to="members" replace />} />
+                  <Route path="members" element={<OrgDetailMembersTab />} />
+                  <Route path="teams" element={<OrgDetailTeamsTab />} />
+                  <Route path="settings" element={<OrgDetailSettingsTab />} />
+                  <Route path="sso" element={<OrgDetailSSOTab />} />
+                </Route>
+                <Route path="users" element={<SystemUsersPage />} />
+                <Route path="mcp-servers" element={<MCPServersPage />} />
+                <Route
+                  path="*"
+                  element={
+                    <PlaceholderPage
+                      title="Not Found"
+                      description="This page does not exist."
+                    />
+                  }
+                />
               </Route>
-              <Route path="org" element={<OrganizationPage />}>
-                <Route index element={<Navigate to="users" replace />} />
-                <Route path="settings" element={<SettingsPage />} />
-                <Route path="users" element={<OrgUsersPage />} />
-                <Route path="models" element={<ModelsAccessTab />} />
-                <Route path="mcp-access" element={<MCPAccessTab />} />
-              </Route>
-              <Route path="service-accounts" element={<ServiceAccountsPage />} />
-              <Route path="models" element={<ModelsLayout />} />
-              <Route path="usage" element={<UsageLayout />}>
-                <Route index element={<UsageOverviewPage />} />
-                <Route path="llm" element={<LLMUsagePage />} />
-                <Route path="mcp" element={<MCPUsagePage />} />
-              </Route>
-              <Route path="cost-reports" element={<CostReportsPage />} />
-              <Route path="profile" element={<ProfilePage />} />
-              <Route path="license" element={<LicensePage />} />
-              <Route path="audit-log" element={<AuditLogPage />} />
-              <Route path="sso" element={<SSOConfigPage />} />
-              <Route path="orgs" element={<OrganizationsPage />} />
-              <Route path="orgs/:orgId" element={<OrgDetailPage />}>
-                <Route index element={<Navigate to="members" replace />} />
-                <Route path="members" element={<OrgDetailMembersTab />} />
-                <Route path="teams" element={<OrgDetailTeamsTab />} />
-                <Route path="settings" element={<OrgDetailSettingsTab />} />
-                <Route path="sso" element={<OrgDetailSSOTab />} />
-              </Route>
-              <Route path="users" element={<SystemUsersPage />} />
-              <Route path="mcp-servers" element={<MCPServersPage />} />
-              <Route
-                path="*"
-                element={
-                  <PlaceholderPage
-                    title="Not Found"
-                    description="This page does not exist."
-                  />
-                }
-              />
-            </Route>
-          </Routes>
-        </BrowserRouter>
-      </ToastProvider>
-    </QueryClientProvider>
+            </Routes>
+          </BrowserRouter>
+        </ToastProvider>
+      </QueryClientProvider>
+    </TranslationProvider>
   )
 }

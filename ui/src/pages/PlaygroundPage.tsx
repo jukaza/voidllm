@@ -11,6 +11,7 @@ import TabSwitcher from '../components/ui/TabSwitcher'
 import apiClient from '../api/client'
 import { LOCAL_STORAGE_KEY } from '../lib/constants'
 import { cn } from '../lib/utils'
+import { useTranslation } from '../lib/i18n'
 
 interface AvailableModel {
   name: string
@@ -135,6 +136,7 @@ export default function PlaygroundPage() {
   const [activeTab, setActiveTab] = useState('')
   const [model, setModel] = useState('')
   const [apiKey, setApiKey] = useState('')
+  const { t } = useTranslation()
 
   // Chat state
   const [systemPrompt, setSystemPrompt] = useState('You are a helpful assistant.')
@@ -481,7 +483,7 @@ export default function PlaygroundPage() {
   return (
     <div className="flex flex-col overflow-hidden" style={{ height: 'calc(100vh - 4rem)' }}>
       <div className="shrink-0 mb-4">
-        <PageHeader title="Playground" description="Test models interactively" />
+        <PageHeader title={t('playground.title')} description={t('playground.desc')} />
         {availableTabs.length > 1 && (
           <div className="mt-3">
             <TabSwitcher
@@ -520,7 +522,7 @@ export default function PlaygroundPage() {
                 d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
               />
             </svg>
-            <span className="text-sm font-medium text-text-primary">Configuration</span>
+            <span className="text-sm font-medium text-text-primary">Cấu hình</span>
           </div>
 
           {/* Scrollable config body */}
@@ -551,7 +553,7 @@ export default function PlaygroundPage() {
               <>
                 {/* Streaming toggle */}
                 <div className="flex items-center justify-between">
-                  <ConfigLabel>Stream response</ConfigLabel>
+                  <ConfigLabel>{t('playground.stream')}</ConfigLabel>
                   <Toggle
                     checked={streaming}
                     onChange={setStreaming}
@@ -561,11 +563,11 @@ export default function PlaygroundPage() {
 
                 {/* System prompt */}
                 <div>
-                  <ConfigLabel>System prompt</ConfigLabel>
+                  <ConfigLabel>{t('playground.system_prompt')}</ConfigLabel>
                   <Textarea
                     value={systemPrompt}
                     onChange={(e) => setSystemPrompt(e.target.value)}
-                    placeholder="You are a helpful assistant."
+                    placeholder={t('playground.system_prompt_placeholder')}
                     rows={4}
                     className="font-mono text-xs"
                     disabled={loading}
@@ -576,7 +578,7 @@ export default function PlaygroundPage() {
                 <details className="group">
                   <summary className="flex items-center justify-between cursor-pointer list-none select-none">
                     <span className="text-[10px] font-medium tracking-widest uppercase text-text-tertiary">
-                      Advanced parameters
+                      Thông số nâng cao
                     </span>
                     <svg
                       className="h-3.5 w-3.5 text-text-tertiary transition-transform duration-200 group-open:rotate-180"
@@ -599,7 +601,7 @@ export default function PlaygroundPage() {
                           id={tempLabelId}
                           className="text-[10px] font-medium tracking-widest uppercase text-text-tertiary"
                         >
-                          Temperature
+                          {t('playground.temp')}
                         </label>
                         <span className="px-2 py-0.5 rounded-full bg-accent/15 text-accent text-xs font-mono">
                           {temperature.toFixed(1)}
@@ -627,7 +629,7 @@ export default function PlaygroundPage() {
                         id={maxTokensLabelId}
                         className="block text-[10px] font-medium tracking-widest uppercase text-text-tertiary mb-1.5"
                       >
-                        Max tokens
+                        {t('playground.max_tokens')}
                       </label>
                       <input
                         type="number"
@@ -649,12 +651,12 @@ export default function PlaygroundPage() {
 
                     {/* API Key override */}
                     <Input
-                      label="API key override"
+                      label="Ghi đè API key"
                       type="password"
                       value={apiKey}
                       onChange={(e) => setApiKey(e.target.value)}
-                      placeholder="Session key (default)"
-                      description="Leave empty to use your session key."
+                      placeholder="Khóa phiên (mặc định)"
+                      description="Để trống để dùng khóa phiên mặc định."
                     />
 
                   </div>
@@ -665,12 +667,12 @@ export default function PlaygroundPage() {
             {/* Embedding-only controls */}
             {isEmbedding && (
               <Input
-                label="API key override"
+                label="Ghi đè API key"
                 type="password"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                placeholder="Session key (default)"
-                description="Leave empty to use your session key."
+                placeholder="Khóa phiên (mặc định)"
+                description="Để trống để dùng khóa phiên mặc định."
               />
             )}
 
@@ -691,7 +693,7 @@ export default function PlaygroundPage() {
                 </span>
               ) : (
                 <span className="px-2.5 py-1 rounded-full bg-bg-tertiary border border-border text-text-tertiary text-xs">
-                  No model selected
+                  Chưa chọn mô hình
                 </span>
               )}
               {!isEmbedding && (
@@ -700,7 +702,7 @@ export default function PlaygroundPage() {
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-success" />
                   </span>
-                  <span className="text-xs text-text-tertiary">Ready</span>
+                  <span className="text-xs text-text-tertiary">Sẵn sàng</span>
                 </div>
               )}
             </div>
@@ -714,7 +716,7 @@ export default function PlaygroundPage() {
                   : chatHistory.length === 0
               }
             >
-              Clear
+              Xóa
             </Button>
           </div>
 
@@ -726,7 +728,7 @@ export default function PlaygroundPage() {
                 {chatHistory.length === 0 && !loading && (
                   <div className="flex items-center justify-center py-20">
                     <p className="text-sm text-text-tertiary">
-                      Send a message to start chatting
+                      Gửi tin nhắn để bắt đầu cuộc trò chuyện
                     </p>
                   </div>
                 )}
@@ -840,7 +842,7 @@ export default function PlaygroundPage() {
                         void handleSend()
                       }
                     }}
-                    placeholder="Type your message..."
+                    placeholder={t('playground.type_message')}
                     rows={3}
                     disabled={loading}
                     className={cn(
@@ -851,7 +853,7 @@ export default function PlaygroundPage() {
                   />
                   <div className="flex items-center justify-between px-4 pb-3 pt-1">
                     <span className="text-xs text-text-tertiary">
-                      Enter to send · Shift+Enter for new line
+                      {t('playground.send_hint')}
                     </span>
                     <button
                       type="button"

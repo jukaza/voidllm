@@ -21,6 +21,7 @@ import { useModelHealth } from '../hooks/useModelHealth'
 import type { ModelHealthInfo } from '../hooks/useModelHealth'
 import { useUpdateCheck } from '../hooks/useUpdateCheck'
 import { formatTokens, formatCost, formatNumber } from '../lib/utils'
+import { useTranslation } from '../lib/i18n'
 
 // ---------------------------------------------------------------------------
 // Time range helpers
@@ -84,12 +85,13 @@ function ProgressBar({ label, used, limit }: { label: string; used: number; limi
 
 function BudgetSection({ orgId, tokens24h }: { orgId: string; tokens24h: number }) {
   const { data: org } = useOrg(orgId)
+  const { t } = useTranslation()
   if (!org || org.daily_token_limit <= 0) return null
   return (
     <div className="bg-bg-secondary rounded-xl border border-border p-6">
-      <h2 className="text-lg font-semibold text-text-primary mb-6">Token Budget</h2>
+      <h2 className="text-lg font-semibold text-text-primary mb-6">{t('keys.table.limits')}</h2>
       <div className="space-y-4">
-        <ProgressBar label="Daily Token Budget" used={tokens24h} limit={org.daily_token_limit} />
+        <ProgressBar label="Ngân sách Token hàng ngày" used={tokens24h} limit={org.daily_token_limit} />
       </div>
     </div>
   )
@@ -285,16 +287,11 @@ function IconXCircle() {
 // DashboardPage
 // ---------------------------------------------------------------------------
 
-const scopeDescriptions: Record<string, string> = {
-  org: 'Organization-wide usage overview',
-  team: 'Your team usage overview',
-  user: 'Your personal usage overview',
-}
-
 export default function DashboardPage() {
   const { data: me } = useMe()
   const { data: stats, isLoading: statsLoading } = useDashboardStats()
   const { data: updateInfo } = useUpdateCheck()
+  const { t } = useTranslation()
   const [timeRange, setTimeRange] = useState<TimeRange>('7d')
   const [showUpdateDialog, setShowUpdateDialog] = useState(false)
 
@@ -347,7 +344,7 @@ export default function DashboardPage() {
   )
 
   const scope = stats?.scope ?? 'user'
-  const description = scopeDescriptions[scope] ?? 'Your VoidLLM usage overview'
+  const description = scope === 'org' ? t('dashboard.overview_desc') : t('dashboard.overview_desc')
   const isOrgScope = scope === 'org'
 
   // Build area chart data from usage series
@@ -395,7 +392,7 @@ export default function DashboardPage() {
 
   return (
     <>
-      <PageHeader title="Dashboard" description={description} />
+      <PageHeader title={t('sidebar.dashboard')} description={description} />
 
       <div className="space-y-6">
         {/* Budget warnings */}
@@ -420,25 +417,25 @@ export default function DashboardPage() {
         {/* Stat cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
           <StatCard
-            label="Requests (24h)"
+            label={t('dashboard.requests') + " (24h)"}
             value={statsLoading ? skeletonValue : formatNumber(stats?.requests_24h ?? 0)}
             icon={<IconActivity />}
             iconColor="purple"
           />
           <StatCard
-            label="Tokens (24h)"
+            label={t('dashboard.tokens') + " (24h)"}
             value={statsLoading ? skeletonValue : formatTokens(stats?.tokens_24h ?? 0)}
             icon={<IconZap />}
             iconColor="blue"
           />
           <StatCard
-            label="Est. Cost (24h)"
+            label={t('dashboard.cost') + " (24h)"}
             value={statsLoading ? skeletonValue : formatCost(stats?.cost_estimate_24h ?? 0)}
             icon={<IconDollarSign />}
             iconColor="green"
           />
           <StatCard
-            label="Active Keys"
+            label={t('dashboard.keys')}
             value={statsLoading ? skeletonValue : formatNumber(stats?.active_keys ?? 0)}
             icon={<IconKey />}
             iconColor="pink"
@@ -450,23 +447,23 @@ export default function DashboardPage() {
           (stats?.models_healthy ?? 0) + (stats?.models_degraded ?? 0) + (stats?.models_unhealthy ?? 0) > 0 && (
             <div>
               <h2 className="text-sm font-medium text-text-tertiary uppercase tracking-wider mb-3">
-                Model Health
+                Sức khỏe Mô hình
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <StatCard
-                  label="Healthy"
+                  label="Tốt (Healthy)"
                   value={stats?.models_healthy ?? 0}
                   icon={<IconHeartPulse />}
                   iconColor="green"
                 />
                 <StatCard
-                  label="Degraded"
+                  label="Suy giảm (Degraded)"
                   value={stats?.models_degraded ?? 0}
                   icon={<IconAlertTriangle />}
                   iconColor="yellow"
                 />
                 <StatCard
-                  label="Unhealthy"
+                  label="Lỗi (Unhealthy)"
                   value={stats?.models_unhealthy ?? 0}
                   icon={<IconXCircle />}
                   iconColor="red"
@@ -484,7 +481,7 @@ export default function DashboardPage() {
         {orgId !== '' && (
           <div className="bg-bg-secondary rounded-xl border border-border p-6">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-text-primary">Requests over Time</h2>
+              <h2 className="text-lg font-semibold text-text-primary">{t('dashboard.throughput')}</h2>
               <TimeRangePills value={timeRange} onChange={setTimeRange} />
             </div>
             {seriesLoading ? (
@@ -505,7 +502,7 @@ export default function DashboardPage() {
                 className="flex items-center justify-center text-text-tertiary text-sm"
                 style={{ height: 220 }}
               >
-                No data for this period
+                {t('keys.limit.none')}
               </div>
             )}
           </div>
@@ -516,7 +513,7 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Top Models */}
             <div className="bg-bg-secondary rounded-xl border border-border p-6">
-              <h2 className="text-lg font-semibold text-text-primary mb-6">Top Models</h2>
+              <h2 className="text-lg font-semibold text-text-primary mb-6">Mô hình hàng đầu</h2>
               {modelsLoading ? (
                 <div className="space-y-5">
                   {[1, 2, 3].map((i) => (
@@ -529,13 +526,13 @@ export default function DashboardPage() {
               ) : topModelsBars.length > 0 ? (
                 <HorizontalBar items={topModelsBars} />
               ) : (
-                <p className="text-sm text-text-tertiary">No model usage in the last 24 hours</p>
+                <p className="text-sm text-text-tertiary">Không có dữ liệu sử dụng mô hình trong 24 giờ qua</p>
               )}
             </div>
 
             {/* Token Distribution */}
             <div className="bg-bg-secondary rounded-xl border border-border p-6">
-              <h2 className="text-lg font-semibold text-text-primary mb-6">Token Distribution</h2>
+              <h2 className="text-lg font-semibold text-text-primary mb-6">{t('dashboard.token_count')}</h2>
               {modelsLoading ? (
                 <div className="flex justify-center">
                   <div className="w-48 h-48 rounded-full bg-bg-tertiary animate-pulse" />
@@ -544,7 +541,7 @@ export default function DashboardPage() {
                 <div className="flex justify-center">
                   <DonutChart
                     segments={donutSegments}
-                    centerLabel="Total tokens"
+                    centerLabel="Tổng tokens"
                     centerValue={formatTokens(
                       donutSegments.reduce((acc, s) => acc + s.value, 0),
                     )}
@@ -553,7 +550,7 @@ export default function DashboardPage() {
                   />
                 </div>
               ) : (
-                <p className="text-sm text-text-tertiary">No token data available</p>
+                <p className="text-sm text-text-tertiary">Không có dữ liệu token</p>
               )}
             </div>
           </div>
@@ -564,7 +561,7 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Usage by Team */}
             <div className="bg-bg-secondary rounded-xl border border-border p-6">
-              <h2 className="text-lg font-semibold text-text-primary mb-6">Usage by Team</h2>
+              <h2 className="text-lg font-semibold text-text-primary mb-6">Sử dụng theo Nhóm</h2>
               {teamUsageLoading ? (
                 <div className="space-y-5">
                   {[1, 2, 3].map((i) => (
@@ -577,13 +574,13 @@ export default function DashboardPage() {
               ) : teamBars.length > 0 ? (
                 <HorizontalBar items={teamBars} color="#6366f1" />
               ) : (
-                <p className="text-sm text-text-tertiary">No team usage in the last 24 hours</p>
+                <p className="text-sm text-text-tertiary">Không có dữ liệu sử dụng nhóm trong 24 giờ qua</p>
               )}
             </div>
 
             {/* Model Performance */}
             <div className="bg-bg-secondary rounded-xl border border-border p-6">
-              <h2 className="text-lg font-semibold text-text-primary mb-6">Model Performance</h2>
+              <h2 className="text-lg font-semibold text-text-primary mb-6">Hiệu năng Mô hình</h2>
               {modelsLoading ? (
                 <div className="space-y-3">
                   {[1, 2, 3].map((i) => (
@@ -596,7 +593,7 @@ export default function DashboardPage() {
                   data={perfRows}
                 />
               ) : (
-                <p className="text-sm text-text-tertiary">No model data available</p>
+                <p className="text-sm text-text-tertiary">Không có dữ liệu hiệu năng</p>
               )}
             </div>
           </div>

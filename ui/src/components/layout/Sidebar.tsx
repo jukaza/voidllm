@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useMe } from '../../hooks/useMe'
 import { useLicense } from '../../hooks/useLicense'
 import { LOCAL_STORAGE_KEY } from '../../lib/constants'
+import { useTranslation } from '../../lib/i18n'
 
 function formatRole(role?: string): string {
   if (!role) return '...'
@@ -187,53 +188,53 @@ function IconPlug() {
   )
 }
 
-function buildNavigation(hasFeature: (f: string) => boolean): NavGroup[] {
+function buildNavigation(hasFeature: (f: string) => boolean, t: any): NavGroup[] {
   return [
     {
-      label: 'Overview',
+      label: t('sidebar.overview'),
       items: [
-        { label: 'Dashboard', path: '/', icon: <IconDashboard /> },
-        { label: 'Playground', path: '/playground', icon: <IconTerminal /> },
+        { label: t('sidebar.dashboard'), path: '/', icon: <IconDashboard /> },
+        { label: t('sidebar.playground'), path: '/playground', icon: <IconTerminal /> },
       ],
     },
     {
-      label: 'Manage',
+      label: t('sidebar.manage'),
       items: [
-        { label: 'Keys', path: '/keys', icon: <IconKey /> },
-        { label: 'Teams', path: '/teams', icon: <IconUsers />, minRole: 'team_admin', end: false },
-        { label: 'Service Accounts', path: '/service-accounts', icon: <IconBot /> },
-        { label: 'MCP Servers', path: '/mcp-servers', icon: <IconPlug /> },
+        { label: t('sidebar.keys'), path: '/keys', icon: <IconKey /> },
+        { label: t('sidebar.teams'), path: '/teams', icon: <IconUsers />, minRole: 'team_admin', end: false },
+        { label: t('sidebar.service_accounts'), path: '/service-accounts', icon: <IconBot /> },
+        { label: t('sidebar.mcp_servers'), path: '/mcp-servers', icon: <IconPlug /> },
       ],
     },
     {
-      label: 'Analytics',
+      label: t('sidebar.analytics'),
       items: [
-        { label: 'Usage', path: '/usage', icon: <IconBarChart /> },
-        { label: 'Cost Reports', path: '/cost-reports', icon: <IconDollar />, locked: !hasFeature('cost_reports') },
+        { label: t('sidebar.usage'), path: '/usage', icon: <IconBarChart /> },
+        { label: t('sidebar.cost_reports'), path: '/cost-reports', icon: <IconDollar />, locked: !hasFeature('cost_reports') },
       ],
     },
     {
-      label: 'Security',
+      label: t('sidebar.security'),
       minRole: 'org_admin',
       items: [
-        { label: 'Audit Log', path: '/audit-log', icon: <IconClipboard />, locked: !hasFeature('audit_logs') },
-        { label: 'SSO Config', path: '/sso', icon: <IconShield />, locked: !hasFeature('sso_oidc') },
+        { label: t('sidebar.audit_log'), path: '/audit-log', icon: <IconClipboard />, locked: !hasFeature('audit_logs') },
+        { label: t('sidebar.sso_config'), path: '/sso', icon: <IconShield />, locked: !hasFeature('sso_oidc') },
       ],
     },
     {
       label: '',
       items: [
-        { label: 'Organization', path: '/org', icon: <IconBuilding />, end: false },
+        { label: t('sidebar.organization'), path: '/org', icon: <IconBuilding />, end: false },
       ],
     },
     {
-      label: 'System',
+      label: t('sidebar.system'),
       minRole: 'system_admin',
       items: [
-        { label: 'Organizations', path: '/orgs', icon: <IconBuilding />, end: false },
-        { label: 'Users', path: '/users', icon: <IconPersonPlus /> },
-        { label: 'Models', path: '/models', icon: <IconCube />, minRole: 'system_admin' },
-        { label: 'License', path: '/license', icon: <IconShield /> },
+        { label: t('sidebar.organizations'), path: '/orgs', icon: <IconBuilding />, end: false },
+        { label: t('sidebar.users'), path: '/users', icon: <IconPersonPlus /> },
+        { label: t('sidebar.models'), path: '/models', icon: <IconCube />, minRole: 'system_admin' },
+        { label: t('sidebar.license'), path: '/license', icon: <IconShield /> },
       ],
     },
   ]
@@ -262,13 +263,14 @@ export function Sidebar() {
   const { data } = useMe()
   const { data: license } = useLicense()
   const queryClient = useQueryClient()
+  const { language, setLanguage, t } = useTranslation()
 
   const userRole = data?.role ?? 'member'
   // Treat loading state as unlocked to avoid flicker — page-level guards enforce the real check
   const hasFeature = (f: string): boolean => !license ? true : license.features.includes(f)
 
   const visibleGroups = useMemo(() => {
-    const navigation = buildNavigation(hasFeature)
+    const navigation = buildNavigation(hasFeature, t)
     return navigation
       .filter(group => hasMinRole(userRole, group.minRole))
       .map(group => ({
@@ -277,7 +279,7 @@ export function Sidebar() {
       }))
       .filter(group => group.items.length > 0)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userRole, license])
+  }, [userRole, license, t])
 
   return (
     <aside
@@ -340,6 +342,29 @@ export function Sidebar() {
 
       {/* Footer */}
       <div className="shrink-0 border-t border-white/5 p-3">
+        {/* Language selector */}
+        <div className="flex items-center justify-between mb-3 px-1">
+          <span className="text-[11px] text-text-tertiary uppercase tracking-wider">Ngôn ngữ</span>
+          <div className="flex gap-1 bg-white/5 p-0.5 rounded border border-white/5">
+            <button
+              onClick={() => setLanguage('vi')}
+              className={`px-2 py-0.5 text-[10px] font-bold rounded-sm cursor-pointer transition-colors ${
+                language === 'vi' ? 'bg-accent text-white' : 'text-text-secondary hover:text-text-primary'
+              }`}
+            >
+              VI
+            </button>
+            <button
+              onClick={() => setLanguage('en')}
+              className={`px-2 py-0.5 text-[10px] font-bold rounded-sm cursor-pointer transition-colors ${
+                language === 'en' ? 'bg-accent text-white' : 'text-text-secondary hover:text-text-primary'
+              }`}
+            >
+              EN
+            </button>
+          </div>
+        </div>
+
         <div className="flex items-center justify-between mb-2">
           <Link
             to="/profile"
@@ -355,7 +380,7 @@ export function Sidebar() {
             to="/profile"
             className="flex-1 py-1.5 bg-transparent border border-white/10 rounded-md text-xs text-text-secondary cursor-pointer transition-colors duration-200 hover:border-accent/40 hover:text-text-primary text-center no-underline"
           >
-            Profile
+            {t('sidebar.profile')}
           </Link>
           <button
             onClick={() => {
@@ -365,7 +390,7 @@ export function Sidebar() {
             }}
             className="flex-1 py-1.5 bg-transparent border border-white/10 rounded-md text-xs text-text-secondary cursor-pointer transition-colors duration-200 hover:border-error hover:text-error"
           >
-            Logout
+            {t('sidebar.logout')}
           </button>
         </div>
       </div>

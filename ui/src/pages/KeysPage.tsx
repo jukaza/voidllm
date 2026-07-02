@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { PageHeader } from '../components/ui/PageHeader'
+import { useTranslation } from '../lib/i18n'
 import { Table } from '../components/ui/Table'
 import type { Column } from '../components/ui/Table'
 import { Dialog, ConfirmDialog } from '../components/ui/Dialog'
@@ -812,6 +813,7 @@ function EditKeyDialog({ apiKey, onClose, orgId }: EditKeyDialogProps) {
 export default function KeysPage() {
   const { data: me } = useMe()
   const orgId = me?.org_id ?? ''
+  const { t } = useTranslation()
 
   const [cursor, setCursor] = useState<string | undefined>()
   const [prevCursors, setPrevCursors] = useState<string[]>([])
@@ -853,7 +855,7 @@ export default function KeysPage() {
   const columns: Column<APIKeyResponse>[] = [
     {
       key: 'key_hint',
-      header: 'Key',
+      header: 'Khóa API',
       render: (row) => (
         <span className="font-mono text-xs">
           <KeyHint hint={row.key_hint} />
@@ -862,7 +864,7 @@ export default function KeysPage() {
     },
     {
       key: 'key_type',
-      header: 'Type',
+      header: t('keys.table.type'),
       render: (row) => (
         <Badge variant={keyTypeBadgeVariant[row.key_type] ?? 'muted'}>
           {keyTypeLabels[row.key_type] ?? row.key_type}
@@ -871,21 +873,21 @@ export default function KeysPage() {
     },
     {
       key: 'name',
-      header: 'Name',
+      header: t('keys.table.name'),
       render: (row) => (
         <span className="text-text-primary">{row.name}</span>
       ),
     },
     {
       key: 'expires_at',
-      header: 'Expires',
+      header: t('keys.table.expires'),
       render: (row) => (
-        <TimeAgo date={row.expires_at ?? ''} fallback="Never" />
+        <TimeAgo date={row.expires_at ?? ''} fallback="Không hết hạn" />
       ),
     },
     {
       key: 'created_at',
-      header: 'Created',
+      header: 'Ngày tạo',
       render: (row) => <TimeAgo date={row.created_at} />,
     },
     {
@@ -974,29 +976,29 @@ export default function KeysPage() {
   return (
     <>
       <PageHeader
-        title="API Keys"
-        description="Manage your API keys"
+        title={t('keys.title')}
+        description={t('keys.desc')}
         actions={
-          <Button onClick={() => setShowCreateDialog(true)}>Create Key</Button>
+          <Button onClick={() => setShowCreateDialog(true)}>{t('keys.add')}</Button>
         }
       />
 
       {/* Stat cards */}
       <div className="grid grid-cols-3 gap-4 mb-6">
         <StatCard
-          label="Total Keys"
+          label="Tổng số khóa"
           value={totalKeys}
           iconColor="purple"
           icon={<IconKey className="h-4 w-4" />}
         />
         <StatCard
-          label="Active Keys"
+          label="Khóa hoạt động"
           value={activeKeys}
           iconColor="green"
           icon={<IconCheck className="h-4 w-4" />}
         />
         <StatCard
-          label="Expiring Soon"
+          label="Sắp hết hạn"
           value={expiringSoon}
           iconColor="yellow"
           icon={<IconClock className="h-4 w-4" />}
@@ -1008,11 +1010,11 @@ export default function KeysPage() {
           <span className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-bg-tertiary">
             <IconKey className="h-7 w-7 text-text-tertiary" />
           </span>
-          <h3 className="mb-1 text-base font-medium text-text-primary">No API keys yet</h3>
+          <h3 className="mb-1 text-base font-medium text-text-primary">Chưa có khóa API nào</h3>
           <p className="mb-6 text-sm text-text-secondary">
-            Create your first key to start using the proxy
+            Tạo khóa API đầu tiên của bạn để bắt đầu sử dụng proxy
           </p>
-          <Button onClick={() => setShowCreateDialog(true)}>Create Key</Button>
+          <Button onClick={() => setShowCreateDialog(true)}>{t('keys.add')}</Button>
         </div>
       ) : (
         <Table<APIKeyResponse>
@@ -1020,7 +1022,7 @@ export default function KeysPage() {
           data={allKeys}
           keyExtractor={(row) => row.id}
           loading={isLoading && !!orgId}
-          emptyMessage="No API keys found"
+          emptyMessage="Không tìm thấy khóa API nào"
           pagination={{
             cursor: cursor ?? null,
             hasMore: keys?.has_more ?? false,

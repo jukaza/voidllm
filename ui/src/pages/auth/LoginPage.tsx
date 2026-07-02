@@ -7,6 +7,7 @@ import { Button } from '../../components/ui/Button'
 import { Banner } from '../../components/ui/Banner'
 import { LOCAL_STORAGE_KEY } from '../../lib/constants'
 import type { MeResponse } from '../../hooks/useMe'
+import { useTranslation } from '../../lib/i18n'
 
 interface AuthProviders {
   local: boolean
@@ -23,6 +24,7 @@ export default function LoginPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [searchParams] = useSearchParams()
+  const { t } = useTranslation()
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -83,7 +85,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm bg-bg-secondary border border-white/5 rounded-xl p-8">
         <div className="mb-8 text-center">
           <h1 className="text-3xl font-bold gradient-text">VoidLLM</h1>
-          <p className="mt-2 text-sm text-text-tertiary">Sign in to your workspace</p>
+          <p className="mt-2 text-sm text-text-tertiary">{t('login.subtitle')}</p>
         </div>
 
         {ssoError !== null && (
@@ -92,7 +94,7 @@ export default function LoginPage() {
 
         <form onSubmit={(e) => void handleSubmit(e)} className="space-y-5">
           <Input
-            label="Email"
+            label={t('login.email')}
             type="email"
             autoComplete="email"
             required
@@ -102,7 +104,7 @@ export default function LoginPage() {
           />
 
           <Input
-            label="Password"
+            label={t('login.password')}
             type="password"
             autoComplete="current-password"
             required
@@ -114,7 +116,7 @@ export default function LoginPage() {
           {error !== null && <Banner variant="error" title={error} />}
 
           <Button type="submit" loading={loading} fullWidth size="lg">
-            Sign in
+            {t('login.sign_in')}
           </Button>
         </form>
 
@@ -122,13 +124,13 @@ export default function LoginPage() {
           <>
             <div className="my-6 flex items-center gap-3">
               <div className="flex-1 h-px bg-white/10" />
-              <span className="text-xs text-text-tertiary">or</span>
+              <span className="text-xs text-text-tertiary">{t('login.or')}</span>
               <div className="flex-1 h-px bg-white/10" />
             </div>
 
             <a href="/api/v1/auth/oidc/login" className="block w-full">
               <Button variant="secondary" fullWidth size="lg" type="button">
-                Sign in with SSO
+                {t('login.sso')}
               </Button>
             </a>
           </>
