@@ -18,7 +18,6 @@ import (
 	"github.com/voidmind-io/voidllm/internal/config"
 	"github.com/voidmind-io/voidllm/internal/db"
 	"github.com/voidmind-io/voidllm/internal/jsonx"
-	"github.com/voidmind-io/voidllm/internal/license"
 	"github.com/voidmind-io/voidllm/internal/provider"
 	"github.com/voidmind-io/voidllm/internal/proxy"
 	voidredis "github.com/voidmind-io/voidllm/internal/redis"
@@ -62,6 +61,14 @@ type createModelRequest struct {
 	// routed to this model. When omitted the network-level default is used.
 	// Pass true to force anonymization on, false to force it off.
 	PIIFilter *bool `json:"pii_filter,omitempty"`
+	// IsPublic marks the model as visible on the public storefront price list.
+	IsPublic bool `json:"is_public,omitempty"`
+	// SellInputPer1M / SellOutputPer1M / SellCachedInputPer1M are the
+	// customer-facing prices in USD per 1M tokens. Omit to leave the model
+	// unbilled (requests do not debit wallets).
+	SellInputPer1M       *float64 `json:"sell_input_per_1m,omitempty"`
+	SellOutputPer1M      *float64 `json:"sell_output_per_1m,omitempty"`
+	SellCachedInputPer1M *float64 `json:"sell_cached_input_per_1m,omitempty"`
 }
 
 // updateModelRequest is the JSON body accepted by UpdateModel.
@@ -102,6 +109,12 @@ type updateModelRequest struct {
 	// Send the JSON key with a null value to clear the override and revert to
 	// the network-level default (NULL in the DB).
 	PIIFilter *bool `json:"pii_filter"`
+	// IsPublic, when non-nil, replaces the storefront visibility flag.
+	IsPublic *bool `json:"is_public"`
+	// Sell prices, when non-nil, replace the customer-facing prices.
+	SellInputPer1M       *float64 `json:"sell_input_per_1m"`
+	SellOutputPer1M      *float64 `json:"sell_output_per_1m"`
+	SellCachedInputPer1M *float64 `json:"sell_cached_input_per_1m"`
 }
 
 // parsePIIFilterField inspects raw JSON bytes to determine how the pii_filter
@@ -161,6 +174,12 @@ type modelResponse struct {
 	// PIIFilter is the per-model PII anonymization override. Nil means the
 	// network-level default is used; true forces anonymization on; false off.
 	PIIFilter *bool `json:"pii_filter,omitempty"`
+	// IsPublic marks the model as visible on the public storefront price list.
+	IsPublic bool `json:"is_public"`
+	// Sell prices are the customer-facing prices per 1M tokens.
+	SellInputPer1M       *float64 `json:"sell_input_per_1m,omitempty"`
+	SellOutputPer1M      *float64 `json:"sell_output_per_1m,omitempty"`
+	SellCachedInputPer1M *float64 `json:"sell_cached_input_per_1m,omitempty"`
 	// Deployments contains the model's deployment entries when present.
 	Deployments []deploymentResponse `json:"deployments,omitempty"`
 	CreatedAt   string               `json:"created_at"`
@@ -208,28 +227,32 @@ func modelToResponse(m *db.Model, fallbackName string) modelResponse {
 		modelType = "chat"
 	}
 	return modelResponse{
-		ID:                m.ID,
-		Name:              m.Name,
-		Provider:          m.Provider,
-		Type:              modelType,
-		BaseURL:           m.BaseURL,
-		MaxContextTokens:  m.MaxContextTokens,
-		InputPricePer1M:   m.InputPricePer1M,
-		OutputPricePer1M:  m.OutputPricePer1M,
-		AzureDeployment:   m.AzureDeployment,
-		AzureAPIVersion:   m.AzureAPIVersion,
-		GCPProject:        m.GCPProject,
-		GCPLocation:       m.GCPLocation,
-		IsActive:          m.IsActive,
-		Source:            m.Source,
-		Aliases:           aliases,
-		Timeout:           m.Timeout,
-		Strategy:          m.Strategy,
-		MaxRetries:        m.MaxRetries,
-		FallbackModelName: fallbackName,
-		PIIFilter:         m.PIIFilter,
-		CreatedAt:         m.CreatedAt,
-		UpdatedAt:         m.UpdatedAt,
+		ID:                   m.ID,
+		Name:                 m.Name,
+		Provider:             m.Provider,
+		Type:                 modelType,
+		BaseURL:              m.BaseURL,
+		MaxContextTokens:     m.MaxContextTokens,
+		InputPricePer1M:      m.InputPricePer1M,
+		OutputPricePer1M:     m.OutputPricePer1M,
+		AzureDeployment:      m.AzureDeployment,
+		AzureAPIVersion:      m.AzureAPIVersion,
+		GCPProject:           m.GCPProject,
+		GCPLocation:          m.GCPLocation,
+		IsActive:             m.IsActive,
+		Source:               m.Source,
+		Aliases:              aliases,
+		Timeout:              m.Timeout,
+		Strategy:             m.Strategy,
+		MaxRetries:           m.MaxRetries,
+		FallbackModelName:    fallbackName,
+		PIIFilter:            m.PIIFilter,
+		IsPublic:             m.IsPublic,
+		SellInputPer1M:       m.SellInputPer1M,
+		SellOutputPer1M:      m.SellOutputPer1M,
+		SellCachedInputPer1M: m.SellCachedInputPer1M,
+		CreatedAt:            m.CreatedAt,
+		UpdatedAt:            m.UpdatedAt,
 	}
 }
 
@@ -253,21 +276,24 @@ func dbModelToProxy(m *db.Model, apiKeyPlaintext string, fallbackName string) pr
 		modelType = "chat"
 	}
 	return proxy.Model{
-		Name:              m.Name,
-		Provider:          m.Provider,
-		Type:              modelType,
-		BaseURL:           m.BaseURL,
-		APIKey:            apiKeyPlaintext,
-		Aliases:           aliases,
-		MaxContextTokens:  m.MaxContextTokens,
-		Pricing:           config.PricingConfig{InputPer1M: m.InputPricePer1M, OutputPer1M: m.OutputPricePer1M},
-		AzureDeployment:   m.AzureDeployment,
-		AzureAPIVersion:   m.AzureAPIVersion,
-		GCPProject:        m.GCPProject,
-		GCPLocation:       m.GCPLocation,
-		Timeout:           timeout,
-		FallbackModelName: fallbackName,
-		PIIFilter:         m.PIIFilter,
+		Name:                 m.Name,
+		Provider:             m.Provider,
+		Type:                 modelType,
+		BaseURL:              m.BaseURL,
+		APIKey:               apiKeyPlaintext,
+		Aliases:              aliases,
+		MaxContextTokens:     m.MaxContextTokens,
+		Pricing:              config.PricingConfig{InputPer1M: m.InputPricePer1M, OutputPer1M: m.OutputPricePer1M},
+		AzureDeployment:      m.AzureDeployment,
+		AzureAPIVersion:      m.AzureAPIVersion,
+		GCPProject:           m.GCPProject,
+		GCPLocation:          m.GCPLocation,
+		Timeout:              timeout,
+		FallbackModelName:    fallbackName,
+		PIIFilter:            m.PIIFilter,
+		SellInputPer1M:       m.SellInputPer1M,
+		SellOutputPer1M:      m.SellOutputPer1M,
+		SellCachedInputPer1M: m.SellCachedInputPer1M,
 	}
 }
 
@@ -501,11 +527,6 @@ func (h *Handler) CreateModel(c fiber.Ctx) error {
 	// Validate and resolve the fallback model when provided.
 	var fallbackModelID *string
 	if req.FallbackModelName != "" {
-		lic := h.License.Load()
-		if !lic.HasFeature(license.FeatureFallbackChains) {
-			return apierror.Send(c, fiber.StatusForbidden, "feature_unavailable",
-				"model fallback chains require an Enterprise license")
-		}
 		fbID, fbErr := h.DB.GetModelIDByName(ctx, req.FallbackModelName)
 		if fbErr != nil {
 			if errors.Is(fbErr, db.ErrNotFound) {
@@ -546,26 +567,30 @@ func (h *Handler) CreateModel(c fiber.Ctx) error {
 	reqType := req.Type
 	// Insert without the API key so we have the model ID available as AAD.
 	m, err := h.DB.CreateModel(ctx, db.CreateModelParams{
-		Name:             req.Name,
-		Provider:         req.Provider,
-		ModelType:        &reqType,
-		BaseURL:          req.BaseURL,
-		APIKeyEncrypted:  nil,
-		MaxContextTokens: req.MaxContextTokens,
-		InputPricePer1M:  req.InputPricePer1M,
-		OutputPricePer1M: req.OutputPricePer1M,
-		AzureDeployment:  req.AzureDeployment,
-		AzureAPIVersion:  req.AzureAPIVersion,
-		GCPProject:       req.GCPProject,
-		GCPLocation:      req.GCPLocation,
-		Source:           "api",
-		CreatedBy:        createdBy,
-		Aliases:          aliasStr,
-		Timeout:          req.Timeout,
-		Strategy:         &req.Strategy,
-		MaxRetries:       &req.MaxRetries,
-		FallbackModelID:  fallbackModelID,
-		PIIFilter:        req.PIIFilter,
+		Name:                 req.Name,
+		Provider:             req.Provider,
+		ModelType:            &reqType,
+		BaseURL:              req.BaseURL,
+		APIKeyEncrypted:      nil,
+		MaxContextTokens:     req.MaxContextTokens,
+		InputPricePer1M:      req.InputPricePer1M,
+		OutputPricePer1M:     req.OutputPricePer1M,
+		AzureDeployment:      req.AzureDeployment,
+		AzureAPIVersion:      req.AzureAPIVersion,
+		GCPProject:           req.GCPProject,
+		GCPLocation:          req.GCPLocation,
+		Source:               "api",
+		CreatedBy:            createdBy,
+		Aliases:              aliasStr,
+		Timeout:              req.Timeout,
+		Strategy:             &req.Strategy,
+		MaxRetries:           &req.MaxRetries,
+		FallbackModelID:      fallbackModelID,
+		PIIFilter:            req.PIIFilter,
+		IsPublic:             req.IsPublic,
+		SellInputPer1M:       req.SellInputPer1M,
+		SellOutputPer1M:      req.SellOutputPer1M,
+		SellCachedInputPer1M: req.SellCachedInputPer1M,
 	})
 	if err != nil {
 		if errors.Is(err, db.ErrConflict) {
@@ -828,22 +853,26 @@ func (h *Handler) UpdateModel(c fiber.Ctx) error {
 	}
 
 	params := db.UpdateModelParams{
-		Name:             req.Name,
-		Provider:         req.Provider,
-		ModelType:        req.Type,
-		BaseURL:          req.BaseURL,
-		MaxContextTokens: req.MaxContextTokens,
-		InputPricePer1M:  req.InputPricePer1M,
-		OutputPricePer1M: req.OutputPricePer1M,
-		AzureDeployment:  req.AzureDeployment,
-		AzureAPIVersion:  req.AzureAPIVersion,
-		GCPProject:       req.GCPProject,
-		GCPLocation:      req.GCPLocation,
-		Timeout:          req.Timeout,
-		Strategy:         req.Strategy,
-		MaxRetries:       req.MaxRetries,
-		PIIFilter:        piiFilter,
-		ClearPIIFilter:   clearPIIFilter,
+		Name:                 req.Name,
+		Provider:             req.Provider,
+		ModelType:            req.Type,
+		BaseURL:              req.BaseURL,
+		MaxContextTokens:     req.MaxContextTokens,
+		InputPricePer1M:      req.InputPricePer1M,
+		OutputPricePer1M:     req.OutputPricePer1M,
+		AzureDeployment:      req.AzureDeployment,
+		AzureAPIVersion:      req.AzureAPIVersion,
+		GCPProject:           req.GCPProject,
+		GCPLocation:          req.GCPLocation,
+		Timeout:              req.Timeout,
+		Strategy:             req.Strategy,
+		MaxRetries:           req.MaxRetries,
+		PIIFilter:            piiFilter,
+		ClearPIIFilter:       clearPIIFilter,
+		IsPublic:             req.IsPublic,
+		SellInputPer1M:       req.SellInputPer1M,
+		SellOutputPer1M:      req.SellOutputPer1M,
+		SellCachedInputPer1M: req.SellCachedInputPer1M,
 	}
 
 	if req.Aliases != nil {
@@ -864,11 +893,6 @@ func (h *Handler) UpdateModel(c fiber.Ctx) error {
 			empty := ""
 			params.FallbackModelID = &empty
 		} else {
-			lic := h.License.Load()
-			if !lic.HasFeature(license.FeatureFallbackChains) {
-				return apierror.Send(c, fiber.StatusForbidden, "feature_unavailable",
-					"model fallback chains require an Enterprise license")
-			}
 			fbID, fbErr := h.DB.GetModelIDByName(ctx, *req.FallbackModelName)
 			if fbErr != nil {
 				if errors.Is(fbErr, db.ErrNotFound) {

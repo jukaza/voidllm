@@ -19,7 +19,6 @@ export default function TeamDetailPage() {
   const tabs: Tab[] = [
     { label: 'Members', path: `/teams/${teamId}/members` },
     { label: 'Models', path: `/teams/${teamId}/models` },
-    { label: 'MCP Servers', path: `/teams/${teamId}/mcp-access` },
     { label: 'Settings', path: `/teams/${teamId}/settings` },
   ]
 

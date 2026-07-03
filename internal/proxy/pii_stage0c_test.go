@@ -623,7 +623,7 @@ func TestPII_Stage0c_StreamIncomplete_StatusBadGateway(t *testing.T) {
 	if streamIncomplete {
 		eventStatusCode = http.StatusBadGateway
 	}
-	h.logUsageEvent(keyInfo, model, ui, 100, nil, eventStatusCode, "req-stage0c-1", model.Name)
+	h.logUsageEvent(keyInfo, model, ui, 100, nil, eventStatusCode, "req-stage0c-1", model.Name, "")
 
 	if h.UsageLogger.BufferLen() == 0 {
 		t.Fatal("no event in usage logger buffer after logUsageEvent for aborted stream")
@@ -636,7 +636,7 @@ func TestPII_Stage0c_StreamIncomplete_StatusBadGateway(t *testing.T) {
 	if streamIncomplete {
 		eventStatusCode = http.StatusBadGateway
 	}
-	h.logUsageEvent(keyInfo, model, ui, 100, nil, eventStatusCode, "req-stage0c-2", model.Name)
+	h.logUsageEvent(keyInfo, model, ui, 100, nil, eventStatusCode, "req-stage0c-2", model.Name, "")
 	after := h.UsageLogger.BufferLen()
 	if after != before+1 {
 		t.Errorf("buffer did not grow by 1 for complete stream: before=%d after=%d", before, after)

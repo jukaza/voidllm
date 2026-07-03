@@ -13,7 +13,8 @@ import (
 const deploymentSelectColumns = "id, model_id, name, provider, base_url, api_key_encrypted, " +
 	"azure_deployment, azure_api_version, gcp_project, gcp_location, " +
 	"weight, priority, is_active, " +
-	"created_at, updated_at, deleted_at, pii_filter"
+	"created_at, updated_at, deleted_at, pii_filter, " +
+	"provider_id, rpm_limit, tpm_limit, daily_request_limit, cost_input_per_1m, cost_output_per_1m"
 
 // Deployment represents a row in the model_deployments table.
 // Each deployment is a concrete upstream endpoint associated with a model.
@@ -41,6 +42,20 @@ type Deployment struct {
 	// routed to this deployment. Nil means not set — inherit the model-level or
 	// network-level default. true enables anonymization; false disables it.
 	PIIFilter *bool
+	// ProviderID links this channel to a business-level provider (partner).
+	// Nil means unattributed.
+	ProviderID *string
+	// RPMLimit is the max requests per minute sent to this channel. 0 = unlimited.
+	RPMLimit int
+	// TPMLimit is the max tokens per minute sent to this channel. 0 = unlimited.
+	TPMLimit int
+	// DailyRequestLimit is the max requests per day sent to this channel. 0 = unlimited.
+	DailyRequestLimit int
+	// CostInputPer1M is this channel's cost price in USD per 1M input tokens.
+	// Nil falls back to the model-level input price.
+	CostInputPer1M *float64
+	// CostOutputPer1M is this channel's cost price in USD per 1M output tokens.
+	CostOutputPer1M *float64
 }
 
 // CreateDeploymentParams holds the input for creating a deployment.
@@ -65,6 +80,18 @@ type CreateDeploymentParams struct {
 	// deployment. true enables anonymization; false disables it. Nil stores NULL
 	// (inherit model-level or network-level default).
 	PIIFilter *bool
+	// ProviderID links this channel to a business-level provider. Nil = unattributed.
+	ProviderID *string
+	// RPMLimit is the max requests per minute for this channel. 0 = unlimited.
+	RPMLimit int
+	// TPMLimit is the max tokens per minute for this channel. 0 = unlimited.
+	TPMLimit int
+	// DailyRequestLimit is the max requests per day for this channel. 0 = unlimited.
+	DailyRequestLimit int
+	// CostInputPer1M is this channel's cost price per 1M input tokens.
+	CostInputPer1M *float64
+	// CostOutputPer1M is this channel's cost price per 1M output tokens.
+	CostOutputPer1M *float64
 }
 
 // UpdateDeploymentParams holds optional fields for a partial deployment update.
@@ -90,6 +117,19 @@ type UpdateDeploymentParams struct {
 	// ClearPIIFilter, when true, sets the pii_filter column to NULL regardless
 	// of the PIIFilter pointer value. Allows callers to revert to inherit-from-model.
 	ClearPIIFilter bool
+	// ProviderID, when non-nil, replaces the linked provider. Set to a pointer
+	// to an empty string to clear the link.
+	ProviderID *string
+	// RPMLimit, when non-nil, replaces the per-minute request limit.
+	RPMLimit *int
+	// TPMLimit, when non-nil, replaces the per-minute token limit.
+	TPMLimit *int
+	// DailyRequestLimit, when non-nil, replaces the per-day request limit.
+	DailyRequestLimit *int
+	// CostInputPer1M, when non-nil, replaces the channel's input cost price.
+	CostInputPer1M *float64
+	// CostOutputPer1M, when non-nil, replaces the channel's output cost price.
+	CostOutputPer1M *float64
 }
 
 // CreateDeployment inserts a new deployment and returns the persisted record.
@@ -110,11 +150,14 @@ func (d *DB) CreateDeployment(ctx context.Context, params CreateDeploymentParams
 		"(id, model_id, name, provider, base_url, api_key_encrypted, " +
 		"azure_deployment, azure_api_version, gcp_project, gcp_location, " +
 		"weight, priority, is_active, pii_filter, " +
+		"provider_id, rpm_limit, tpm_limit, daily_request_limit, cost_input_per_1m, cost_output_per_1m, " +
 		"created_at, updated_at) " +
 		"VALUES (" +
 		p(1) + ", " + p(2) + ", " + p(3) + ", " + p(4) + ", " + p(5) + ", " + p(6) + ", " +
 		p(7) + ", " + p(8) + ", " + p(9) + ", " + p(10) + ", " + p(11) + ", " + p(12) + ", " +
-		"1, " + p(13) + ", CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+		"1, " + p(13) + ", " +
+		p(14) + ", " + p(15) + ", " + p(16) + ", " + p(17) + ", " + p(18) + ", " + p(19) + ", " +
+		"CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
 
 	selectQuery := "SELECT " + deploymentSelectColumns +
 		" FROM model_deployments WHERE id = " + p(1) + " AND deleted_at IS NULL"
@@ -135,6 +178,12 @@ func (d *DB) CreateDeployment(ctx context.Context, params CreateDeploymentParams
 			weight,
 			params.Priority,
 			boolPtrToNullableInt(params.PIIFilter),
+			params.ProviderID,
+			params.RPMLimit,
+			params.TPMLimit,
+			params.DailyRequestLimit,
+			params.CostInputPer1M,
+			params.CostOutputPer1M,
 		)
 		if execErr != nil {
 			return translateError(execErr)
@@ -294,6 +343,40 @@ func (d *DB) UpdateDeployment(ctx context.Context, id string, params UpdateDeplo
 		args = append(args, boolPtrToNullableInt(params.PIIFilter))
 		argN++
 	}
+	if params.ProviderID != nil {
+		if *params.ProviderID == "" {
+			setClauses = append(setClauses, "provider_id = NULL")
+		} else {
+			setClauses = append(setClauses, "provider_id = "+p(argN))
+			args = append(args, *params.ProviderID)
+			argN++
+		}
+	}
+	if params.RPMLimit != nil {
+		setClauses = append(setClauses, "rpm_limit = "+p(argN))
+		args = append(args, *params.RPMLimit)
+		argN++
+	}
+	if params.TPMLimit != nil {
+		setClauses = append(setClauses, "tpm_limit = "+p(argN))
+		args = append(args, *params.TPMLimit)
+		argN++
+	}
+	if params.DailyRequestLimit != nil {
+		setClauses = append(setClauses, "daily_request_limit = "+p(argN))
+		args = append(args, *params.DailyRequestLimit)
+		argN++
+	}
+	if params.CostInputPer1M != nil {
+		setClauses = append(setClauses, "cost_input_per_1m = "+p(argN))
+		args = append(args, *params.CostInputPer1M)
+		argN++
+	}
+	if params.CostOutputPer1M != nil {
+		setClauses = append(setClauses, "cost_output_per_1m = "+p(argN))
+		args = append(args, *params.CostOutputPer1M)
+		argN++
+	}
 
 	if len(setClauses) == 0 {
 		return d.GetDeployment(ctx, id)
@@ -408,6 +491,8 @@ func scanDeployment(scanner interface{ Scan(...any) error }) (*Deployment, error
 		&dep.Weight, &dep.Priority,
 		&isActiveInt, &dep.CreatedAt, &dep.UpdatedAt, &dep.DeletedAt,
 		&piiFilterInt,
+		&dep.ProviderID, &dep.RPMLimit, &dep.TPMLimit, &dep.DailyRequestLimit,
+		&dep.CostInputPer1M, &dep.CostOutputPer1M,
 	)
 	if err != nil {
 		return nil, err

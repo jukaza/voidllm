@@ -44,4 +44,13 @@ type Event struct {
 	// RequestID is the per-request trace ID set by the request ID middleware.
 	// It correlates the usage record with the proxy access log and audit log.
 	RequestID string
+	// CachedTokens is the subset of PromptTokens served from the provider's
+	// prompt cache. Zero when the provider does not report cache usage.
+	CachedTokens int
+	// Revenue is the amount debited from the customer's wallet for this
+	// request, in USD. Nil when the model has no sell pricing configured.
+	Revenue *float64
+	// DeploymentID is the DB ID of the channel that actually served the
+	// request. Empty for single-deployment (legacy) models.
+	DeploymentID string
 }

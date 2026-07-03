@@ -4,9 +4,7 @@ import { StatCard } from '../components/ui/StatCard'
 import { Table } from '../components/ui/Table'
 import type { Column } from '../components/ui/Table'
 import { Button } from '../components/ui/Button'
-import { UpgradePrompt } from '../components/ui/UpgradePrompt'
 import { useMe } from '../hooks/useMe'
-import { useLicense } from '../hooks/useLicense'
 import { useUsage } from '../hooks/useUsage'
 import type { UsageDataPoint } from '../hooks/useUsage'
 import { formatNumber, formatCost } from '../lib/utils'
@@ -224,10 +222,8 @@ const dayColumns: Column<DayCostRow>[] = [
 export default function CostReportsPage() {
   const [range, setRange] = useState<TimeRange>('30d')
   const { data: me } = useMe()
-  const { data: license } = useLicense()
   const orgId = me?.org_id ?? ''
 
-  const featureEnabled = !license || license.features.includes('cost_reports')
   const { from, to } = useMemo(() => getTimeRange(range), [range])
 
   const { data: modelUsage, isLoading: modelLoading } = useUsage(orgId, from, to, 'model')
@@ -270,15 +266,6 @@ export default function CostReportsPage() {
 
   const dayRowsDesc = useMemo(() => [...dayRows].reverse(), [dayRows])
   const modelColumns = useMemo(() => buildModelColumns(totalCost), [totalCost])
-
-  if (!featureEnabled) {
-    return (
-      <UpgradePrompt
-        title="Cost Reports"
-        description="Cost reports and budget alerts require a Pro or Enterprise license."
-      />
-    )
-  }
 
   const isModelLoading = modelLoading && !!orgId
   const isDayLoading = dayLoading && !!orgId

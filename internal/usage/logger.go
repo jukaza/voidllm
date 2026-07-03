@@ -32,6 +32,23 @@ type Logger struct {
 	done         chan struct{}
 	stopped      chan struct{}           // closed by run() when it exits
 	tokenCounter *ratelimit.TokenCounter // nil disables in-memory token counting
+	wallet       WalletDebitor           // nil disables wallet debiting
+}
+
+// WalletDebitor receives wallet debits from the usage pipeline.
+// *wallet.Service implements this interface; the indirection avoids coupling
+// the usage package to the wallet package's constructor and seeding logic.
+type WalletDebitor interface {
+	// DebitMemory reduces the in-memory balance immediately (hot-path cheap).
+	DebitMemory(userID string, amount float64)
+	// PersistDebit writes the ledger entry and re-syncs the cached balance.
+	PersistDebit(ctx context.Context, userID string, amount float64, refID, description string)
+}
+
+// SetWallet wires a wallet debitor into the pipeline. Must be called before
+// Start; not safe to call concurrently with Log.
+func (l *Logger) SetWallet(w WalletDebitor) {
+	l.wallet = w
 }
 
 // NewLogger constructs a Logger wired to the given database connection.
@@ -99,6 +116,13 @@ func (l *Logger) Log(event Event) {
 	// CheckTokens calls reflect this request even before it reaches the DB.
 	if l.tokenCounter != nil && event.TotalTokens > 0 {
 		l.tokenCounter.Add(event.KeyID, event.TeamID, event.OrgID, int64(event.TotalTokens))
+	}
+
+	// Reduce the in-memory wallet balance immediately so that subsequent
+	// balance checks reflect this request's spend before the DB flush. The
+	// ledger write happens in flush() alongside the usage_events insert.
+	if l.wallet != nil && event.Revenue != nil && *event.Revenue > 0 && event.UserID != "" {
+		l.wallet.DebitMemory(event.UserID, *event.Revenue)
 	}
 
 	if l.dropOnFull {
@@ -194,13 +218,13 @@ func (l *Logger) flush(events []Event) error {
 		"(id, key_id, key_type, org_id, team_id, user_id, service_account_id, " +
 		"model_name, prompt_tokens, completion_tokens, total_tokens, " +
 		"cost_estimate, request_duration_ms, ttft_ms, tokens_per_second, status_code, request_id, " +
-		"requested_model_name) " +
+		"requested_model_name, cached_tokens, revenue, deployment_id) " +
 		"VALUES (" +
 		p(1) + ", " + p(2) + ", " + p(3) + ", " + p(4) + ", " +
 		p(5) + ", " + p(6) + ", " + p(7) + ", " + p(8) + ", " +
 		p(9) + ", " + p(10) + ", " + p(11) + ", " +
 		p(12) + ", " + p(13) + ", " + p(14) + ", " + p(15) + ", " + p(16) + ", " + p(17) + ", " +
-		p(18) + ")"
+		p(18) + ", " + p(19) + ", " + p(20) + ", " + p(21) + ")"
 
 	ctx := context.Background()
 
@@ -234,6 +258,9 @@ func (l *Logger) flush(events []Event) error {
 				ev.StatusCode,
 				ev.RequestID,
 				ev.RequestedModelName,
+				ev.CachedTokens,
+				ev.Revenue,
+				ev.DeploymentID,
 			)
 			if err != nil {
 				return fmt.Errorf("usage flush: insert event: %w", err)
@@ -242,6 +269,19 @@ func (l *Logger) flush(events []Event) error {
 		return nil
 	}); err != nil {
 		return err
+	}
+
+	// Persist wallet debits for billed events. This runs after the usage
+	// insert so a failed usage flush never double-charges; conversely a failed
+	// debit is logged inside PersistDebit and the in-memory balance re-syncs
+	// on the next successful debit.
+	if l.wallet != nil {
+		for _, ev := range events {
+			if ev.Revenue != nil && *ev.Revenue > 0 && ev.UserID != "" {
+				l.wallet.PersistDebit(ctx, ev.UserID, *ev.Revenue, ev.RequestID,
+					"Usage: "+ev.ModelName)
+			}
+		}
 	}
 
 	// Aggregate the flushed events into hourly rollup buckets. The bucket hour

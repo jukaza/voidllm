@@ -23,7 +23,6 @@ export default function OrgDetailPage() {
     { label: 'Members', path: `/orgs/${orgId}/members` },
     { label: 'Teams', path: `/orgs/${orgId}/teams` },
     { label: 'Settings', path: `/orgs/${orgId}/settings` },
-    { label: 'SSO', path: `/orgs/${orgId}/sso` },
   ]
 
   return (

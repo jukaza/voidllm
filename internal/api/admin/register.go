@@ -1,0 +1,403 @@
+package admin
+
+import (
+	"errors"
+	"log/slog"
+	"strings"
+	"time"
+
+	"github.com/gofiber/fiber/v3"
+	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
+
+	"github.com/voidmind-io/voidllm/internal/apierror"
+	"github.com/voidmind-io/voidllm/internal/auth"
+	"github.com/voidmind-io/voidllm/internal/db"
+	"github.com/voidmind-io/voidllm/pkg/keygen"
+)
+
+// registerRequest is the JSON body accepted by Register.
+type registerRequest struct {
+	Email       string `json:"email"`
+	Password    string `json:"password"`
+	DisplayName string `json:"display_name"`
+}
+
+// registerResponse is returned on successful public signup. It carries the
+// customer's first API key in plaintext — shown exactly once — plus a session
+// token so the UI can log the customer straight in.
+type registerResponse struct {
+	Token     string     `json:"token"`
+	ExpiresAt string     `json:"expires_at"`
+	APIKey    string     `json:"api_key"`
+	User      meResponse `json:"user"`
+}
+
+// Register handles POST /api/v1/auth/register — public self-signup for the
+// marketplace. It creates the user, a personal organization, an empty wallet,
+// and the customer's first API key, then opens a session.
+//
+// @Summary      Public customer signup
+// @Description  Creates a customer account with a personal org, prepaid wallet, and first API key.
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Success      201  {object}  registerResponse
+// @Failure      400  {object}  swaggerErrorResponse
+// @Failure      409  {object}  swaggerErrorResponse
+// @Router       /auth/register [post]
+func (h *Handler) Register(c fiber.Ctx) error {
+	var req registerRequest
+	if err := c.Bind().JSON(&req); err != nil {
+		return apierror.BadRequest(c, "invalid request body")
+	}
+
+	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
+	req.DisplayName = strings.TrimSpace(req.DisplayName)
+
+	if req.Email == "" || !strings.Contains(req.Email, "@") {
+		return apierror.BadRequest(c, "a valid email is required")
+	}
+	if len(req.Password) < 8 {
+		return apierror.BadRequest(c, "password must be at least 8 characters")
+	}
+	if req.DisplayName == "" {
+		return apierror.BadRequest(c, "display_name is required")
+	}
+
+	// Reuse the login throttle for signup abuse protection: one bucket per IP
+	// plus a per-email lockout, same thresholds as login brute-force.
+	if h.LoginThrottle != nil {
+		if err := h.LoginThrottle.Allow(c.IP(), req.Email); err != nil {
+			return apierror.Send(c, fiber.StatusTooManyRequests, "too_many_requests",
+				"too many signup attempts, try again later")
+		}
+	}
+
+	ctx := c.Context()
+
+	passwordHashBytes, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		h.Log.ErrorContext(ctx, "register: hash password", slog.String("error", err.Error()))
+		return apierror.InternalError(c, "signup failed")
+	}
+	passwordHash := string(passwordHashBytes)
+
+	user, err := h.DB.CreateUser(ctx, db.CreateUserParams{
+		Email:        req.Email,
+		DisplayName:  req.DisplayName,
+		PasswordHash: &passwordHash,
+		AuthProvider: "local",
+	})
+	if err != nil {
+		if errors.Is(err, db.ErrConflict) {
+			if h.LoginThrottle != nil {
+				h.LoginThrottle.RecordFailure(req.Email)
+			}
+			return apierror.Conflict(c, "email already registered")
+		}
+		h.Log.ErrorContext(ctx, "register: create user", slog.String("error", err.Error()))
+		return apierror.InternalError(c, "signup failed")
+	}
+
+	// Personal org: every customer gets an invisible single-member org so all
+	// existing org-scoped queries (usage, keys, access) work unchanged. The
+	// slug must be unique — derive it from a fresh UUID.
+	orgSlug := "cust-" + uuid.NewString()[:13]
+	org, err := h.DB.CreateOrg(ctx, db.CreateOrgParams{
+		Name: req.DisplayName,
+		Slug: orgSlug,
+	})
+	if err != nil {
+		h.Log.ErrorContext(ctx, "register: create org", slog.String("error", err.Error()))
+		return apierror.InternalError(c, "signup failed")
+	}
+
+	if _, err := h.DB.CreateOrgMembership(ctx, db.CreateOrgMembershipParams{
+		OrgID:  org.ID,
+		UserID: user.ID,
+		Role:   auth.RoleMember,
+	}); err != nil {
+		h.Log.ErrorContext(ctx, "register: create membership", slog.String("error", err.Error()))
+		return apierror.InternalError(c, "signup failed")
+	}
+
+	// Empty prepaid wallet; requests are rejected with 402 until topped up.
+	if _, err := h.DB.CreateWallet(ctx, user.ID, ""); err != nil {
+		h.Log.ErrorContext(ctx, "register: create wallet", slog.String("error", err.Error()))
+		return apierror.InternalError(c, "signup failed")
+	}
+	if h.Wallet != nil {
+		h.Wallet.Register(user.ID)
+	}
+
+	// First API key, auto-issued so the customer can call the proxy right away.
+	apiKeyPlain, err := keygen.Generate(keygen.KeyTypeUser)
+	if err != nil {
+		h.Log.ErrorContext(ctx, "register: generate api key", slog.String("error", err.Error()))
+		return apierror.InternalError(c, "signup failed")
+	}
+	apiKeyHash := keygen.Hash(apiKeyPlain, h.HMACSecret)
+	apiKeyRec, err := h.DB.CreateAPIKey(ctx, db.CreateAPIKeyParams{
+		KeyHash:   apiKeyHash,
+		KeyHint:   keygen.Hint(apiKeyPlain),
+		KeyType:   keygen.KeyTypeUser,
+		Name:      "Default key",
+		OrgID:     org.ID,
+		UserID:    &user.ID,
+		CreatedBy: user.ID,
+	})
+	if err != nil {
+		h.Log.ErrorContext(ctx, "register: create api key", slog.String("error", err.Error()))
+		return apierror.InternalError(c, "signup failed")
+	}
+	h.KeyCache.Set(apiKeyHash, auth.KeyInfo{
+		ID:      apiKeyRec.ID,
+		KeyType: keygen.KeyTypeUser,
+		Role:    auth.RoleMember,
+		OrgID:   org.ID,
+		UserID:  user.ID,
+		Name:    apiKeyRec.Name,
+	})
+
+	// Open a 24h session so the UI can log the customer in immediately.
+	sessionKey, err := keygen.Generate(keygen.KeyTypeSession)
+	if err != nil {
+		h.Log.ErrorContext(ctx, "register: generate session key", slog.String("error", err.Error()))
+		return apierror.InternalError(c, "signup failed")
+	}
+	sessionHash := keygen.Hash(sessionKey, h.HMACSecret)
+	expiresAt := time.Now().UTC().Add(24 * time.Hour)
+	expiresAtStr := expiresAt.Format(time.RFC3339)
+	sessionRec, err := h.DB.CreateAPIKey(ctx, db.CreateAPIKeyParams{
+		KeyHash:   sessionHash,
+		KeyHint:   keygen.Hint(sessionKey),
+		KeyType:   keygen.KeyTypeSession,
+		Name:      "Login session",
+		OrgID:     org.ID,
+		UserID:    &user.ID,
+		ExpiresAt: &expiresAtStr,
+		CreatedBy: user.ID,
+	})
+	if err != nil {
+		h.Log.ErrorContext(ctx, "register: create session", slog.String("error", err.Error()))
+		return apierror.InternalError(c, "signup failed")
+	}
+	h.KeyCache.Set(sessionHash, auth.KeyInfo{
+		ID:        sessionRec.ID,
+		KeyType:   keygen.KeyTypeSession,
+		Role:      auth.RoleMember,
+		OrgID:     org.ID,
+		UserID:    user.ID,
+		Name:      "Login session",
+		ExpiresAt: &expiresAt,
+	})
+
+	if h.LoginThrottle != nil {
+		h.LoginThrottle.RecordSuccess(req.Email)
+	}
+
+	h.Log.InfoContext(ctx, "customer registered",
+		slog.String("user_id", user.ID),
+		slog.String("org_id", org.ID),
+	)
+
+	return c.Status(fiber.StatusCreated).JSON(registerResponse{
+		Token:     sessionKey,
+		ExpiresAt: expiresAtStr,
+		APIKey:    apiKeyPlain,
+		User: meResponse{
+			ID:          user.ID,
+			Email:       user.Email,
+			DisplayName: user.DisplayName,
+			Role:        auth.RoleMember,
+			OrgID:       org.ID,
+		},
+	})
+}
+
+// walletResponse is the JSON shape for GET /me/wallet.
+type walletResponse struct {
+	Balance  float64 `json:"balance"`
+	Currency string  `json:"currency"`
+}
+
+// MyWallet handles GET /api/v1/me/wallet — the customer's own balance.
+func (h *Handler) MyWallet(c fiber.Ctx) error {
+	keyInfo := auth.KeyInfoFromCtx(c)
+	if keyInfo == nil || keyInfo.UserID == "" {
+		return apierror.Send(c, fiber.StatusForbidden, "forbidden", "no user identity on this key")
+	}
+
+	w, err := h.DB.GetWalletByUser(c.Context(), keyInfo.UserID)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			return c.JSON(walletResponse{Balance: 0, Currency: "USD"})
+		}
+		h.Log.ErrorContext(c.Context(), "my wallet", slog.String("error", err.Error()))
+		return apierror.InternalError(c, "failed to load wallet")
+	}
+	return c.JSON(walletResponse{Balance: w.Balance, Currency: w.Currency})
+}
+
+// transactionItem is one row in the transaction history response.
+type transactionItem struct {
+	ID           string  `json:"id"`
+	Type         string  `json:"type"`
+	Amount       float64 `json:"amount"`
+	BalanceAfter float64 `json:"balance_after"`
+	RefID        string  `json:"ref_id"`
+	Description  string  `json:"description"`
+	CreatedAt    string  `json:"created_at"`
+}
+
+// MyTransactions handles GET /api/v1/me/transactions — the customer's ledger,
+// newest first, keyset-paginated by transaction ID.
+func (h *Handler) MyTransactions(c fiber.Ctx) error {
+	keyInfo := auth.KeyInfoFromCtx(c)
+	if keyInfo == nil || keyInfo.UserID == "" {
+		return apierror.Send(c, fiber.StatusForbidden, "forbidden", "no user identity on this key")
+	}
+
+	pg, err := parsePagination(c)
+	if err != nil {
+		return apierror.BadRequest(c, err.Error())
+	}
+
+	txs, err := h.DB.ListTransactions(c.Context(), keyInfo.UserID, pg.Cursor, pg.Limit+1)
+	if err != nil {
+		h.Log.ErrorContext(c.Context(), "my transactions", slog.String("error", err.Error()))
+		return apierror.InternalError(c, "failed to load transactions")
+	}
+
+	hasMore := len(txs) > pg.Limit
+	if hasMore {
+		txs = txs[:pg.Limit]
+	}
+	items := make([]transactionItem, len(txs))
+	for i, t := range txs {
+		items[i] = transactionItem{
+			ID: t.ID, Type: t.Type, Amount: t.Amount, BalanceAfter: t.BalanceAfter,
+			RefID: t.RefID, Description: t.Description, CreatedAt: t.CreatedAt,
+		}
+	}
+	cursor := ""
+	if hasMore && len(items) > 0 {
+		cursor = items[len(items)-1].ID
+	}
+	return c.JSON(fiber.Map{"data": items, "has_more": hasMore, "cursor": cursor})
+}
+
+// topupRequestBody is the JSON body for POST /me/topups.
+type topupRequestBody struct {
+	Amount     float64 `json:"amount"`
+	PaymentRef string  `json:"payment_ref"`
+}
+
+// CreateMyTopup handles POST /api/v1/me/topups — a customer submits a manual
+// top-up (bank transfer) for admin review.
+func (h *Handler) CreateMyTopup(c fiber.Ctx) error {
+	keyInfo := auth.KeyInfoFromCtx(c)
+	if keyInfo == nil || keyInfo.UserID == "" {
+		return apierror.Send(c, fiber.StatusForbidden, "forbidden", "no user identity on this key")
+	}
+
+	var req topupRequestBody
+	if err := c.Bind().JSON(&req); err != nil {
+		return apierror.BadRequest(c, "invalid request body")
+	}
+	if req.Amount <= 0 {
+		return apierror.BadRequest(c, "amount must be positive")
+	}
+	if req.Amount > 1_000_000 {
+		return apierror.BadRequest(c, "amount exceeds the maximum accepted per top-up")
+	}
+
+	tr, err := h.DB.CreateTopupRequest(c.Context(), keyInfo.UserID, req.Amount, req.PaymentRef)
+	if err != nil {
+		h.Log.ErrorContext(c.Context(), "create topup", slog.String("error", err.Error()))
+		return apierror.InternalError(c, "failed to create top-up request")
+	}
+	return c.Status(fiber.StatusCreated).JSON(topupToJSON(tr))
+}
+
+// MyTopups handles GET /api/v1/me/topups — the customer's own top-up history.
+func (h *Handler) MyTopups(c fiber.Ctx) error {
+	keyInfo := auth.KeyInfoFromCtx(c)
+	if keyInfo == nil || keyInfo.UserID == "" {
+		return apierror.Send(c, fiber.StatusForbidden, "forbidden", "no user identity on this key")
+	}
+
+	pg, err := parsePagination(c)
+	if err != nil {
+		return apierror.BadRequest(c, err.Error())
+	}
+
+	reqs, err := h.DB.ListTopupRequests(c.Context(), "", keyInfo.UserID, pg.Cursor, pg.Limit+1)
+	if err != nil {
+		h.Log.ErrorContext(c.Context(), "my topups", slog.String("error", err.Error()))
+		return apierror.InternalError(c, "failed to load top-up requests")
+	}
+
+	hasMore := len(reqs) > pg.Limit
+	if hasMore {
+		reqs = reqs[:pg.Limit]
+	}
+	items := make([]fiber.Map, len(reqs))
+	for i := range reqs {
+		items[i] = topupToJSON(&reqs[i])
+	}
+	cursor := ""
+	if hasMore && len(reqs) > 0 {
+		cursor = reqs[len(reqs)-1].ID
+	}
+	return c.JSON(fiber.Map{"data": items, "has_more": hasMore, "cursor": cursor})
+}
+
+func topupToJSON(t *db.TopupRequest) fiber.Map {
+	return fiber.Map{
+		"id":          t.ID,
+		"user_id":     t.UserID,
+		"amount":      t.Amount,
+		"payment_ref": t.PaymentRef,
+		"status":      t.Status,
+		"reviewed_by": t.ReviewedBy,
+		"reviewed_at": t.ReviewedAt,
+		"note":        t.Note,
+		"created_at":  t.CreatedAt,
+	}
+}
+
+// publicModelItem is one row of the public storefront price list.
+type publicModelItem struct {
+	Name                 string   `json:"name"`
+	Type                 string   `json:"type"`
+	MaxContextTokens     int      `json:"max_context_tokens,omitempty"`
+	SellInputPer1M       *float64 `json:"sell_input_per_1m"`
+	SellOutputPer1M      *float64 `json:"sell_output_per_1m"`
+	SellCachedInputPer1M *float64 `json:"sell_cached_input_per_1m,omitempty"`
+}
+
+// PublicModels handles GET /api/v1/public/models — the unauthenticated
+// storefront price list. Only models flagged is_public are returned, and only
+// sell-side fields are exposed (never cost prices or upstream details).
+func (h *Handler) PublicModels(c fiber.Ctx) error {
+	models, err := h.DB.ListPublicModels(c.Context())
+	if err != nil {
+		h.Log.ErrorContext(c.Context(), "public models", slog.String("error", err.Error()))
+		return apierror.InternalError(c, "failed to load models")
+	}
+
+	items := make([]publicModelItem, len(models))
+	for i, m := range models {
+		items[i] = publicModelItem{
+			Name:                 m.Name,
+			Type:                 m.ModelType,
+			MaxContextTokens:     m.MaxContextTokens,
+			SellInputPer1M:       m.SellInputPer1M,
+			SellOutputPer1M:      m.SellOutputPer1M,
+			SellCachedInputPer1M: m.SellCachedInputPer1M,
+		}
+	}
+	return c.JSON(fiber.Map{"data": items})
+}

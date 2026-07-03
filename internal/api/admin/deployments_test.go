@@ -14,7 +14,6 @@ import (
 	"github.com/voidmind-io/voidllm/internal/cache"
 	"github.com/voidmind-io/voidllm/internal/config"
 	"github.com/voidmind-io/voidllm/internal/db"
-	"github.com/voidmind-io/voidllm/internal/license"
 	"log/slog"
 	"time"
 )
@@ -58,7 +57,6 @@ func setupTestAppWithEncKey(t *testing.T, dsn string) (*fiber.App, *db.DB, *cach
 		HMACSecret:    testHMACSecret,
 		EncryptionKey: testEncryptionKey,
 		KeyCache:      keyCache,
-		License:       license.NewHolder(license.Verify("", true)),
 		Log:           slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 

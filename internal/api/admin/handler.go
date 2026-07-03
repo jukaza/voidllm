@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
-	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
@@ -14,15 +13,12 @@ import (
 	"github.com/voidmind-io/voidllm/internal/audit"
 	"github.com/voidmind-io/voidllm/internal/auth"
 	"github.com/voidmind-io/voidllm/internal/cache"
-	"github.com/voidmind-io/voidllm/internal/config"
 	"github.com/voidmind-io/voidllm/internal/db"
 	"github.com/voidmind-io/voidllm/internal/health"
-	"github.com/voidmind-io/voidllm/internal/license"
-	"github.com/voidmind-io/voidllm/internal/mcp"
 	"github.com/voidmind-io/voidllm/internal/proxy"
 	voidredis "github.com/voidmind-io/voidllm/internal/redis"
-	"github.com/voidmind-io/voidllm/internal/sso"
 	"github.com/voidmind-io/voidllm/internal/update"
+	"github.com/voidmind-io/voidllm/internal/wallet"
 )
 
 // ModelHealthProvider provides upstream model health status for the admin API.
@@ -43,68 +39,32 @@ type Handler struct {
 	// enterprise deployments the process-level mutex is sufficient.
 	fallbackMu sync.Mutex
 
-	DB                *db.DB
-	HMACSecret        []byte
-	EncryptionKey     []byte // AES-256-GCM key for upstream API key encryption
-	KeyCache          *cache.Cache[string, auth.KeyInfo]
-	Registry          *proxy.Registry
-	AccessCache       *proxy.ModelAccessCache  // in-memory model access cache; nil disables refresh
-	AliasCache        *proxy.AliasCache        // in-memory model alias cache; nil disables refresh
-	MCPServerCache    *proxy.MCPServerCache    // in-memory MCP server cache; nil falls back to DB
-	MCPAccessCache    *proxy.MCPAccessCache    // in-memory MCP access cache; nil falls back to DB
-	MCPTransportCache *proxy.MCPTransportCache // persistent transport + decrypted token cache; nil disables
-	Redis             *voidredis.Client        // nil when Redis is not configured
-	AuditLogger       *audit.Logger            // nil when audit logging is disabled
-	License           *license.Holder          // thread-safe license holder; Load() never returns nil
-	FallbackMaxDepth  int                      // from config; 0 = fallback disabled; exposed via GET /license
-	Log               *slog.Logger
-	// SSOProvider is the OIDC provider used for SSO login. Nil when SSO is
-	// disabled or unlicensed.
-	SSOProvider *sso.Provider
-	// SSOConfig holds the SSO configuration passed from the application config.
-	SSOConfig config.SSOConfig
+	DB            *db.DB
+	HMACSecret    []byte
+	EncryptionKey []byte // AES-256-GCM key for upstream API key encryption
+	KeyCache      *cache.Cache[string, auth.KeyInfo]
+	Registry      *proxy.Registry
+	AccessCache   *proxy.ModelAccessCache // in-memory model access cache; nil disables refresh
+	AliasCache    *proxy.AliasCache       // in-memory model alias cache; nil disables refresh
+	Redis         *voidredis.Client       // nil when Redis is not configured
+	AuditLogger   *audit.Logger           // nil when audit logging is disabled
+	Log           *slog.Logger
 	// HealthChecker provides upstream model health status. Nil when health
 	// monitoring is not enabled.
 	HealthChecker ModelHealthProvider
-	// MCPHealthChecker provides MCP server health status. Nil when MCP health
-	// monitoring is not enabled.
-	MCPHealthChecker *health.MCPHealthChecker
-	// MCPServer is the management MCP server (list_models, get_usage, etc.).
-	// Nil when MCP is not configured — the route is only registered when non-nil.
-	MCPServer *mcp.Server
-	// CodeModeServer is the Code Mode MCP server (list_servers, search_tools,
-	// execute_code). Nil when Code Mode is disabled — the /api/v1/mcp route is
-	// only registered when non-nil.
-	CodeModeServer *mcp.Server
-	// MCPCallTimeout is the maximum duration for a single proxied MCP tool call
-	// to an external server. Zero falls back to a 30-second default.
-	MCPCallTimeout time.Duration
-	// MCPLogger receives asynchronous usage events for proxied MCP tool calls.
-	// Nil disables usage logging for MCP proxy calls.
-	MCPLogger MCPToolCallLogger
-	// MCPAllowPrivateURLs disables SSRF protection for MCP server URLs.
-	// Set via YAML config only — not exposed in Admin API.
-	MCPAllowPrivateURLs bool
-	// ToolCache holds cached tool schemas from upstream MCP servers for use by
-	// Code Mode. Nil when Code Mode is disabled.
-	ToolCache *mcp.ToolCache
-	// CodeExecutor runs Code Mode JavaScript in sandboxed QJS runtimes.
-	// Nil when Code Mode is disabled.
-	CodeExecutor *mcp.Executor
-	// CodePool is the QJS runtime pool backing CodeExecutor. Held here so that
-	// app.cleanup can drain and close the pool on graceful shutdown.
-	// Nil when Code Mode is disabled.
-	CodePool *mcp.RuntimePool
 	// LoginThrottle enforces per-IP and per-account brute-force protection on
 	// the login endpoint. Nil disables throttling (test environments only).
 	LoginThrottle *auth.LoginThrottle
+	// Wallet is the prepaid wallet service. Nil disables wallet features
+	// (signup still creates the DB wallet row).
+	Wallet *wallet.Service
 	// UpdateChecker provides cached update status read from the settings table.
 	// Nil in dev builds (Version == "dev") — GetUpdateStatus returns a static
 	// response in that case.
 	UpdateChecker *update.Checker
-	// ReloadModels triggers an in-process rebuild of the model registry,
-	// including the license-aware fallback gating. Called from SetLicense
-	// to apply license changes immediately, independent of Redis pub/sub.
+	// ReloadModels triggers an in-process rebuild of the model registry.
+	// Called after model/deployment mutations to apply changes immediately,
+	// independent of Redis pub/sub.
 	// Must be safe to call concurrently. May be nil — callers must nil-check.
 	ReloadModels func(context.Context) error
 }
@@ -157,41 +117,4 @@ func (h *Handler) refreshAccessCache(ctx context.Context) {
 		return
 	}
 	h.AccessCache.Load(orgA, teamA, keyA)
-}
-
-// refreshMCPCaches performs a single LoadAllActiveMCPServers query and feeds
-// the result to both MCPServerCache and MCPTransportCache. It is called after
-// any MCP server mutation so that both hot-path caches are updated atomically
-// from one DB round-trip. If both caches are nil the call is a no-op.
-func (h *Handler) refreshMCPCaches(ctx context.Context) {
-	if h.MCPServerCache == nil && h.MCPTransportCache == nil {
-		return
-	}
-	servers, err := h.DB.LoadAllActiveMCPServers(ctx)
-	if err != nil {
-		h.Log.ErrorContext(ctx, "refresh mcp caches", slog.String("error", err.Error()))
-		return
-	}
-	if h.MCPServerCache != nil {
-		h.MCPServerCache.LoadAll(servers)
-	}
-	if h.MCPTransportCache != nil {
-		h.MCPTransportCache.LoadAll(servers)
-	}
-}
-
-// refreshMCPAccessCache reloads all MCP access allowlists from the database
-// into the in-memory MCP access cache. It is called after any Set*MCPAccess
-// mutation so that the hot path immediately reflects the updated configuration.
-// If MCPAccessCache is nil the call is a no-op.
-func (h *Handler) refreshMCPAccessCache(ctx context.Context) {
-	if h.MCPAccessCache == nil {
-		return
-	}
-	orgA, teamA, keyA, err := h.DB.LoadAllMCPAccess(ctx)
-	if err != nil {
-		h.Log.ErrorContext(ctx, "refresh mcp access cache", slog.String("error", err.Error()))
-		return
-	}
-	h.MCPAccessCache.Load(orgA, teamA, keyA)
 }

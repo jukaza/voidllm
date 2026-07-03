@@ -55,6 +55,10 @@ type UsageInfo struct {
 	CompletionTokens int
 	// TotalTokens is the sum of prompt and completion tokens.
 	TotalTokens int
+	// CachedTokens is the subset of PromptTokens served from the provider's
+	// prompt cache (usage.prompt_tokens_details.cached_tokens). Zero when the
+	// provider does not report cache usage.
+	CachedTokens int
 }
 
 // Adapter transforms requests and responses between the client's OpenAI-compatible

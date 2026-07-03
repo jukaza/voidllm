@@ -25,7 +25,6 @@ import type { ModelResponse, DeploymentResponse, CreateModelParams, UpdateModelP
 import { useModelHealth } from '../hooks/useModelHealth'
 import type { ModelHealthInfo } from '../hooks/useModelHealth'
 import { useToast } from '../hooks/useToast'
-import { useLicense } from '../hooks/useLicense'
 import { providerBadgeVariant, isKnownProvider } from '../lib/providers'
 import type { ProviderKey } from '../lib/providers'
 import apiClient from '../api/client'
@@ -494,6 +493,10 @@ function CreateModelDialog({ open, onClose }: CreateModelDialogProps) {
   const [azureApiVersion, setAzureApiVersion] = useState('')
   const [timeout, setTimeout] = useState('')
   const [piiFilter, setPiiFilter] = useState('default')
+  const [isPublic, setIsPublic] = useState(false)
+  const [sellInputPer1m, setSellInputPer1m] = useState('')
+  const [sellOutputPer1m, setSellOutputPer1m] = useState('')
+  const [sellCachedInputPer1m, setSellCachedInputPer1m] = useState('')
 
   // Load-balanced fields
   const [strategy, setStrategy] = useState('round-robin')
@@ -512,9 +515,7 @@ function CreateModelDialog({ open, onClose }: CreateModelDialogProps) {
   const createModel = useCreateModel()
   const createDeployment = useCreateDeployment()
   const { toast } = useToast()
-  const { data: license } = useLicense()
   const { data: modelsData } = useModels()
-  const hasFallbackFeature = license?.features.includes('fallback_chains') ?? false
 
   function handleClose() {
     setMode('single')
@@ -677,6 +678,19 @@ function CreateModelDialog({ open, onClose }: CreateModelDialogProps) {
       if (parsedAliases.length > 0) params.aliases = parsedAliases
       const piiFilterValue = piiFilterToParam(piiFilter)
       if (piiFilterValue !== undefined) params.pii_filter = piiFilterValue
+      params.is_public = isPublic
+      if (sellInputPer1m.trim()) {
+        const parsed = parseFloat(sellInputPer1m)
+        if (!isNaN(parsed)) params.sell_input_per_1m = parsed
+      }
+      if (sellOutputPer1m.trim()) {
+        const parsed = parseFloat(sellOutputPer1m)
+        if (!isNaN(parsed)) params.sell_output_per_1m = parsed
+      }
+      if (sellCachedInputPer1m.trim()) {
+        const parsed = parseFloat(sellCachedInputPer1m)
+        if (!isNaN(parsed)) params.sell_cached_input_per_1m = parsed
+      }
 
       createModel.mutate(params, {
         onSuccess: () => {
@@ -718,6 +732,19 @@ function CreateModelDialog({ open, onClose }: CreateModelDialogProps) {
       if (parsedAliases.length > 0) params.aliases = parsedAliases
       const piiFilterValueLB = piiFilterToParam(piiFilter)
       if (piiFilterValueLB !== undefined) params.pii_filter = piiFilterValueLB
+      params.is_public = isPublic
+      if (sellInputPer1m.trim()) {
+        const parsedSell = parseFloat(sellInputPer1m)
+        if (!isNaN(parsedSell)) params.sell_input_per_1m = parsedSell
+      }
+      if (sellOutputPer1m.trim()) {
+        const parsedSell = parseFloat(sellOutputPer1m)
+        if (!isNaN(parsedSell)) params.sell_output_per_1m = parsedSell
+      }
+      if (sellCachedInputPer1m.trim()) {
+        const parsedSell = parseFloat(sellCachedInputPer1m)
+        if (!isNaN(parsedSell)) params.sell_cached_input_per_1m = parsedSell
+      }
 
       try {
         const model = await createModel.mutateAsync(params)
@@ -875,23 +902,11 @@ function CreateModelDialog({ open, onClose }: CreateModelDialogProps) {
                 options={fallbackOptions}
                 value={fallbackModelName}
                 onChange={setFallbackModelName}
-                disabled={isPending || !hasFallbackFeature}
+                disabled={isPending}
               />
-              {!hasFallbackFeature && (
-                <p className="text-xs text-text-tertiary mt-1">
-                  Available with an Enterprise license.
-                </p>
-              )}
-              {hasFallbackFeature && license?.fallback_max_depth === 0 && (
-                <p className="text-xs text-amber-400 mt-1">
-                  Fallback is configured but disabled. Set fallback_max_depth in your server config to enable.
-                </p>
-              )}
-              {hasFallbackFeature && (license?.fallback_max_depth ?? 0) > 0 && (
-                <p className="text-xs text-text-tertiary mt-1">
-                  When this model fails, requests automatically retry on the fallback model.
-                </p>
-              )}
+              <p className="text-xs text-text-tertiary mt-1">
+                When this model fails, requests automatically retry on the fallback model.
+              </p>
             </div>
 
             {/* Deployments list */}
@@ -1173,6 +1188,41 @@ function CreateModelDialog({ open, onClose }: CreateModelDialogProps) {
                 disabled={isPending}
               />
             </div>
+            <div className="rounded-lg border border-white/5 p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-text-secondary">Storefront (sell pricing)</p>
+                  <p className="text-xs text-text-tertiary">Customer-facing prices; wallet is debited at these rates.</p>
+                </div>
+                <Toggle checked={isPublic} onChange={setIsPublic} label="Public" disabled={isPending} />
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <Input
+                  label="Sell Input /1M"
+                  type="number"
+                  value={sellInputPer1m}
+                  onChange={(e) => setSellInputPer1m(e.target.value)}
+                  placeholder="3.00"
+                  disabled={isPending}
+                />
+                <Input
+                  label="Sell Output /1M"
+                  type="number"
+                  value={sellOutputPer1m}
+                  onChange={(e) => setSellOutputPer1m(e.target.value)}
+                  placeholder="12.00"
+                  disabled={isPending}
+                />
+                <Input
+                  label="Sell Cached /1M"
+                  type="number"
+                  value={sellCachedInputPer1m}
+                  onChange={(e) => setSellCachedInputPer1m(e.target.value)}
+                  placeholder="1.50"
+                  disabled={isPending}
+                />
+              </div>
+            </div>
             <Input
               label="Timeout"
               value={timeout}
@@ -1243,12 +1293,20 @@ function EditModelDialog({ model, onClose }: EditModelDialogProps) {
   const [timeout, setTimeout] = useState(model.timeout ?? '')
   const [fallbackModelName, setFallbackModelName] = useState(model.fallback_model_name ?? '')
   const [piiFilter, setPiiFilter] = useState(() => piiFilterFromResponse(model.pii_filter))
+  const [isPublic, setIsPublic] = useState(model.is_public ?? false)
+  const [sellInputPer1m, setSellInputPer1m] = useState(
+    model.sell_input_per_1m != null ? String(model.sell_input_per_1m) : '',
+  )
+  const [sellOutputPer1m, setSellOutputPer1m] = useState(
+    model.sell_output_per_1m != null ? String(model.sell_output_per_1m) : '',
+  )
+  const [sellCachedInputPer1m, setSellCachedInputPer1m] = useState(
+    model.sell_cached_input_per_1m != null ? String(model.sell_cached_input_per_1m) : '',
+  )
 
   const updateModel = useUpdateModel()
   const { toast } = useToast()
-  const { data: license } = useLicense()
   const { data: modelsData } = useModels()
-  const hasFallbackFeature = license?.features.includes('fallback_chains') ?? false
 
   const isAzure = provider === 'azure'
 
@@ -1339,6 +1397,20 @@ function EditModelDialog({ model, onClose }: EditModelDialogProps) {
       params.pii_filter = newPiiFilter ?? null
     }
 
+    if (isPublic !== (model.is_public ?? false)) params.is_public = isPublic
+    if (sellInputPer1m.trim()) {
+      const parsed = parseFloat(sellInputPer1m)
+      if (!isNaN(parsed) && parsed !== model.sell_input_per_1m) params.sell_input_per_1m = parsed
+    }
+    if (sellOutputPer1m.trim()) {
+      const parsed = parseFloat(sellOutputPer1m)
+      if (!isNaN(parsed) && parsed !== model.sell_output_per_1m) params.sell_output_per_1m = parsed
+    }
+    if (sellCachedInputPer1m.trim()) {
+      const parsed = parseFloat(sellCachedInputPer1m)
+      if (!isNaN(parsed) && parsed !== model.sell_cached_input_per_1m) params.sell_cached_input_per_1m = parsed
+    }
+
     if (Object.keys(params).length === 0) {
       onClose()
       return
@@ -1427,6 +1499,41 @@ function EditModelDialog({ model, onClose }: EditModelDialogProps) {
             disabled={updateModel.isPending}
           />
         </div>
+        <div className="rounded-lg border border-white/5 p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-text-secondary">Storefront (sell pricing)</p>
+              <p className="text-xs text-text-tertiary">Customer-facing prices; wallet is debited at these rates.</p>
+            </div>
+            <Toggle checked={isPublic} onChange={setIsPublic} label="Public" disabled={updateModel.isPending} />
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <Input
+              label="Sell Input /1M"
+              type="number"
+              value={sellInputPer1m}
+              onChange={(e) => setSellInputPer1m(e.target.value)}
+              placeholder="3.00"
+              disabled={updateModel.isPending}
+            />
+            <Input
+              label="Sell Output /1M"
+              type="number"
+              value={sellOutputPer1m}
+              onChange={(e) => setSellOutputPer1m(e.target.value)}
+              placeholder="12.00"
+              disabled={updateModel.isPending}
+            />
+            <Input
+              label="Sell Cached /1M"
+              type="number"
+              value={sellCachedInputPer1m}
+              onChange={(e) => setSellCachedInputPer1m(e.target.value)}
+              placeholder="1.50"
+              disabled={updateModel.isPending}
+            />
+          </div>
+        </div>
         {isAzure && (
           <>
             <Input
@@ -1459,23 +1566,11 @@ function EditModelDialog({ model, onClose }: EditModelDialogProps) {
             options={fallbackOptions}
             value={fallbackModelName}
             onChange={setFallbackModelName}
-            disabled={updateModel.isPending || !hasFallbackFeature}
+            disabled={updateModel.isPending}
           />
-          {!hasFallbackFeature && (
-            <p className="text-xs text-text-tertiary mt-1">
-              Available with an Enterprise license.
-            </p>
-          )}
-          {hasFallbackFeature && license?.fallback_max_depth === 0 && (
-            <p className="text-xs text-amber-400 mt-1">
-              Fallback is configured but disabled. Set fallback_max_depth in your server config to enable.
-            </p>
-          )}
-          {hasFallbackFeature && (license?.fallback_max_depth ?? 0) > 0 && (
-            <p className="text-xs text-text-tertiary mt-1">
-              When this model fails, requests automatically retry on the fallback model.
-            </p>
-          )}
+          <p className="text-xs text-text-tertiary mt-1">
+            When this model fails, requests automatically retry on the fallback model.
+          </p>
         </div>
         <Input
           label="Aliases"

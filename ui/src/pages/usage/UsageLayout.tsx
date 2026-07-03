@@ -4,7 +4,6 @@ import { PageHeader } from '../../components/ui/PageHeader'
 const tabs = [
   { path: '/usage', label: 'Overview', exact: true },
   { path: '/usage/llm', label: 'LLM' },
-  { path: '/usage/mcp', label: 'MCP' },
 ]
 
 export default function UsageLayout() {
@@ -14,7 +13,7 @@ export default function UsageLayout() {
     <>
       <PageHeader
         title="Usage"
-        description="Track token usage and costs across LLM and MCP"
+        description="Track token usage and costs"
       />
 
       <div className="flex items-center gap-1 mb-6 border-b border-border">

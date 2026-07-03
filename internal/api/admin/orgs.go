@@ -116,19 +116,6 @@ func (h *Handler) CreateOrg(c fiber.Ctx) error {
 		return apierror.BadRequest(c, "slug must be lowercase alphanumeric with hyphens, 2-63 characters")
 	}
 
-	lic := h.License.Load()
-	if lic.MaxOrgs() > 0 {
-		count, err := h.DB.CountOrgs(c.Context())
-		if err != nil {
-			h.Log.ErrorContext(c.Context(), "create org: count orgs", slog.String("error", err.Error()))
-			return apierror.InternalError(c, "failed to check organization limit")
-		}
-		if count >= lic.MaxOrgs() {
-			return apierror.Send(c, fiber.StatusForbidden, "limit_reached",
-				"organization limit reached for your plan")
-		}
-	}
-
 	created, err := h.DB.CreateOrg(c.Context(), db.CreateOrgParams{
 		Name:              req.Name,
 		Slug:              req.Slug,

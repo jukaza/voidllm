@@ -17,7 +17,6 @@ import (
 	"github.com/voidmind-io/voidllm/internal/cache"
 	"github.com/voidmind-io/voidllm/internal/config"
 	"github.com/voidmind-io/voidllm/internal/db"
-	"github.com/voidmind-io/voidllm/internal/license"
 	"github.com/voidmind-io/voidllm/pkg/keygen"
 )
 
@@ -56,7 +55,6 @@ func setupTestApp(t *testing.T, dsn string) (*fiber.App, *db.DB, *cache.Cache[st
 		DB:         database,
 		HMACSecret: testHMACSecret,
 		KeyCache:   keyCache,
-		License:    license.NewHolder(license.Verify("", true)),
 		Log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 
@@ -919,4 +917,43 @@ func TestDeleteOrg_ThenGetReturns404(t *testing.T) {
 		body, _ := io.ReadAll(getResp.Body)
 		t.Errorf("GET after DELETE status = %d, want 404; body: %s", getResp.StatusCode, body)
 	}
+}
+
+// mustCreateTeam creates a team directly at the DB layer. The admin API no
+// longer exposes team CRUD (marketplace model), but team-scoped API keys are
+// still supported, so key tests need a way to provision teams.
+func mustCreateTeam(t *testing.T, database *db.DB, orgID, name, slug string) *db.Team {
+	t.Helper()
+	team, err := database.CreateTeam(context.Background(), db.CreateTeamParams{
+		OrgID: orgID,
+		Name:  name,
+		Slug:  slug,
+	})
+	if err != nil {
+		t.Fatalf("mustCreateTeam(%q, %q): %v", name, slug, err)
+	}
+	return team
+}
+
+// addTestKeyWithUser seeds the key cache with a user-scoped key so tests can
+// exercise endpoints that read KeyInfo.UserID (own-key listing, rotation).
+func addTestKeyWithUser(t *testing.T, keyCache *cache.Cache[string, auth.KeyInfo], role, orgID, userID string) string {
+	t.Helper()
+
+	plaintext, err := keygen.Generate(keygen.KeyTypeUser)
+	if err != nil {
+		t.Fatalf("generate test key: %v", err)
+	}
+
+	hash := keygen.Hash(plaintext, testHMACSecret)
+	keyCache.Set(hash, auth.KeyInfo{
+		ID:      "test-key-id-" + role + "-user",
+		KeyType: keygen.KeyTypeUser,
+		Role:    role,
+		OrgID:   orgID,
+		UserID:  userID,
+		Name:    "test key " + role,
+	})
+
+	return plaintext
 }

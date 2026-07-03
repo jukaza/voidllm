@@ -38,6 +38,10 @@ export interface ModelResponse {
   max_retries?: number
   fallback_model_name?: string
   pii_filter?: boolean
+  is_public: boolean
+  sell_input_per_1m?: number | null
+  sell_output_per_1m?: number | null
+  sell_cached_input_per_1m?: number | null
   deployments?: DeploymentResponse[]
 }
 
@@ -64,6 +68,10 @@ export interface CreateModelParams {
   max_retries?: number
   fallback_model_name?: string
   pii_filter?: boolean
+  is_public?: boolean
+  sell_input_per_1m?: number
+  sell_output_per_1m?: number
+  sell_cached_input_per_1m?: number
 }
 
 export interface CreateDeploymentParams {
@@ -103,6 +111,10 @@ export interface UpdateModelParams {
   aliases?: string[]
   fallback_model_name?: string | null
   pii_filter?: boolean | null
+  is_public?: boolean
+  sell_input_per_1m?: number
+  sell_output_per_1m?: number
+  sell_cached_input_per_1m?: number
 }
 
 export function useModels(cursor?: string) {

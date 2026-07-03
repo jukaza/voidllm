@@ -13,6 +13,7 @@ import (
 	"github.com/voidmind-io/voidllm/internal/circuitbreaker"
 	"github.com/voidmind-io/voidllm/internal/health"
 	"github.com/voidmind-io/voidllm/internal/proxy"
+	"github.com/voidmind-io/voidllm/internal/ratelimit"
 )
 
 // Router selects deployments for a model based on routing strategy,
@@ -20,15 +21,23 @@ import (
 type Router struct {
 	healthChecker   *health.Checker
 	circuitBreakers *circuitbreaker.Registry
-	counters        sync.Map // model name → *atomic.Uint64 (round-robin)
+	upstreamLimiter *ratelimit.UpstreamLimiter // nil disables per-channel throughput caps
+	counters        sync.Map                   // model name → *atomic.Uint64 (round-robin)
 }
 
-// NewRouter creates a Router. Both dependencies are optional (nil-safe).
+// NewRouter creates a Router. All dependencies are optional (nil-safe).
 func NewRouter(hc *health.Checker, cb *circuitbreaker.Registry) *Router {
 	return &Router{
 		healthChecker:   hc,
 		circuitBreakers: cb,
 	}
+}
+
+// SetUpstreamLimiter wires a per-channel throughput limiter. Deployments at
+// their configured RPM/TPM/daily cap are skipped by Pick like unhealthy ones.
+// Must be called before the router serves traffic.
+func (r *Router) SetUpstreamLimiter(u *ratelimit.UpstreamLimiter) {
+	r.upstreamLimiter = u
 }
 
 // DeploymentKey returns the key used for circuit breakers and health lookups.
@@ -113,6 +122,14 @@ func (r *Router) filterAvailable(model proxy.Model) []proxy.Deployment {
 		// Health check — nil checker means health monitoring is disabled.
 		if r.healthChecker != nil {
 			if mh, ok := r.healthChecker.GetHealth(key); ok && mh.Status == "unhealthy" {
+				continue
+			}
+		}
+
+		// Upstream throughput caps — a channel at its RPM/TPM/daily cap is
+		// treated like a temporarily unhealthy one and skipped this round.
+		if r.upstreamLimiter != nil {
+			if !r.upstreamLimiter.Allow(d.ID, d.RPMLimit, d.TPMLimit, d.DailyRequestLimit) {
 				continue
 			}
 		}

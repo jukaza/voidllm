@@ -11,18 +11,6 @@ import (
 	"github.com/voidmind-io/voidllm/internal/provider"
 )
 
-// mcpAliasRe matches a valid MCP server alias: lowercase alphanumeric
-// characters and hyphens, starting with an alphanumeric character.
-var mcpAliasRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
-
-// validMCPAuthTypes is the set of accepted MCP server auth type values.
-var validMCPAuthTypes = map[string]bool{
-	"none":   true,
-	"bearer": true,
-	"header": true,
-	"oauth":  true,
-}
-
 // validModelTypes is the set of accepted model type values in the YAML config.
 // An empty string is also valid and resolves to "chat" at sync time.
 var validModelTypes = map[string]bool{
@@ -223,72 +211,6 @@ func (c *Config) validate() error {
 		}
 	}
 
-	// --- mcp_servers ---
-	seenMCPAliases := make(map[string]bool)
-	for i, s := range c.MCPServers {
-		prefix := fmt.Sprintf("mcp_servers[%d]", i)
-
-		if s.Name == "" {
-			errs = append(errs, fmt.Errorf("%s.name: must not be empty", prefix))
-		}
-
-		if s.Alias == "" {
-			errs = append(errs, fmt.Errorf("%s.alias: must not be empty", prefix))
-		} else if s.Alias == "voidllm" {
-			errs = append(errs, fmt.Errorf(`%s.alias: "voidllm" is reserved`, prefix))
-		} else if !mcpAliasRe.MatchString(s.Alias) {
-			errs = append(errs, fmt.Errorf("%s.alias: must contain only lowercase alphanumeric characters and hyphens, and must start with an alphanumeric character", prefix))
-		} else if seenMCPAliases[s.Alias] {
-			errs = append(errs, fmt.Errorf("%s.alias: duplicate alias %q", prefix, s.Alias))
-		} else {
-			seenMCPAliases[s.Alias] = true
-		}
-
-		if s.URL == "" {
-			errs = append(errs, fmt.Errorf("%s.url: must not be empty", prefix))
-		} else if !strings.HasPrefix(s.URL, "http://") && !strings.HasPrefix(s.URL, "https://") {
-			errs = append(errs, fmt.Errorf("%s.url: must start with http:// or https://", prefix))
-		}
-
-		authType := s.AuthType
-		if authType == "" {
-			authType = "none"
-		}
-		if !validMCPAuthTypes[authType] {
-			errs = append(errs, fmt.Errorf(`%s.auth_type: must be one of "none", "bearer", "header", "oauth"; got %q`, prefix, s.AuthType))
-		}
-		if authType == "header" && s.AuthHeader == "" {
-			errs = append(errs, fmt.Errorf(`%s.auth_header: must not be empty when auth_type is "header"`, prefix))
-		}
-		if authType == "oauth" {
-			if s.OAuthTokenURL != "" && !strings.HasPrefix(s.OAuthTokenURL, "https://") {
-				errs = append(errs, fmt.Errorf(`%s.oauth_token_url: must use HTTPS`, prefix))
-			}
-			if s.OAuthClientID == "" {
-				errs = append(errs, fmt.Errorf(`%s.oauth_client_id: must not be empty when auth_type is "oauth"`, prefix))
-			}
-			if s.OAuthClientSecret == "" {
-				errs = append(errs, fmt.Errorf(`%s.oauth_client_secret: must not be empty when auth_type is "oauth"`, prefix))
-			}
-		}
-	}
-
-	// --- settings.mcp.code_mode ---
-	if c.Settings.MCP.CodeMode.IsEnabled() {
-		if c.Settings.MCP.CodeMode.MemoryLimitMB < 1 || c.Settings.MCP.CodeMode.MemoryLimitMB > 128 {
-			errs = append(errs, fmt.Errorf("settings.mcp.code_mode.memory_limit_mb: must be between 1 and 128, got %d", c.Settings.MCP.CodeMode.MemoryLimitMB))
-		}
-		if c.Settings.MCP.CodeMode.Timeout < time.Second || c.Settings.MCP.CodeMode.Timeout > 120*time.Second {
-			errs = append(errs, fmt.Errorf("settings.mcp.code_mode.timeout: must be between 1s and 120s, got %s", c.Settings.MCP.CodeMode.Timeout))
-		}
-		if c.Settings.MCP.CodeMode.PoolSize < 1 || c.Settings.MCP.CodeMode.PoolSize > 32 {
-			errs = append(errs, fmt.Errorf("settings.mcp.code_mode.pool_size: must be between 1 and 32, got %d", c.Settings.MCP.CodeMode.PoolSize))
-		}
-		if c.Settings.MCP.CodeMode.MaxToolCalls < 1 || c.Settings.MCP.CodeMode.MaxToolCalls > 1000 {
-			errs = append(errs, fmt.Errorf("settings.mcp.code_mode.max_tool_calls: must be between 1 and 1000, got %d", c.Settings.MCP.CodeMode.MaxToolCalls))
-		}
-	}
-
 	// --- settings.bootstrap.admin_email ---
 	if c.Settings.Bootstrap.AdminEmail != "" && !strings.Contains(c.Settings.Bootstrap.AdminEmail, "@") {
 		errs = append(errs, fmt.Errorf("settings.bootstrap.admin_email: invalid email format"))
@@ -429,16 +351,6 @@ func (c *Config) validate() error {
 	const minRetentionInterval = 1 * time.Minute
 	if c.Settings.Retention.Enabled() && c.Settings.Retention.Interval < minRetentionInterval {
 		errs = append(errs, fmt.Errorf("settings.retention.interval must be >= %s when retention is enabled", minRetentionInterval))
-	}
-
-	// --- settings.sso.default_role ---
-	if c.Settings.SSO.Enabled {
-		switch c.Settings.SSO.DefaultRole {
-		case "member", "team_admin":
-			// allowed for SSO auto-provisioning
-		default:
-			errs = append(errs, fmt.Errorf("sso.default_role must be 'member' or 'team_admin', got %q", c.Settings.SSO.DefaultRole))
-		}
 	}
 
 	// --- logging.level ---

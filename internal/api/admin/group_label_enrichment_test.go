@@ -3,7 +3,7 @@ package admin_test
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+
 	"io"
 	"net/http/httptest"
 	"strings"
@@ -53,26 +53,6 @@ func myUsageURL(from, to, groupBy string) string {
 		u += "?" + strings.Join(params, "&")
 	}
 	return u
-}
-
-// insertMCPToolCallWithUserHTTP inserts a mcp_tool_calls row with a specific
-// user_id so that group_by=user label resolution can be tested.
-func insertMCPToolCallWithUserHTTP(t *testing.T, database *db.DB, id, userID, orgID, serverAlias, toolName string, createdAt time.Time) {
-	t.Helper()
-	query := fmt.Sprintf(
-		`INSERT INTO mcp_tool_calls
-			(id, key_id, key_type, org_id, user_id,
-			 server_alias, tool_name, duration_ms, status, code_mode, created_at)
-		 VALUES
-			('%s', 'key-mcp-user', 'user_key', '%s', '%s',
-			 '%s', '%s', 100, 'success', 0, '%s')`,
-		id, orgID, userID,
-		serverAlias, toolName,
-		createdAt.UTC().Format(time.RFC3339),
-	)
-	if _, err := database.SQL().ExecContext(context.Background(), query); err != nil {
-		t.Fatalf("insertMCPToolCallWithUserHTTP id=%q: %v", id, err)
-	}
 }
 
 // addTestKeyWithIDAndUserAndOrg generates a key with a specific key ID, user ID,
@@ -308,75 +288,5 @@ func TestMyUsage_GroupByKey_HasGroupLabel(t *testing.T) {
 	}
 	if row.GroupLabel != "My Labeled Key" {
 		t.Errorf("group_label = %q, want %q", row.GroupLabel, "My Labeled Key")
-	}
-}
-
-// ---- GetSystemMCPUsage group_label enrichment tests -------------------------
-
-// TestGetSystemMCPUsage_GroupByUser_HasGroupLabel verifies that GET /api/v1/mcp-usage
-// with group_by=user sets group_label to the user's display_name when the user
-// row exists in the database.
-func TestGetSystemMCPUsage_GroupByUser_HasGroupLabel(t *testing.T) {
-	t.Parallel()
-
-	app, database, keyCache := setupTestApp(t, "file:TestSysMCPUsage_GBUser_Label?mode=memory&cache=private")
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
-
-	// Create a real user whose ID will appear in mcp_tool_calls.user_id.
-	user, err := database.CreateUser(context.Background(), db.CreateUserParams{
-		Email:       "mcp-sys-user@example.com",
-		DisplayName: "MCP System User",
-	})
-	if err != nil {
-		t.Fatalf("CreateUser: %v", err)
-	}
-
-	now := time.Now().UTC()
-	from := now.Add(-2 * time.Hour).Format(time.RFC3339)
-	to := now.Add(time.Minute).Format(time.RFC3339)
-
-	// Seed an mcp_tool_calls row with the user's ID.
-	insertMCPToolCallWithUserHTTP(t, database, "sys-mcp-gl-user-1", user.ID, "org-mcp-sys", "server-a", "tool-x",
-		now.Add(-30*time.Minute))
-
-	req := httptest.NewRequest("GET", systemMCPUsageURL(from, to, "user"), nil)
-	req.Header.Set("Authorization", "Bearer "+testKey)
-
-	resp, err := app.Test(req, fiber.TestConfig{Timeout: testTimeout})
-	if err != nil {
-		t.Fatalf("app.Test: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != fiber.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("status = %d, want 200; body: %s", resp.StatusCode, body)
-	}
-
-	var envelope struct {
-		Data []struct {
-			GroupKey   string `json:"group_key"`
-			GroupLabel string `json:"group_label"`
-		} `json:"data"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if len(envelope.Data) == 0 {
-		t.Fatal("data is empty, want at least one row")
-	}
-
-	var found bool
-	for _, row := range envelope.Data {
-		if row.GroupKey == user.ID {
-			found = true
-			if row.GroupLabel != "MCP System User" {
-				t.Errorf("group_label = %q, want %q", row.GroupLabel, "MCP System User")
-			}
-			break
-		}
-	}
-	if !found {
-		t.Errorf("no data point with group_key = %q; all data: %v", user.ID, envelope.Data)
 	}
 }

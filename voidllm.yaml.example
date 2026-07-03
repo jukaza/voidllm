@@ -213,9 +213,6 @@ settings:
   # Changing this key will invalidate all stored upstream API keys.
   encryption_key: ${VOIDLLM_ENCRYPTION_KEY}
 
-  # Enterprise license key (leave empty for OSS mode)
-  license: ${VOIDLLM_LICENSE}
-
   # Async usage logging
   usage:
     buffer_size:    1000    # Max events in buffer before flush
@@ -232,17 +229,6 @@ settings:
   # Hard limits are always enforced via DB aggregate
   soft_limit_threshold: 0.9   # Warn at 90% of limit
 
-  # MCP Gateway settings
-  mcp:
-    call_timeout: 30s             # Timeout for proxied MCP tool calls
-    allow_private_urls: false     # Block MCP servers on private/loopback IPs
-    code_mode:
-      enabled: false              # Enable WASM-sandboxed JS execution
-      memory_limit_mb: 16         # Memory limit per execution
-      timeout: 30s                # Execution timeout
-      pool_size: 8                # WASM runtime pool size
-      max_tool_calls: 50          # Max tool calls per execution
-
   # Health checks
   health_check:
     health:
@@ -252,15 +238,11 @@ settings:
       enabled: true
       interval: 5m
 
-  # --- Enterprise Features (require license) ---
-
   # Model fallback chains: retry a different model when the primary is unavailable.
-  # Requires a license with the fallback_chains feature; ignored otherwise.
   # fallback_max_depth: 3
   #   Maximum depth of the model fallback chain.
   #   - 0 (default, if unset): fallback chains disabled globally
   #   - 1-10: enables fallback chains, capped at this depth
-  #   Requires Enterprise license.
 
   # Audit logging
   # audit:
@@ -289,15 +271,6 @@ settings:
   #   audit_logs: 365d    # delete audit_logs rows older than 1 year
   #   interval: 24h       # how often the cleanup job runs (default: 24h)
 
-  # SSO/OIDC authentication
-  # sso:
-  #   enabled: true
-  #   issuer: "https://accounts.google.com"
-  #   client_id: ${VOIDLLM_SSO_CLIENT_ID}
-  #   client_secret: ${VOIDLLM_SSO_CLIENT_SECRET}
-  #   redirect_url: "https://voidllm.company.com/api/v1/auth/oidc/callback"
-  #   scopes: ["openid", "email", "profile"]
-  #   allowed_domains: ["company.com"]
   #   default_role: "member"
   #   auto_provision: true
 
@@ -320,23 +293,3 @@ settings:
 logging:
   level: info                     # debug, info, warn, error
   format: json                    # json or text
-
-
-# =============================================================================
-# MCP SERVERS (optional)
-# =============================================================================
-# External MCP servers to register at startup.
-# Servers can also be managed via the Admin API (stored in DB).
-# Global servers require explicit org-level access (closed-by-default).
-
-# mcp_servers:
-#   - name: GitHub
-#     alias: github
-#     url: https://mcp.github.com/sse
-#     auth_type: bearer
-#     auth_token: ${GITHUB_TOKEN}
-#
-#   - name: Internal Tools
-#     alias: tools
-#     url: http://internal-mcp:3000
-#     auth_type: none

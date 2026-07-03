@@ -19,7 +19,6 @@ import { useMe } from '../hooks/useMe'
 import { useAPIKeys, useCreateAPIKey, useDeleteAPIKey, useUpdateAPIKey, useRotateAPIKey } from '../hooks/useAPIKeys'
 import type { APIKeyResponse, CreateAPIKeyParams } from '../hooks/useAPIKeys'
 import { useTeams } from '../hooks/useTeams'
-import { useServiceAccounts } from '../hooks/useServiceAccounts'
 import { useToast } from '../hooks/useToast'
 import apiClient from '../api/client'
 
@@ -44,7 +43,6 @@ const keyTypeLabels: Record<string, string> = {
 const KEY_TYPE_OPTIONS = [
   { value: 'user_key', label: 'User Key' },
   { value: 'team_key', label: 'Team Key' },
-  { value: 'sa_key', label: 'Service Account' },
 ]
 
 const EXPIRES_OPTIONS = [
@@ -225,9 +223,7 @@ function CreateKeyDialog({ open, onClose, onCreated, orgId }: CreateKeyDialogPro
   const [expiresIn, setExpiresIn] = useState('90d')
   const [nameError, setNameError] = useState<string | undefined>()
   const [teamId, setTeamId] = useState('')
-  const [serviceAccountId, setServiceAccountId] = useState('')
   const [teamError, setTeamError] = useState<string | undefined>()
-  const [serviceAccountError, setServiceAccountError] = useState<string | undefined>()
   const [restrictModels, setRestrictModels] = useState(false)
   const [selectedModels, setSelectedModels] = useState<Set<string>>(new Set())
   const [showAdvancedLimits, setShowAdvancedLimits] = useState(false)
@@ -238,7 +234,6 @@ function CreateKeyDialog({ open, onClose, onCreated, orgId }: CreateKeyDialogPro
 
   const { data: me } = useMe()
   const { data: teams } = useTeams(orgId)
-  const { data: serviceAccounts } = useServiceAccounts(orgId)
 
   const userTeams = teams?.data ?? []
   const showTeamPickerForUserKey = keyType === 'user_key' && userTeams.length > 1
@@ -258,9 +253,7 @@ function CreateKeyDialog({ open, onClose, onCreated, orgId }: CreateKeyDialogPro
     setExpiresIn('90d')
     setNameError(undefined)
     setTeamId('')
-    setServiceAccountId('')
     setTeamError(undefined)
-    setServiceAccountError(undefined)
     setRestrictModels(false)
     setSelectedModels(new Set())
     setShowAdvancedLimits(false)
@@ -274,9 +267,7 @@ function CreateKeyDialog({ open, onClose, onCreated, orgId }: CreateKeyDialogPro
   function handleKeyTypeChange(newType: string) {
     setKeyType(newType)
     setTeamId('')
-    setServiceAccountId('')
     setTeamError(undefined)
-    setServiceAccountError(undefined)
   }
 
   function toggleModel(modelName: string) {
@@ -318,13 +309,6 @@ function CreateKeyDialog({ open, onClose, onCreated, orgId }: CreateKeyDialogPro
       hasError = true
     }
 
-    if (keyType === 'sa_key' && !serviceAccountId) {
-      setServiceAccountError('Service account is required')
-      hasError = true
-    } else {
-      setServiceAccountError(undefined)
-    }
-
     if (hasError) return
 
     let effectiveTeamId = teamId
@@ -344,7 +328,6 @@ function CreateKeyDialog({ open, onClose, onCreated, orgId }: CreateKeyDialogPro
         user_id: me?.id,
       } : {}),
       ...(keyType === 'team_key' && effectiveTeamId ? { team_id: effectiveTeamId } : {}),
-      ...(keyType === 'sa_key' && serviceAccountId ? { service_account_id: serviceAccountId } : {}),
     }
 
     const parsedDailyToken = parseInt(dailyTokenLimit, 10)
@@ -422,18 +405,6 @@ function CreateKeyDialog({ open, onClose, onCreated, orgId }: CreateKeyDialogPro
             placeholder="Select a team..."
             searchable
             error={teamError}
-            disabled={createKey.isPending}
-          />
-        )}
-        {keyType === 'sa_key' && (
-          <Select
-            label="Service Account"
-            options={serviceAccounts?.data?.map((sa) => ({ value: sa.id, label: sa.name })) ?? []}
-            value={serviceAccountId}
-            onChange={(v) => { setServiceAccountId(v); setServiceAccountError(undefined) }}
-            placeholder="Select a service account..."
-            searchable
-            error={serviceAccountError}
             disabled={createKey.isPending}
           />
         )}

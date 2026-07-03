@@ -21,6 +21,9 @@ var ErrModelNotFound = errors.New("model not found")
 // Deployment holds endpoint-specific configuration for one deployment
 // within a multi-deployment model.
 type Deployment struct {
+	// ID is the database ID of this deployment. Empty for deployments
+	// synthesized from single-deployment models or YAML config.
+	ID              string
 	Name            string
 	Provider        string
 	BaseURL         string
@@ -33,6 +36,16 @@ type Deployment struct {
 	GCPLocation string
 	Weight      int
 	Priority    int
+	// RPMLimit is the max requests per minute this channel accepts. 0 = unlimited.
+	RPMLimit int
+	// TPMLimit is the max tokens per minute this channel accepts. 0 = unlimited.
+	TPMLimit int
+	// DailyRequestLimit is the max requests per day this channel accepts. 0 = unlimited.
+	DailyRequestLimit int
+	// CostInputPer1M / CostOutputPer1M are this channel's cost prices in USD
+	// per 1M tokens. Nil falls back to the model-level Pricing.
+	CostInputPer1M  *float64
+	CostOutputPer1M *float64
 	// destPrivate is computed once at registry/config load time from the
 	// deployment's BaseURL host. It is true when the host is a loopback address
 	// (127.0.0.0/8, ::1), a private RFC-1918/ULA address (10/8, 172.16/12,
@@ -89,6 +102,12 @@ type Model struct {
 	// MaxRetries is the number of times the proxy will retry a failed upstream
 	// request across the available deployments. Must be >= 0.
 	MaxRetries int
+	// SellInputPer1M / SellOutputPer1M / SellCachedInputPer1M are the
+	// customer-facing prices in USD per 1M tokens. Nil means the model has no
+	// sell pricing configured and requests on it are not billed to wallets.
+	SellInputPer1M       *float64
+	SellOutputPer1M      *float64
+	SellCachedInputPer1M *float64
 	// FallbackModelName is the canonical name of the fallback target.
 	// Empty when no fallback is configured. Set to empty by the registry
 	// builder if the license does not include FeatureFallbackChains.

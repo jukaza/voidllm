@@ -27,7 +27,6 @@ import (
 	"github.com/voidmind-io/voidllm/internal/cache"
 	"github.com/voidmind-io/voidllm/internal/config"
 	"github.com/voidmind-io/voidllm/internal/db"
-	"github.com/voidmind-io/voidllm/internal/license"
 )
 
 // setupDeploymentReloadApp creates a minimal Fiber app wired with an in-memory
@@ -66,7 +65,6 @@ func setupDeploymentReloadApp(
 		HMACSecret:    testHMACSecret,
 		EncryptionKey: testEncryptionKey,
 		KeyCache:      keyCache,
-		License:       license.NewHolder(license.Verify("", true)),
 		Log:           slog.New(slog.NewTextHandler(io.Discard, nil)),
 		ReloadModels:  reloadModels,
 		Redis:         nil, // local-only reload path under test

@@ -17,15 +17,9 @@ import (
 func RegisterRoutes(app *fiber.App, handler *Handler, keyCache *cache.Cache[string, auth.KeyInfo], hmacSecret []byte, auditLogger *audit.Logger) {
 	// Public routes — no auth required.
 	app.Post("/api/v1/auth/login", handler.Login)
+	app.Post("/api/v1/auth/register", handler.Register)
 	app.Get("/api/v1/auth/providers", handler.AuthProviders)
-	app.Get("/api/v1/invites/peek", handler.PeekInvite)
-	app.Post("/api/v1/invites/redeem", handler.RedeemInvite)
-
-	// SSO / OIDC routes — public, only registered when an SSO provider is configured.
-	if handler.SSOProvider != nil {
-		app.Get("/api/v1/auth/oidc/login", handler.OIDCLogin)
-		app.Get("/api/v1/auth/oidc/callback", handler.OIDCCallback)
-	}
+	app.Get("/api/v1/public/models", handler.PublicModels)
 
 	var apiMiddlewares []any
 	apiMiddlewares = append(apiMiddlewares, auth.Middleware(keyCache, hmacSecret))
@@ -39,6 +33,12 @@ func RegisterRoutes(app *fiber.App, handler *Handler, keyCache *cache.Cache[stri
 	api.Get("/me", handler.Me)
 	api.Post("/me/password", handler.ChangeOwnPassword)
 	api.Get("/me/available-models", handler.AvailableModels)
+
+	// Customer wallet — any authenticated user sees their own balance/ledger.
+	api.Get("/me/wallet", handler.MyWallet)
+	api.Get("/me/transactions", handler.MyTransactions)
+	api.Post("/me/topups", handler.CreateMyTopup)
+	api.Get("/me/topups", handler.MyTopups)
 
 	// Own usage — no role restriction; any authenticated key sees its own data.
 	api.Get("/usage/me", handler.MyUsage)
@@ -65,31 +65,6 @@ func RegisterRoutes(app *fiber.App, handler *Handler, keyCache *cache.Cache[stri
 	api.Get("/orgs/:org_id/members", auth.RequireRole(auth.RoleOrgAdmin), handler.ListOrgMemberships)
 	api.Patch("/orgs/:org_id/members/:membership_id", auth.RequireRole(auth.RoleOrgAdmin), handler.UpdateOrgMembership)
 	api.Delete("/orgs/:org_id/members/:membership_id", auth.RequireRole(auth.RoleOrgAdmin), handler.DeleteOrgMembership)
-
-	// Teams
-	api.Post("/orgs/:org_id/teams", auth.RequireRole(auth.RoleOrgAdmin), handler.CreateTeam)
-	api.Get("/orgs/:org_id/teams", auth.RequireRole(auth.RoleMember), handler.ListTeams)
-	api.Get("/orgs/:org_id/teams/:team_id", auth.RequireRole(auth.RoleMember), handler.GetTeam)
-	api.Patch("/orgs/:org_id/teams/:team_id", auth.RequireRole(auth.RoleTeamAdmin), handler.UpdateTeam)
-	api.Delete("/orgs/:org_id/teams/:team_id", auth.RequireRole(auth.RoleOrgAdmin), handler.DeleteTeam)
-
-	// Team Memberships
-	api.Post("/orgs/:org_id/teams/:team_id/members", auth.RequireRole(auth.RoleTeamAdmin), handler.CreateTeamMembership)
-	api.Get("/orgs/:org_id/teams/:team_id/members", auth.RequireRole(auth.RoleTeamAdmin), handler.ListTeamMemberships)
-	api.Patch("/orgs/:org_id/teams/:team_id/members/:membership_id", auth.RequireRole(auth.RoleTeamAdmin), handler.UpdateTeamMembership)
-	api.Delete("/orgs/:org_id/teams/:team_id/members/:membership_id", auth.RequireRole(auth.RoleTeamAdmin), handler.DeleteTeamMembership)
-
-	// Service Accounts
-	api.Post("/orgs/:org_id/service-accounts", auth.RequireRole(auth.RoleMember), handler.CreateServiceAccount)
-	api.Get("/orgs/:org_id/service-accounts", auth.RequireRole(auth.RoleMember), handler.ListServiceAccounts)
-	api.Get("/orgs/:org_id/service-accounts/:sa_id", auth.RequireRole(auth.RoleMember), handler.GetServiceAccount)
-	api.Patch("/orgs/:org_id/service-accounts/:sa_id", auth.RequireRole(auth.RoleMember), handler.UpdateServiceAccount)
-	api.Delete("/orgs/:org_id/service-accounts/:sa_id", auth.RequireRole(auth.RoleMember), handler.DeleteServiceAccount)
-
-	// Invites
-	api.Post("/orgs/:org_id/invites", auth.RequireRole(auth.RoleOrgAdmin), handler.CreateInvite)
-	api.Get("/orgs/:org_id/invites", auth.RequireRole(auth.RoleOrgAdmin), handler.ListInvites)
-	api.Delete("/orgs/:org_id/invites/:invite_id", auth.RequireRole(auth.RoleOrgAdmin), handler.RevokeInvite)
 
 	// API Keys
 	api.Post("/orgs/:org_id/keys", auth.RequireRole(auth.RoleMember), handler.CreateAPIKey)
@@ -123,112 +98,33 @@ func RegisterRoutes(app *fiber.App, handler *Handler, keyCache *cache.Cache[stri
 	// Model Access Control
 	api.Get("/orgs/:org_id/model-access", auth.RequireRole(auth.RoleOrgAdmin), handler.GetOrgModelAccess)
 	api.Put("/orgs/:org_id/model-access", auth.RequireRole(auth.RoleOrgAdmin), handler.SetOrgModelAccess)
-	api.Get("/orgs/:org_id/teams/:team_id/model-access", auth.RequireRole(auth.RoleTeamAdmin), handler.GetTeamModelAccess)
-	api.Put("/orgs/:org_id/teams/:team_id/model-access", auth.RequireRole(auth.RoleTeamAdmin), handler.SetTeamModelAccess)
 	api.Get("/orgs/:org_id/keys/:key_id/model-access", auth.RequireRole(auth.RoleOrgAdmin), handler.GetKeyModelAccess)
 	api.Put("/orgs/:org_id/keys/:key_id/model-access", auth.RequireRole(auth.RoleOrgAdmin), handler.SetKeyModelAccess)
-
-	// MCP Access Control
-	api.Get("/orgs/:org_id/mcp-access", auth.RequireRole(auth.RoleOrgAdmin), handler.GetOrgMCPAccess)
-	api.Put("/orgs/:org_id/mcp-access", auth.RequireRole(auth.RoleOrgAdmin), handler.SetOrgMCPAccess)
-	api.Get("/orgs/:org_id/teams/:team_id/mcp-access", auth.RequireRole(auth.RoleTeamAdmin), handler.GetTeamMCPAccess)
-	api.Put("/orgs/:org_id/teams/:team_id/mcp-access", auth.RequireRole(auth.RoleTeamAdmin), handler.SetTeamMCPAccess)
-	api.Get("/orgs/:org_id/keys/:key_id/mcp-access", auth.RequireRole(auth.RoleOrgAdmin), handler.GetKeyMCPAccess)
-	api.Put("/orgs/:org_id/keys/:key_id/mcp-access", auth.RequireRole(auth.RoleOrgAdmin), handler.SetKeyMCPAccess)
-	api.Get("/orgs/:org_id/available-mcp-servers", auth.RequireRole(auth.RoleOrgAdmin), handler.ListAvailableGlobalMCPServers)
 
 	// Model Aliases
 	api.Post("/orgs/:org_id/model-aliases", auth.RequireRole(auth.RoleOrgAdmin), handler.CreateOrgAlias)
 	api.Get("/orgs/:org_id/model-aliases", auth.RequireRole(auth.RoleOrgAdmin), handler.ListOrgAliases)
 	api.Delete("/orgs/:org_id/model-aliases/:alias_id", auth.RequireRole(auth.RoleOrgAdmin), handler.DeleteOrgAlias)
-	api.Post("/orgs/:org_id/teams/:team_id/model-aliases", auth.RequireRole(auth.RoleOrgAdmin), handler.CreateTeamAlias)
-	api.Get("/orgs/:org_id/teams/:team_id/model-aliases", auth.RequireRole(auth.RoleOrgAdmin), handler.ListTeamAliases)
-	api.Delete("/orgs/:org_id/teams/:team_id/model-aliases/:alias_id", auth.RequireRole(auth.RoleOrgAdmin), handler.DeleteTeamAlias)
 
 	// Usage
 	api.Get("/usage", auth.RequireRole(auth.RoleSystemAdmin), handler.SystemAdminUsage)
 	api.Get("/orgs/:org_id/usage", auth.RequireRole(auth.RoleOrgAdmin), handler.GetOrgUsage)
 
-	// MCP Usage
-	api.Get("/mcp-usage", auth.RequireRole(auth.RoleSystemAdmin), handler.GetSystemMCPUsage)
-	api.Get("/orgs/:org_id/mcp-usage", auth.RequireRole(auth.RoleOrgAdmin), handler.GetOrgMCPUsage)
+	// Providers (upstream partners) — system_admin only.
+	api.Post("/providers", auth.RequireRole(auth.RoleSystemAdmin), handler.CreateProvider)
+	api.Get("/providers", auth.RequireRole(auth.RoleSystemAdmin), handler.ListProviders)
+	api.Get("/providers/:provider_id", auth.RequireRole(auth.RoleSystemAdmin), handler.GetProvider)
+	api.Patch("/providers/:provider_id", auth.RequireRole(auth.RoleSystemAdmin), handler.UpdateProvider)
+	api.Delete("/providers/:provider_id", auth.RequireRole(auth.RoleSystemAdmin), handler.DeleteProvider)
 
-	// Audit logs — org_admin and above; org_admin is scoped to own org in the handler.
-	api.Get("/audit-logs", auth.RequireRole(auth.RoleOrgAdmin), handler.ListAuditLogs)
-
-	// Org SSO configuration — org_admin and above; handler also enforces the org boundary.
-	api.Get("/orgs/:org_id/sso", auth.RequireRole(auth.RoleOrgAdmin), handler.GetOrgSSOConfig)
-	api.Put("/orgs/:org_id/sso", auth.RequireRole(auth.RoleOrgAdmin), handler.UpsertOrgSSOConfig)
-	api.Delete("/orgs/:org_id/sso", auth.RequireRole(auth.RoleOrgAdmin), handler.DeleteOrgSSOConfig)
-	api.Post("/orgs/:org_id/sso/test", auth.RequireRole(auth.RoleOrgAdmin), handler.TestSSOConnection)
-
-	// Global SSO configuration — system admin only, read-only view of YAML config.
-	api.Get("/settings/sso", auth.RequireRole(auth.RoleSystemAdmin), handler.GetGlobalSSOConfig)
-
-	// License key management — system_admin only for writes; any member may read.
-	api.Put("/settings/license", auth.RequireRole(auth.RoleSystemAdmin), handler.SetLicense)
-
-	// License — any authenticated user may inspect the current license.
-	api.Get("/license", auth.RequireRole(auth.RoleMember), handler.GetLicense)
+	// Top-up review queue and wallet administration — system_admin only.
+	api.Get("/topups", auth.RequireRole(auth.RoleSystemAdmin), handler.ListTopups)
+	api.Post("/topups/:topup_id/review", auth.RequireRole(auth.RoleSystemAdmin), handler.ReviewTopup)
+	api.Get("/users/:user_id/wallet", auth.RequireRole(auth.RoleSystemAdmin), handler.GetUserWallet)
+	api.Post("/users/:user_id/wallet/adjust", auth.RequireRole(auth.RoleSystemAdmin), handler.AdjustWallet)
 
 	// Update check — any authenticated user may read the cached update status.
 	// Version info is not sensitive; no additional role gate required.
 	api.Get("/system/update-check", handler.GetUpdateStatus)
 
-	// Code Mode MCP server — aggregated code execution tools (list_servers,
-	// search_tools, execute_code). These routes MUST be registered before the
-	// /mcp/:alias routes so that Fiber does not treat the bare /mcp path as
-	// alias="" on the parameterised route.
-	if handler.CodeModeServer != nil {
-		api.Post("/mcp", handler.HandleCodeModeMCP)
-		api.Get("/mcp", handler.HandleCodeModeMCPSSE)
-	}
-
-	// MCP gateway — any authenticated caller may send MCP requests.
-	// The :alias parameter routes to the built-in "voidllm" management server
-	// or any registered external MCP server. Individual tools enforce their own
-	// RBAC checks via the injected KeyIdentity.
-	// GET opens a persistent SSE stream (legacy SSE transport for "voidllm");
-	// POST handles JSON-RPC and responds with JSON or SSE per the Accept header.
-	if handler.MCPServer != nil {
-		api.Post("/mcp/:alias", handler.HandleMCPProxy)
-		api.Get("/mcp/:alias", handler.HandleMCPProxySSE)
-	}
-
-	// MCP Servers — global resources (system_admin only for write; handler checks
-	// scope permissions for shared read/mutate routes).
-	// Static sub-paths (health, :server_id/test) are registered before /:server_id
-	// so Fiber does not treat "health" or "test" as server_id parameter values.
-	api.Get("/mcp-servers/health", auth.RequireRole(auth.RoleMember), handler.ListMCPServerHealth)
-	api.Post("/mcp-servers", auth.RequireRole(auth.RoleSystemAdmin), handler.CreateMCPServer)
-	api.Get("/mcp-servers", auth.RequireRole(auth.RoleSystemAdmin), handler.ListMCPServers)
-
-	// Org-scoped MCP Servers.
-	api.Post("/orgs/:org_id/mcp-servers", auth.RequireRole(auth.RoleOrgAdmin), handler.CreateOrgMCPServer)
-	api.Get("/orgs/:org_id/mcp-servers", auth.RequireRole(auth.RoleMember), handler.ListOrgMCPServers)
-
-	// Team-scoped MCP Servers.
-	api.Post("/orgs/:org_id/teams/:team_id/mcp-servers", auth.RequireRole(auth.RoleTeamAdmin), handler.CreateTeamMCPServer)
-	api.Get("/orgs/:org_id/teams/:team_id/mcp-servers", auth.RequireRole(auth.RoleMember), handler.ListTeamMCPServers)
-
-	// Shared MCP server operations — handler enforces scope-based ownership.
-	// Static sub-paths (activate, deactivate, test) are registered before
-	// /:server_id so Fiber does not treat them as server_id parameter values.
-	api.Get("/mcp-servers/:server_id", auth.RequireRole(auth.RoleMember), handler.GetMCPServer)
-	api.Patch("/mcp-servers/:server_id", auth.RequireRole(auth.RoleMember), handler.UpdateMCPServer)
-	api.Delete("/mcp-servers/:server_id", auth.RequireRole(auth.RoleMember), handler.DeleteMCPServer)
-	api.Patch("/mcp-servers/:server_id/activate", auth.RequireRole(auth.RoleMember), handler.ActivateMCPServer)
-	api.Patch("/mcp-servers/:server_id/deactivate", auth.RequireRole(auth.RoleMember), handler.DeactivateMCPServer)
-	api.Post("/mcp-servers/:server_id/test", auth.RequireRole(auth.RoleMember), handler.TestMCPServerConnection)
-
-	// MCP server tool blocklist — scope permissions enforced in handlers.
-	api.Get("/mcp-servers/:server_id/blocklist", auth.RequireRole(auth.RoleMember), handler.ListMCPServerBlocklist)
-	api.Post("/mcp-servers/:server_id/blocklist", auth.RequireRole(auth.RoleMember), handler.AddMCPServerBlocklist)
-	api.Delete("/mcp-servers/:server_id/blocklist", auth.RequireRole(auth.RoleMember), handler.RemoveMCPServerBlocklist)
-
-	// MCP server tool cache refresh — scope permissions enforced in handler.
-	api.Post("/mcp-servers/:server_id/refresh-tools", auth.RequireRole(auth.RoleMember), handler.HandleRefreshMCPServerTools)
-
-	// MCP server cached tools — returns cached schemas with blocked status.
-	api.Get("/mcp-servers/:server_id/tools", auth.RequireRole(auth.RoleMember), handler.HandleListMCPServerTools)
 }

@@ -33,6 +33,24 @@ import (
 	"github.com/voidmind-io/voidllm/internal/usage"
 )
 
+// WalletChecker performs prepaid-balance checks for the marketplace billing
+// model. *wallet.Service implements this; the local interface avoids an
+// import dependency from proxy to wallet.
+type WalletChecker interface {
+	// Check returns nil when the user can spend; a non-nil error means the
+	// request must be rejected with 402.
+	Check(userID string) error
+}
+
+// UpstreamRecorder receives per-deployment throughput accounting from the
+// hot path. *ratelimit.UpstreamLimiter implements this.
+type UpstreamRecorder interface {
+	// RecordRequest counts one request sent to the deployment.
+	RecordRequest(depID string)
+	// RecordTokens counts response tokens against the deployment's minute window.
+	RecordTokens(depID string, tokens int64)
+}
+
 // DeploymentPicker selects an ordered list of deployment candidates for a model.
 // router.Router implements this interface; the indirection avoids an import
 // cycle between the proxy and router packages (router already imports proxy).
@@ -54,6 +72,8 @@ type ProxyHandler struct {
 	RateLimiter       ratelimit.Checker       // nil disables rate limiting
 	TokenCounter      *ratelimit.TokenCounter // nil disables token budget enforcement
 	ShutdownState     *shutdown.State         // nil disables in-flight tracking and graceful drain
+	Wallet            WalletChecker           // nil disables prepaid wallet balance checks
+	UpstreamLimiter   UpstreamRecorder        // nil disables per-channel throughput accounting
 	Tracer            trace.Tracer            // nil disables distributed tracing
 	Log               *slog.Logger
 	MaxRequestBody    int           // maximum allowed request body size in bytes
@@ -136,16 +156,24 @@ func (s *streamUsageExtractor) observe(line []byte) {
 	data := line[len("data: "):]
 	var chunk struct {
 		Usage *struct {
-			PromptTokens     int `json:"prompt_tokens"`
-			CompletionTokens int `json:"completion_tokens"`
-			TotalTokens      int `json:"total_tokens"`
+			PromptTokens        int `json:"prompt_tokens"`
+			CompletionTokens    int `json:"completion_tokens"`
+			TotalTokens         int `json:"total_tokens"`
+			PromptTokensDetails *struct {
+				CachedTokens int `json:"cached_tokens"`
+			} `json:"prompt_tokens_details"`
 		} `json:"usage"`
 	}
 	if jsonx.Unmarshal(data, &chunk) == nil && chunk.Usage != nil {
+		cached := 0
+		if chunk.Usage.PromptTokensDetails != nil {
+			cached = chunk.Usage.PromptTokensDetails.CachedTokens
+		}
 		s.lastUsage = UsageInfo{
 			PromptTokens:     chunk.Usage.PromptTokens,
 			CompletionTokens: chunk.Usage.CompletionTokens,
 			TotalTokens:      chunk.Usage.TotalTokens,
+			CachedTokens:     cached,
 		}
 	}
 }
@@ -482,12 +510,12 @@ func (p *ProxyHandler) Handle(c fiber.Ctx) error {
 			breaker = p.CircuitBreakers.Get(deploymentKey(currentModel.Name, usedDep.Name))
 		}
 		return p.handleStreamingResponse(c, resp, cancelUpstream, currentModel,
-			keyInfo, adapter, startTime, requestID, requestedModelName, effectiveStreamDur, maxRespBody, trackDone, breaker, piiFilter)
+			keyInfo, adapter, startTime, requestID, requestedModelName, usedDep.ID, effectiveStreamDur, maxRespBody, trackDone, breaker, piiFilter)
 	}
 
 	defer cancelUpstream()
 	return p.handleBufferedResponse(c, resp, currentModel, keyInfo, adapter,
-		startTime, requestID, requestedModelName, maxRespBody, piiFilter)
+		startTime, requestID, requestedModelName, usedDep.ID, maxRespBody, piiFilter)
 }
 
 // tryModel attempts to forward the request to the given model using its
@@ -590,6 +618,12 @@ func (p *ProxyHandler) tryModel(
 		req, cancelUpstream, currentAdapter, buildErr = p.buildUpstreamRequest(c, m, effectiveBody, envelope)
 		if buildErr != nil {
 			return nil, nil, nil, Deployment{}, nil, 0, buildErr
+		}
+
+		// Count the attempt against the channel's RPM/daily windows before
+		// sending so concurrent picks see the up-to-date rate.
+		if p.UpstreamLimiter != nil {
+			p.UpstreamLimiter.RecordRequest(d.ID)
 		}
 
 		// Send the request to the upstream. The upstream span measures
@@ -777,6 +811,20 @@ func (p *ProxyHandler) checkLimits(c fiber.Ctx, keyInfo *auth.KeyInfo) error {
 		RequestsPerDay:    keyInfo.OrgRequestsPerDay,
 		DailyTokenLimit:   keyInfo.OrgDailyTokenLimit,
 		MonthlyTokenLimit: keyInfo.OrgMonthlyTokenLimit,
+	}
+
+	if p.Wallet != nil && keyInfo.UserID != "" {
+		if err := p.Wallet.Check(keyInfo.UserID); err != nil {
+			p.Log.LogAttrs(c.Context(), slog.LevelWarn, "insufficient wallet balance",
+				slog.String("key_id", keyInfo.ID),
+				slog.String("user_id", keyInfo.UserID),
+			)
+			if err := apierror.Send(c, fiber.StatusPaymentRequired, "insufficient_balance",
+				"wallet balance is empty — top up to continue"); err != nil {
+				return err
+			}
+			return errResponseSent
+		}
 	}
 
 	if p.RateLimiter != nil {
@@ -1000,7 +1048,7 @@ func writeStreamAbortEvent(w *bufio.Writer, code string) {
 // maxRespBody is the aggregate byte cap for the PII-buffered streaming path;
 // it is the same limit used for non-streaming responses.
 // filter may be nil when PII anonymization is disabled.
-func (p *ProxyHandler) handleStreamingResponse(c fiber.Ctx, resp *http.Response, cancelUpstream context.CancelFunc, model Model, keyInfo *auth.KeyInfo, adapter Adapter, startTime time.Time, requestID string, requestedModelName string, maxStreamDuration time.Duration, maxRespBody int, trackDone func(), breaker *circuitbreaker.Breaker, filter *pii.Filter) error {
+func (p *ProxyHandler) handleStreamingResponse(c fiber.Ctx, resp *http.Response, cancelUpstream context.CancelFunc, model Model, keyInfo *auth.KeyInfo, adapter Adapter, startTime time.Time, requestID string, requestedModelName string, deploymentID string, maxStreamDuration time.Duration, maxRespBody int, trackDone func(), breaker *circuitbreaker.Breaker, filter *pii.Filter) error {
 	copyResponseHeaders(c, resp)
 	c.Set("Content-Type", "text/event-stream")
 	c.Set("Cache-Control", "no-cache")
@@ -1431,7 +1479,7 @@ func (p *ProxyHandler) handleStreamingResponse(c fiber.Ctx, resp *http.Response,
 			if streamIncomplete {
 				eventStatusCode = http.StatusBadGateway
 			}
-			p.logUsageEvent(keyInfo, model, streamUI, durationMS, ttftMS, eventStatusCode, requestID, requestedModelName)
+			p.logUsageEvent(keyInfo, model, streamUI, durationMS, ttftMS, eventStatusCode, requestID, requestedModelName, deploymentID)
 		}
 
 		metrics.ProxyDurationSeconds.WithLabelValues(model.Name, "true").Observe(time.Since(startTime).Seconds())
@@ -1444,7 +1492,7 @@ func (p *ProxyHandler) handleStreamingResponse(c fiber.Ctx, resp *http.Response,
 // requestedModelName is the canonical name the client originally asked for;
 // it may differ from model.Name when a fallback was activated.
 // filter may be nil when PII anonymization is disabled.
-func (p *ProxyHandler) handleBufferedResponse(c fiber.Ctx, resp *http.Response, model Model, keyInfo *auth.KeyInfo, adapter Adapter, startTime time.Time, requestID string, requestedModelName string, maxResponseBody int, filter *pii.Filter) error {
+func (p *ProxyHandler) handleBufferedResponse(c fiber.Ctx, resp *http.Response, model Model, keyInfo *auth.KeyInfo, adapter Adapter, startTime time.Time, requestID string, requestedModelName string, deploymentID string, maxResponseBody int, filter *pii.Filter) error {
 	// Content-Length pre-check: fast-reject optimization to avoid allocating
 	// memory for obviously oversized responses. Not the security boundary —
 	// io.LimitReader on the next line handles chunked/unknown-length responses.
@@ -1527,7 +1575,7 @@ func (p *ProxyHandler) handleBufferedResponse(c fiber.Ctx, resp *http.Response, 
 		// For non-streaming responses TTFT equals total duration: the entire
 		// response body is the first (and only) "token delivery".
 		ttftMS := durationMS
-		p.logUsageEvent(keyInfo, model, ui, durationMS, &ttftMS, resp.StatusCode, requestID, requestedModelName)
+		p.logUsageEvent(keyInfo, model, ui, durationMS, &ttftMS, resp.StatusCode, requestID, requestedModelName, deploymentID)
 	}
 
 	metrics.ProxyDurationSeconds.WithLabelValues(model.Name, "false").Observe(time.Since(startTime).Seconds())
@@ -1544,7 +1592,7 @@ func (p *ProxyHandler) handleBufferedResponse(c fiber.Ctx, resp *http.Response, 
 // is recycled by fasthttp after the handler exits.
 // requestedModelName is the canonical name the client originally asked for; equal
 // to model.Name when no fallback occurred.
-func (p *ProxyHandler) logUsageEvent(keyInfo *auth.KeyInfo, model Model, ui UsageInfo, durationMS int, ttftMS *int, statusCode int, requestID string, requestedModelName string) {
+func (p *ProxyHandler) logUsageEvent(keyInfo *auth.KeyInfo, model Model, ui UsageInfo, durationMS int, ttftMS *int, statusCode int, requestID string, requestedModelName string, deploymentID string) {
 	if keyInfo == nil {
 		return
 	}
@@ -1554,6 +1602,32 @@ func (p *ProxyHandler) logUsageEvent(keyInfo *auth.KeyInfo, model Model, ui Usag
 		c := float64(ui.PromptTokens)/1_000_000*model.Pricing.InputPer1M +
 			float64(ui.CompletionTokens)/1_000_000*model.Pricing.OutputPer1M
 		cost = &c
+	}
+
+	// Revenue: what the customer's wallet is charged, from the model's sell
+	// prices. Cached prompt tokens are billed at the cached rate when
+	// configured, falling back to the full input rate.
+	var revenue *float64
+	if model.SellInputPer1M != nil || model.SellOutputPer1M != nil {
+		sellIn, sellOut := 0.0, 0.0
+		if model.SellInputPer1M != nil {
+			sellIn = *model.SellInputPer1M
+		}
+		if model.SellOutputPer1M != nil {
+			sellOut = *model.SellOutputPer1M
+		}
+		cachedRate := sellIn
+		if model.SellCachedInputPer1M != nil {
+			cachedRate = *model.SellCachedInputPer1M
+		}
+		freshPrompt := ui.PromptTokens - ui.CachedTokens
+		if freshPrompt < 0 {
+			freshPrompt = 0
+		}
+		r := float64(freshPrompt)/1_000_000*sellIn +
+			float64(ui.CachedTokens)/1_000_000*cachedRate +
+			float64(ui.CompletionTokens)/1_000_000*sellOut
+		revenue = &r
 	}
 
 	var tps *float64
@@ -1580,7 +1654,14 @@ func (p *ProxyHandler) logUsageEvent(keyInfo *auth.KeyInfo, model Model, ui Usag
 		TokensPerSecond:    tps,
 		StatusCode:         statusCode,
 		RequestID:          requestID,
+		CachedTokens:       ui.CachedTokens,
+		Revenue:            revenue,
+		DeploymentID:       deploymentID,
 	})
+
+	if p.UpstreamLimiter != nil && deploymentID != "" && ui.TotalTokens > 0 {
+		p.UpstreamLimiter.RecordTokens(deploymentID, int64(ui.TotalTokens))
+	}
 
 	metrics.TokensTotal.WithLabelValues(model.Name, "prompt").Add(float64(ui.PromptTokens))
 	metrics.TokensTotal.WithLabelValues(model.Name, "completion").Add(float64(ui.CompletionTokens))
@@ -1628,18 +1709,26 @@ func isRetryable(statusCode int) bool {
 func extractUsage(body []byte) UsageInfo {
 	var resp struct {
 		Usage *struct {
-			PromptTokens     int `json:"prompt_tokens"`
-			CompletionTokens int `json:"completion_tokens"`
-			TotalTokens      int `json:"total_tokens"`
+			PromptTokens        int `json:"prompt_tokens"`
+			CompletionTokens    int `json:"completion_tokens"`
+			TotalTokens         int `json:"total_tokens"`
+			PromptTokensDetails *struct {
+				CachedTokens int `json:"cached_tokens"`
+			} `json:"prompt_tokens_details"`
 		} `json:"usage"`
 	}
 	if jsonx.Unmarshal(body, &resp) != nil || resp.Usage == nil {
 		return UsageInfo{}
 	}
+	cached := 0
+	if resp.Usage.PromptTokensDetails != nil {
+		cached = resp.Usage.PromptTokensDetails.CachedTokens
+	}
 	return UsageInfo{
 		PromptTokens:     resp.Usage.PromptTokens,
 		CompletionTokens: resp.Usage.CompletionTokens,
 		TotalTokens:      resp.Usage.TotalTokens,
+		CachedTokens:     cached,
 	}
 }
 

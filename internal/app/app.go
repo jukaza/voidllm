@@ -34,8 +34,6 @@ import (
 	"github.com/voidmind-io/voidllm/internal/db"
 	"github.com/voidmind-io/voidllm/internal/docs"
 	"github.com/voidmind-io/voidllm/internal/health"
-	"github.com/voidmind-io/voidllm/internal/license"
-	"github.com/voidmind-io/voidllm/internal/mcp"
 	"github.com/voidmind-io/voidllm/internal/metrics"
 	voidotel "github.com/voidmind-io/voidllm/internal/otel"
 	"github.com/voidmind-io/voidllm/internal/pii"
@@ -45,11 +43,10 @@ import (
 	"github.com/voidmind-io/voidllm/internal/retention"
 	"github.com/voidmind-io/voidllm/internal/router"
 	"github.com/voidmind-io/voidllm/internal/shutdown"
-	"github.com/voidmind-io/voidllm/internal/sso"
 	"github.com/voidmind-io/voidllm/internal/update"
 	"github.com/voidmind-io/voidllm/internal/usage"
+	"github.com/voidmind-io/voidllm/internal/wallet"
 	"github.com/voidmind-io/voidllm/pkg/crypto"
-	"github.com/voidmind-io/voidllm/pkg/keygen"
 )
 
 // Application is the top-level VoidLLM server lifecycle coordinator. It owns
@@ -60,31 +57,26 @@ type Application struct {
 	cfg             *config.Config
 	log             *slog.Logger
 	devMode         bool
-	licHolder       *license.Holder
-	rawLicenseKey   string
 	bootstrapResult *auth.BootstrapResult
 
 	database   *db.DB
 	encKey     []byte
 	hmacSecret []byte
 
-	registry          *proxy.Registry
-	keyCache          *cache.Cache[string, auth.KeyInfo]
-	accessCache       *proxy.ModelAccessCache
-	aliasCache        *proxy.AliasCache
-	mcpServerCache    *proxy.MCPServerCache
-	mcpAccessCache    *proxy.MCPAccessCache
-	mcpTransportCache *proxy.MCPTransportCache
+	registry    *proxy.Registry
+	keyCache    *cache.Cache[string, auth.KeyInfo]
+	accessCache *proxy.ModelAccessCache
+	aliasCache  *proxy.AliasCache
 
 	rateLimiter      ratelimit.Checker
 	tokenCounter     *ratelimit.TokenCounter
+	walletService    *wallet.Service
+	upstreamLimiter  *ratelimit.UpstreamLimiter
 	loginThrottle    *auth.LoginThrottle
 	usageLogger      *usage.Logger
-	mcpLogger        *usage.MCPLogger
 	auditLogger      *audit.Logger
 	retentionCleaner *retention.Cleaner
 	healthChecker    *health.Checker
-	mcpHealthChecker *health.MCPHealthChecker
 
 	shutdownState *shutdown.State
 	proxyHandler  *proxy.ProxyHandler
@@ -135,11 +127,6 @@ func (s *dbUsageSeeder) QueryUsageSeed(ctx context.Context, since time.Time) (ra
 func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, error) {
 	ctx := context.Background()
 
-	enterpriseDev := devMode && (os.Getenv("VOIDLLM_ENTERPRISE_DEV") == "1" || os.Getenv("VOIDLLM_ENTERPRISE_DEV") == "true")
-	if enterpriseDev {
-		log.LogAttrs(ctx, slog.LevelWarn, "ENTERPRISE DEV MODE: all enterprise features enabled without license")
-	}
-
 	// Step 1: open database and run migrations.
 	database, err := db.Open(ctx, cfg.Database)
 	if err != nil {
@@ -150,39 +137,6 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 		database.Close() //nolint:errcheck // best-effort on error path
 		return nil, fmt.Errorf("run migrations: %w", err)
 	}
-
-	// Check DB for a cached license JWT (refreshed by heartbeat on a previous run).
-	configKey := cfg.Settings.License
-	cachedKey, _ := database.GetSetting(ctx, "license_jwt")
-
-	// Prefer DB-cached key (refreshed by heartbeat), fall back to config.
-	licenseKey := configKey
-	if cachedKey != "" {
-		licenseKey = cachedKey
-	}
-
-	lic := license.Verify(licenseKey, enterpriseDev)
-
-	// If DB-cached key failed (e.g. corrupted), try config key as fallback.
-	if lic.Edition() != license.EditionEnterprise && configKey != "" && configKey != licenseKey {
-		lic = license.Verify(configKey, enterpriseDev)
-		if lic.Edition() == license.EditionEnterprise {
-			licenseKey = configKey
-		}
-	}
-
-	licHolder := license.NewHolder(lic)
-	licenseSource := "none"
-	if cachedKey != "" && licenseKey == cachedKey {
-		licenseSource = "database"
-	} else if configKey != "" {
-		licenseSource = "config"
-	}
-	log.LogAttrs(ctx, slog.LevelInfo, "license loaded",
-		slog.String("edition", string(lic.Edition())),
-		slog.Bool("valid", lic.Valid()),
-		slog.String("source", licenseSource),
-	)
 
 	// Declare variables that the deferred cleanup needs to reference before
 	// they are assigned by the steps below.
@@ -227,65 +181,11 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 	if err := database.SyncYAMLModels(ctx, cfg.Models, encKey); err != nil {
 		return nil, fmt.Errorf("sync YAML models: %w", err)
 	}
-	if err := database.SyncYAMLMCPServers(ctx, cfg.MCPServers, encKey); err != nil {
-		return nil, fmt.Errorf("sync YAML MCP servers: %w", err)
-	}
-	builtinServer, err := database.EnsureBuiltinMCPServer(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("ensure builtin MCP server: %w", err)
-	}
-
-	// Probe all active MCP servers to detect deprecated SSE transport.
-	// Servers that only support SSE are auto-deactivated with a warning.
-	if allServers, listErr := database.ListMCPServers(ctx); listErr == nil {
-		for _, s := range allServers {
-			if s.Source == "builtin" {
-				continue // built-in server has no external URL to probe
-			}
-			var token string
-			if s.AuthTokenEnc != nil && *s.AuthTokenEnc != "" {
-				token, _ = crypto.DecryptString(*s.AuthTokenEnc, encKey, []byte("mcp_server:"+s.ID))
-			}
-			// For the startup SSE probe, OAuth is not needed — we pass nil for the
-			// OAuth manager and config. The probe only detects deprecated SSE transport.
-			transport := mcp.NewHTTPTransport(s.URL, s.AuthType, s.AuthHeader, token, 10*time.Second, cfg.Settings.MCP.AllowPrivateURLs, "", nil, nil)
-			_, probeErr := transport.ListTools(ctx)
-			transport.Close()
-			if errors.Is(probeErr, mcp.ErrSSENotSupported) {
-				isActive := false
-				database.UpdateMCPServer(ctx, s.ID, db.UpdateMCPServerParams{IsActive: &isActive}) //nolint:errcheck
-				log.WarnContext(ctx, "MCP server uses deprecated SSE transport, deactivated",
-					slog.String("alias", s.Alias),
-					slog.String("url", s.URL))
-			}
-		}
-	}
 
 	// Step 4a: build the in-memory registry from the YAML config.
 	registry, err := proxy.NewRegistry(cfg.Models)
 	if err != nil {
 		return nil, fmt.Errorf("build model registry: %w", err)
-	}
-
-	// gateFallback strips FallbackModelName from every model in reg when the
-	// current license (read live from h) does not include FeatureFallbackChains.
-	// It reads the license from the Holder on each invocation so that a license
-	// change via the admin API takes effect on the next registry reload without
-	// requiring a process restart. Safe to call with any reg/h combination.
-	//
-	// The strip is performed atomically via StripAllFallbacks (single write-lock
-	// acquisition) to eliminate the race window between snapshot and re-insert
-	// that existed in the previous snapshot+loop pattern.
-	gateFallback := func(reg *proxy.Registry, h *license.Holder) {
-		l := h.Load()
-		if l.HasFeature(license.FeatureFallbackChains) {
-			return
-		}
-		stripped := reg.StripAllFallbacks()
-		if stripped > 0 {
-			log.Warn("model fallback chains require an Enterprise license; stripped fallback configuration",
-				slog.Int("models_affected", stripped))
-		}
 	}
 
 	// loadModelsIntoRegistry fetches all active models from the DB, decrypts
@@ -361,17 +261,23 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 					}
 				}
 				deployments = append(deployments, proxy.Deployment{
-					Name:            dep.Name,
-					Provider:        dep.Provider,
-					BaseURL:         dep.BaseURL,
-					APIKey:          depAPIKey,
-					AzureDeployment: dep.AzureDeployment,
-					AzureAPIVersion: dep.AzureAPIVersion,
-					GCPProject:      dep.GCPProject,
-					GCPLocation:     dep.GCPLocation,
-					Weight:          dep.Weight,
-					Priority:        dep.Priority,
-					PIIFilter:       dep.PIIFilter,
+					ID:                dep.ID,
+					Name:              dep.Name,
+					Provider:          dep.Provider,
+					BaseURL:           dep.BaseURL,
+					APIKey:            depAPIKey,
+					AzureDeployment:   dep.AzureDeployment,
+					AzureAPIVersion:   dep.AzureAPIVersion,
+					GCPProject:        dep.GCPProject,
+					GCPLocation:       dep.GCPLocation,
+					Weight:            dep.Weight,
+					Priority:          dep.Priority,
+					RPMLimit:          dep.RPMLimit,
+					TPMLimit:          dep.TPMLimit,
+					DailyRequestLimit: dep.DailyRequestLimit,
+					CostInputPer1M:    dep.CostInputPer1M,
+					CostOutputPer1M:   dep.CostOutputPer1M,
+					PIIFilter:         dep.PIIFilter,
 				})
 			}
 
@@ -381,27 +287,29 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 			}
 
 			registry.AddModel(proxy.Model{
-				Name:              m.Name,
-				Provider:          m.Provider,
-				Type:              modelType,
-				BaseURL:           m.BaseURL,
-				APIKey:            apiKey,
-				Aliases:           aliases,
-				MaxContextTokens:  m.MaxContextTokens,
-				Pricing:           config.PricingConfig{InputPer1M: m.InputPricePer1M, OutputPer1M: m.OutputPricePer1M},
-				AzureDeployment:   m.AzureDeployment,
-				AzureAPIVersion:   m.AzureAPIVersion,
-				GCPProject:        m.GCPProject,
-				GCPLocation:       m.GCPLocation,
-				Timeout:           timeout,
-				Strategy:          m.Strategy,
-				MaxRetries:        m.MaxRetries,
-				Deployments:       deployments,
-				FallbackModelName: fallbackName,
-				PIIFilter:         m.PIIFilter,
+				Name:                 m.Name,
+				Provider:             m.Provider,
+				Type:                 modelType,
+				BaseURL:              m.BaseURL,
+				APIKey:               apiKey,
+				Aliases:              aliases,
+				MaxContextTokens:     m.MaxContextTokens,
+				Pricing:              config.PricingConfig{InputPer1M: m.InputPricePer1M, OutputPer1M: m.OutputPricePer1M},
+				AzureDeployment:      m.AzureDeployment,
+				AzureAPIVersion:      m.AzureAPIVersion,
+				GCPProject:           m.GCPProject,
+				GCPLocation:          m.GCPLocation,
+				Timeout:              timeout,
+				Strategy:             m.Strategy,
+				MaxRetries:           m.MaxRetries,
+				Deployments:          deployments,
+				FallbackModelName:    fallbackName,
+				PIIFilter:            m.PIIFilter,
+				SellInputPer1M:       m.SellInputPer1M,
+				SellOutputPer1M:      m.SellOutputPer1M,
+				SellCachedInputPer1M: m.SellCachedInputPer1M,
 			})
 		}
-		gateFallback(registry, licHolder)
 		return nil
 	}
 
@@ -456,14 +364,22 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 		return nil, fmt.Errorf("seed token counter: %w", err)
 	}
 
+	// Step 7b: wallet service — seeds prepaid balances from the DB and feeds
+	// the hot-path balance check plus the async debit pipeline.
+	walletService, err := wallet.NewService(ctx, database, log)
+	if err != nil {
+		return nil, fmt.Errorf("create wallet service: %w", err)
+	}
+
 	// Step 8: start usage logger (always) and audit logger (if enabled).
 	usageLogger = usage.NewLogger(database, cfg.Settings.Usage, log, tokenCounter)
+	usageLogger.SetWallet(walletService)
 	usageLogger.Start()
 
 	metrics.RegisterDBCollectors(database.SQL())
 	metrics.RegisterUsageCollector(usageLogger)
 
-	if cfg.Settings.Audit.Enabled && lic.HasFeature(license.FeatureAuditLogs) {
+	if cfg.Settings.Audit.Enabled {
 		auditLogger = audit.NewLogger(database, cfg.Settings.Audit, log)
 		auditLogger.Start()
 		log.LogAttrs(ctx, slog.LevelInfo, "audit logging enabled")
@@ -486,27 +402,6 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 		log.Error("load model aliases", slog.String("error", err.Error()))
 	} else {
 		aliasCache.Load(orgAliases, teamAliases)
-	}
-
-	mcpServerCache := proxy.NewMCPServerCache()
-	if mcpServers, mcpServersErr := database.LoadAllActiveMCPServers(ctx); mcpServersErr == nil {
-		mcpServerCache.LoadAll(mcpServers)
-	} else {
-		log.Error("load mcp server cache", slog.String("error", mcpServersErr.Error()))
-	}
-
-	mcpAccessCache := proxy.NewMCPAccessCache()
-	if mcpOrgA, mcpTeamA, mcpKeyA, mcpAccessErr := database.LoadAllMCPAccess(ctx); mcpAccessErr == nil {
-		mcpAccessCache.Load(mcpOrgA, mcpTeamA, mcpKeyA)
-	} else {
-		log.Error("load mcp access cache", slog.String("error", mcpAccessErr.Error()))
-	}
-
-	mcpTransportCache := proxy.NewMCPTransportCache(encKey, cfg.Settings.MCP.AllowPrivateURLs, cfg.Settings.MCP.CallTimeout, log)
-	if mcpServersForTransport, mcpTransportErr := database.LoadAllActiveMCPServers(ctx); mcpTransportErr == nil {
-		mcpTransportCache.LoadAll(mcpServersForTransport)
-	} else {
-		log.Error("load mcp transport cache", slog.String("error", mcpTransportErr.Error()))
 	}
 
 	// Step 10: connect Redis (optional). On failure, continue without Redis.
@@ -603,7 +498,7 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 	// OTel tracing: initialise only when the feature is licensed and enabled.
 	var otelShutdownFn func(context.Context) error
 	var tracer trace.Tracer
-	if cfg.Settings.OTel.Enabled && lic.HasFeature(license.FeatureOTelTracing) {
+	if cfg.Settings.OTel.Enabled {
 		var setupErr error
 		otelShutdownFn, setupErr = voidotel.Setup(ctx,
 			cfg.Settings.OTel.Endpoint,
@@ -620,22 +515,6 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 			log.LogAttrs(ctx, slog.LevelInfo, "opentelemetry tracing enabled",
 				slog.String("endpoint", cfg.Settings.OTel.Endpoint),
 				slog.Float64("sample_rate", *cfg.Settings.OTel.SampleRate),
-			)
-		}
-	}
-
-	// SSO/OIDC: initialise only when the feature is licensed and enabled.
-	var ssoProvider *sso.Provider
-	if cfg.Settings.SSO.Enabled && lic.HasFeature(license.FeatureSSOOIDC) {
-		var ssoErr error
-		ssoProvider, ssoErr = sso.NewProvider(ctx, cfg.Settings.SSO)
-		if ssoErr != nil {
-			log.LogAttrs(ctx, slog.LevelWarn, "SSO/OIDC setup failed, SSO disabled",
-				slog.String("error", ssoErr.Error()),
-			)
-		} else {
-			log.LogAttrs(ctx, slog.LevelInfo, "SSO/OIDC enabled",
-				slog.String("issuer", cfg.Settings.SSO.Issuer),
 			)
 		}
 	}
@@ -658,6 +537,9 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 	// cbRegistry may be nil when circuit breaking is disabled.
 	modelRouter := router.NewRouter(healthChecker, cbRegistry)
 
+	upstreamLimiter := ratelimit.NewUpstreamLimiter()
+	modelRouter.SetUpstreamLimiter(upstreamLimiter)
+
 	proxyHandler := proxy.NewProxyHandler(registry, log)
 	proxyHandler.AccessCache = accessCache
 	proxyHandler.AliasCache = aliasCache
@@ -666,6 +548,8 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 	proxyHandler.UsageLogger = usageLogger
 	proxyHandler.RateLimiter = rateLimiter
 	proxyHandler.TokenCounter = tokenCounter
+	proxyHandler.Wallet = walletService
+	proxyHandler.UpstreamLimiter = upstreamLimiter
 	proxyHandler.ShutdownState = shutdownState
 	proxyHandler.Tracer = tracer
 	proxyHandler.MaxRequestBody = cfg.Server.Proxy.MaxRequestBody
@@ -685,25 +569,20 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 	loginThrottle := auth.NewLoginThrottle()
 
 	adminHandler := &admin.Handler{
-		DB:                database,
-		HMACSecret:        hmacSecret,
-		EncryptionKey:     encKey,
-		KeyCache:          keyCache,
-		Registry:          registry,
-		AccessCache:       accessCache,
-		AliasCache:        aliasCache,
-		MCPServerCache:    mcpServerCache,
-		MCPAccessCache:    mcpAccessCache,
-		MCPTransportCache: mcpTransportCache,
-		Redis:             redisClient,
-		AuditLogger:       auditLogger,
-		License:           licHolder,
-		Log:               log,
-		SSOProvider:       ssoProvider,
-		SSOConfig:         cfg.Settings.SSO,
-		LoginThrottle:     loginThrottle,
+		DB:            database,
+		HMACSecret:    hmacSecret,
+		EncryptionKey: encKey,
+		KeyCache:      keyCache,
+		Registry:      registry,
+		AccessCache:   accessCache,
+		AliasCache:    aliasCache,
+		Redis:         redisClient,
+		AuditLogger:   auditLogger,
+		Log:           log,
+		LoginThrottle: loginThrottle,
+		Wallet:        walletService,
 	}
-	// Wire the in-process reload callback so SetLicense can re-gate the
+	// Wire the in-process reload callback so deployment mutations can re-gate the
 	// model registry immediately after storing a new license, even on
 	// deployments that have no Redis (the default single-instance setup).
 	adminHandler.ReloadModels = func(reloadCtx context.Context) error {
@@ -716,381 +595,34 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 		adminHandler.HealthChecker = healthChecker
 	}
 
-	// builtinMCPServer is set after RegisterVoidLLMTools below; the ToolFetcher
-	// closure captures this variable so the assignment is visible at call time.
-	// toolStore is also hoisted so the built-in tools can be persisted after
-	// RegisterVoidLLMTools populates the server.
-	var builtinMCPServer *mcp.Server
-	var toolStore mcp.ToolStore
-
-	// Code Mode: create the runtime pool, executor, and tool cache when enabled.
-	// These are assigned to the handler before RegisterVoidLLMTools is called so
-	// that the deps closures below can close over the handler and its fields.
-	if cfg.Settings.MCP.CodeMode.IsEnabled() {
-		codePool, poolErr := mcp.NewRuntimePool(
-			cfg.Settings.MCP.CodeMode.PoolSize,
-			cfg.Settings.MCP.CodeMode.MemoryLimitMB,
-			cfg.Settings.MCP.CodeMode.Timeout,
-		)
-		if poolErr != nil {
-			redisCancel()
-			return nil, fmt.Errorf("create code mode pool: %w", poolErr)
-		}
-		adminHandler.CodePool = codePool
-		adminHandler.CodeExecutor = mcp.NewExecutor(codePool)
-		toolStore = &dbToolStore{db: database}
-		httpFetcher := adminHandler.MakeToolFetcher()
-		builtinServerID := builtinServer.ID
-		adminHandler.ToolCache = mcp.NewPersistentToolCache(func(fetchCtx context.Context, serverID string) ([]mcp.Tool, error) {
-			if serverID == builtinServerID && builtinMCPServer != nil {
-				return builtinMCPServer.Tools(), nil
-			}
-			return httpFetcher(fetchCtx, serverID)
-		}, time.Hour, toolStore)
-		if loadErr := adminHandler.ToolCache.LoadFromStore(ctx); loadErr != nil {
-			log.WarnContext(ctx, "failed to load cached tools from DB", slog.String("error", loadErr.Error()))
-		}
-		log.LogAttrs(ctx, slog.LevelInfo, "code mode enabled",
-			slog.Int("pool_size", cfg.Settings.MCP.CodeMode.PoolSize),
-			slog.Int("memory_limit_mb", cfg.Settings.MCP.CodeMode.MemoryLimitMB),
-			slog.Duration("timeout", cfg.Settings.MCP.CodeMode.Timeout),
-		)
-	}
-
-	// Wire the management MCP server with VoidLLM management tools. The server
-	// is always created; the route is only registered when MCPServer is non-nil
-	// (which it always is after this block). Tools that need DB access or RBAC
-	// enforcement perform those checks inside the handler function.
-
-	// Create Code Mode service — wires the three Code Mode VoidLLMDeps functions
-	// and the OnToolsListHook as methods on a single struct so they share state
-	// without ad-hoc closure captures.
-	//
-	// SchemaTTL is only assigned a default when Code Mode is explicitly enabled,
-	// so it can still be nil here when Code Mode is disabled. Dereferencing it
-	// unconditionally would panic at startup; fall back to a zero TTL in that
-	// case (the service's Code Mode entrypoints are not reachable anyway).
-	var schemaTTL time.Duration
-	if cfg.Settings.MCP.CodeMode.SchemaTTL != nil {
-		schemaTTL = *cfg.Settings.MCP.CodeMode.SchemaTTL
-	}
-	cmService := &codeModeService{
-		executor:     adminHandler.CodeExecutor,
-		toolCache:    adminHandler.ToolCache,
-		callMCPTool:  adminHandler.CallMCPTool,
-		db:           database,
-		log:          log,
-		maxToolCalls: cfg.Settings.MCP.CodeMode.MaxToolCalls,
-		schemaTTL:    schemaTTL,
-		serverCache:  mcpServerCache,
-		codePool:     adminHandler.CodePool,
-	}
-
-	mcpServer := mcp.NewServer("voidllm", apihealth.Version)
-	voidllmDeps := mcp.VoidLLMDeps{
-		ListModels: func(ctx context.Context) ([]map[string]any, error) {
-			infos := registry.ListInfo()
-			result := make([]map[string]any, len(infos))
-			for i, info := range infos {
-				result[i] = map[string]any{
-					"name":               info.Name,
-					"provider":           info.Provider,
-					"type":               info.Type,
-					"aliases":            info.Aliases,
-					"max_context_tokens": info.MaxContextTokens,
-					"strategy":           info.Strategy,
-					"deployment_count":   info.DeploymentCount,
-				}
-			}
-			return result, nil
-		},
-		ListAvailableModels: func(ctx context.Context) ([]map[string]any, error) {
-			// Return only name + type for models accessible to the caller.
-			// Uses the same access-cache logic as the /me/available-models endpoint
-			// but scoped via the KeyIdentity carried in the MCP context.
-			id := mcp.KeyIdentityFromCtx(ctx)
-			infos := registry.ListInfo()
-			result := make([]map[string]any, 0, len(infos))
-			for _, info := range infos {
-				if accessCache == nil || accessCache.Check(id.OrgID, "", id.KeyID, info.Name) {
-					modelType := info.Type
-					if modelType == "" {
-						modelType = "chat"
-					}
-					result = append(result, map[string]any{
-						"name": info.Name,
-						"type": modelType,
-					})
-				}
-			}
-			return result, nil
-		},
-		GetAllHealth: func() []map[string]any {
-			if healthChecker == nil {
-				return nil
-			}
-			healths := healthChecker.GetAllHealth()
-			result := make([]map[string]any, len(healths))
-			for i, h := range healths {
-				result[i] = map[string]any{
-					"name":       h.ModelName,
-					"status":     h.Status,
-					"latency_ms": h.LatencyMs,
-					"last_error": h.LastError,
-				}
-			}
-			return result
-		},
-		GetHealth: func(key string) (map[string]any, bool) {
-			if healthChecker == nil {
-				return nil, false
-			}
-			h, ok := healthChecker.GetHealth(key)
-			if !ok {
-				return nil, false
-			}
-			return map[string]any{
-				"name":          h.ModelName,
-				"status":        h.Status,
-				"latency_ms":    h.LatencyMs,
-				"last_error":    h.LastError,
-				"health_ok":     h.HealthOK,
-				"models_ok":     h.ModelsOK,
-				"functional_ok": h.FunctionalOK,
-			}, true
-		},
-		GetUsage: func(ctx context.Context, from, to, groupBy, orgID, keyID string) (any, error) {
-			return map[string]any{
-				"message": "use the VoidLLM web UI or GET /api/v1/usage for detailed analytics",
-			}, nil
-		},
-		ListKeys: func(ctx context.Context, orgID, role string) ([]map[string]any, error) {
-			// Org admins and system admins see all non-session keys in the org.
-			// Members see only their own keys via the userID filter.
-			var userID string
-			if role != auth.RoleOrgAdmin && role != auth.RoleSystemAdmin {
-				id := mcp.KeyIdentityFromCtx(ctx)
-				userID = id.UserID
-			}
-			keys, err := database.ListAPIKeys(ctx, orgID, userID, "", "", 200, false)
-			if err != nil {
-				return nil, fmt.Errorf("list api keys: %w", err)
-			}
-			result := make([]map[string]any, len(keys))
-			for i, k := range keys {
-				result[i] = map[string]any{
-					"id":         k.ID,
-					"key_hint":   k.KeyHint,
-					"key_type":   k.KeyType,
-					"name":       k.Name,
-					"created_at": k.CreatedAt,
-				}
-			}
-			return result, nil
-		},
-		CreateKey: func(ctx context.Context, orgID, userID, name string, expiresIn time.Duration) (map[string]any, error) {
-			plaintextKey, err := keygen.Generate(keygen.KeyTypeUser)
-			if err != nil {
-				return nil, fmt.Errorf("generate key: %w", err)
-			}
-			keyHash := keygen.Hash(plaintextKey, hmacSecret)
-			keyHint := keygen.Hint(plaintextKey)
-
-			var expiresAt *string
-			if expiresIn > 0 {
-				t := time.Now().UTC().Add(expiresIn).Format(time.RFC3339)
-				expiresAt = &t
-			}
-
-			apiKey, err := database.CreateAPIKey(ctx, db.CreateAPIKeyParams{
-				KeyHash:   keyHash,
-				KeyHint:   keyHint,
-				KeyType:   keygen.KeyTypeUser,
-				Name:      name,
-				OrgID:     orgID,
-				UserID:    &userID,
-				ExpiresAt: expiresAt,
-				CreatedBy: userID,
-			})
-			if err != nil {
-				return nil, fmt.Errorf("create api key: %w", err)
-			}
-
-			// Resolve the user's role so the key cache entry is accurate.
-			resolvedRole, roleErr := database.GetUserOrgRole(ctx, userID, orgID)
-			if roleErr == nil && resolvedRole != "" {
-				var expTime *time.Time
-				if apiKey.ExpiresAt != nil {
-					if t, parseErr := time.Parse(time.RFC3339, *apiKey.ExpiresAt); parseErr == nil {
-						expTime = &t
-					}
-				}
-				keyCache.Set(apiKey.KeyHash, auth.KeyInfo{
-					ID:        apiKey.ID,
-					KeyType:   apiKey.KeyType,
-					Role:      resolvedRole,
-					OrgID:     apiKey.OrgID,
-					UserID:    userID,
-					Name:      apiKey.Name,
-					ExpiresAt: expTime,
-				})
-			}
-
-			return map[string]any{
-				"id":         apiKey.ID,
-				"key":        plaintextKey,
-				"key_hint":   apiKey.KeyHint,
-				"name":       apiKey.Name,
-				"expires_at": apiKey.ExpiresAt,
-			}, nil
-		},
-		ListDeployments: func(ctx context.Context, modelID string) ([]map[string]any, error) {
-			deps, err := database.ListDeployments(ctx, modelID)
-			if err != nil {
-				return nil, fmt.Errorf("list deployments: %w", err)
-			}
-			result := make([]map[string]any, len(deps))
-			for i, d := range deps {
-				result[i] = map[string]any{
-					"id":        d.ID,
-					"name":      d.Name,
-					"provider":  d.Provider,
-					"base_url":  d.BaseURL,
-					"weight":    d.Weight,
-					"priority":  d.Priority,
-					"is_active": d.IsActive,
-				}
-			}
-			return result, nil
-		},
-		ExecuteCode:              cmService.ExecuteCode,
-		ListAccessibleMCPServers: cmService.ListAccessibleMCPServers,
-		SearchMCPTools:           cmService.SearchMCPTools,
-	}
-	mcp.RegisterVoidLLMTools(mcpServer, voidllmDeps)
-	adminHandler.MCPServer = mcpServer
-
-	// Expose the built-in server's tools through the ToolCache so Code Mode
-	// callers can discover and invoke them without an HTTP round-trip.
-	builtinMCPServer = mcpServer
-	if adminHandler.ToolCache != nil {
-		builtinTools := mcpServer.Tools()
-		adminHandler.ToolCache.SetTools(builtinServer.ID, builtinTools)
-		if toolStore != nil {
-			toolStore.Save(ctx, builtinServer.ID, builtinTools) //nolint:errcheck
-		}
-	}
-
-	// Wire the Code Mode MCP server when Code Mode is enabled. It exposes only
-	// the list_servers, search_tools, and execute_code tools and is served at
-	// /api/v1/mcp (distinct from the management server at /api/v1/mcp/voidllm).
-	if cfg.Settings.MCP.CodeMode.IsEnabled() {
-		codeModeServer := mcp.NewServer("voidllm-code-mode", apihealth.Version)
-		mcp.RegisterCodeModeTools(codeModeServer, mcp.VoidLLMDeps{
-			ExecuteCode:              voidllmDeps.ExecuteCode,
-			ListAccessibleMCPServers: voidllmDeps.ListAccessibleMCPServers,
-			SearchMCPTools:           voidllmDeps.SearchMCPTools,
-		})
-
-		// Inject TypeScript type declarations into the execute_code tool
-		// description so LLMs can generate correct tool calls without calling
-		// search_tools first. The hook runs on every tools/list request so the
-		// declarations stay current as the ToolCache is populated lazily.
-		codeModeServer.SetOnToolsList(cmService.toolsListHook())
-
-		adminHandler.CodeModeServer = codeModeServer
-	}
-
-	adminHandler.MCPCallTimeout = cfg.Settings.MCP.CallTimeout
-	adminHandler.MCPAllowPrivateURLs = cfg.Settings.MCP.AllowPrivateURLs
-	adminHandler.FallbackMaxDepth = cfg.Settings.FallbackMaxDepth
-
-	mcpLogger := usage.NewMCPLogger(database, 1000, log)
-	adminHandler.MCPLogger = mcpLogger
-
-	// Build the MCP health checker when enabled. The servers callback reads
-	// from the in-memory MCPServerCache so no DB I/O occurs during probe cycles.
-	// Tokens are decrypted on each callback invocation so that key rotations are
-	// picked up without restarting the checker.
-	var mcpHealthChecker *health.MCPHealthChecker
-	if cfg.Settings.MCP.Health.Enabled != nil && *cfg.Settings.MCP.Health.Enabled {
-		mcpHealthChecker = health.NewMCPHealthChecker(
-			func() []health.MCPServerTarget {
-				servers := mcpServerCache.List()
-				targets := make([]health.MCPServerTarget, 0, len(servers))
-				for _, s := range servers {
-					if !s.IsActive {
-						continue
-					}
-					t := health.MCPServerTarget{
-						ID:            s.ID,
-						Name:          s.Name,
-						Alias:         s.Alias,
-						URL:           s.URL,
-						AuthType:      s.AuthType,
-						AuthHeader:    s.AuthHeader,
-						Source:        s.Source,
-						OAuthTokenURL: s.OAuthTokenURL,
-						OAuthClientID: s.OAuthClientID,
-						OAuthScopes:   s.OAuthScopes,
-					}
-					if s.AuthTokenEnc != nil {
-						token, decErr := crypto.DecryptString(*s.AuthTokenEnc, encKey, []byte("mcp_server:"+s.ID))
-						if decErr == nil {
-							t.AuthToken = token
-						}
-					}
-					if s.OAuthClientSecretEnc != nil {
-						secret, decErr := crypto.DecryptString(*s.OAuthClientSecretEnc, encKey, []byte("mcp_server:"+s.ID))
-						if decErr == nil {
-							t.OAuthClientSecret = secret
-						}
-					}
-					targets = append(targets, t)
-				}
-				return targets
-			},
-			cfg.Settings.MCP.Health.Interval,
-			cfg.Settings.MCP.AllowPrivateURLs,
-			log.With(slog.String("component", "mcp_health")),
-			mcpTransportCache.OAuthManager(),
-		)
-		adminHandler.MCPHealthChecker = mcpHealthChecker
-	}
-
 	success = true
 	return &Application{
-		cfg:               cfg,
-		log:               log,
-		devMode:           devMode,
-		licHolder:         licHolder,
-		rawLicenseKey:     licenseKey,
-		bootstrapResult:   bootstrapResult,
-		database:          database,
-		encKey:            encKey,
-		hmacSecret:        hmacSecret,
-		registry:          registry,
-		keyCache:          keyCache,
-		accessCache:       accessCache,
-		aliasCache:        aliasCache,
-		mcpServerCache:    mcpServerCache,
-		mcpAccessCache:    mcpAccessCache,
-		mcpTransportCache: mcpTransportCache,
-		rateLimiter:       rateLimiter,
-		tokenCounter:      tokenCounter,
-		loginThrottle:     loginThrottle,
-		usageLogger:       usageLogger,
-		mcpLogger:         mcpLogger,
-		auditLogger:       auditLogger,
-		retentionCleaner:  retentionCleaner,
-		healthChecker:     healthChecker,
-		mcpHealthChecker:  mcpHealthChecker,
-		shutdownState:     shutdownState,
-		proxyHandler:      proxyHandler,
-		adminHandler:      adminHandler,
-		redisClient:       redisClient,
-		redisCancel:       redisCancel,
-		otelShutdown:      otelShutdownFn,
+		cfg:              cfg,
+		log:              log,
+		devMode:          devMode,
+		bootstrapResult:  bootstrapResult,
+		database:         database,
+		encKey:           encKey,
+		hmacSecret:       hmacSecret,
+		registry:         registry,
+		keyCache:         keyCache,
+		accessCache:      accessCache,
+		aliasCache:       aliasCache,
+		rateLimiter:      rateLimiter,
+		tokenCounter:     tokenCounter,
+		walletService:    walletService,
+		upstreamLimiter:  upstreamLimiter,
+		loginThrottle:    loginThrottle,
+		usageLogger:      usageLogger,
+		auditLogger:      auditLogger,
+		retentionCleaner: retentionCleaner,
+		healthChecker:    healthChecker,
+		shutdownState:    shutdownState,
+		proxyHandler:     proxyHandler,
+		adminHandler:     adminHandler,
+		redisClient:      redisClient,
+		redisCancel:      redisCancel,
+		otelShutdown:     otelShutdownFn,
 	}, nil
 }
 
@@ -1132,36 +664,12 @@ func (a *Application) Start() error {
 		startTicker(5*time.Minute, func() {
 			a.tokenCounter.EvictStale()
 			a.loginThrottle.EvictStale()
+			a.upstreamLimiter.EvictStale()
 		}),
 		startTicker(30*time.Second, func() {
 			metrics.CacheSize.WithLabelValues("keys").Set(float64(a.keyCache.Len()))
 			metrics.CacheSize.WithLabelValues("access").Set(float64(a.accessCache.Len()))
 			metrics.CacheSize.WithLabelValues("aliases").Set(float64(a.aliasCache.Len()))
-			metrics.CacheSize.WithLabelValues("mcp_servers").Set(float64(a.mcpServerCache.Len()))
-			metrics.CacheSize.WithLabelValues("mcp_access").Set(float64(a.mcpAccessCache.Len()))
-			metrics.CacheSize.WithLabelValues("mcp_transports").Set(float64(a.mcpTransportCache.Len()))
-		}),
-		startTicker(30*time.Second, func() {
-			ctx1, cancel1 := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel1()
-			if servers, err := a.database.LoadAllActiveMCPServers(ctx1); err == nil {
-				a.mcpServerCache.LoadAll(servers)
-				a.mcpTransportCache.LoadAll(servers)
-			} else {
-				a.log.LogAttrs(context.Background(), slog.LevelError, "mcp server cache refresh failed",
-					slog.String("error", err.Error()),
-				)
-			}
-
-			ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel2()
-			if orgA, teamA, keyA, err := a.database.LoadAllMCPAccess(ctx2); err == nil {
-				a.mcpAccessCache.Load(orgA, teamA, keyA)
-			} else {
-				a.log.LogAttrs(context.Background(), slog.LevelError, "mcp access cache refresh failed",
-					slog.String("error", err.Error()),
-				)
-			}
 		}),
 	)
 
@@ -1179,54 +687,6 @@ func (a *Application) Start() error {
 	// Start upstream model health monitoring when at least one probe is enabled.
 	if a.healthChecker != nil {
 		a.stopFuncs = append(a.stopFuncs, a.healthChecker.Start())
-	}
-
-	// Start MCP server health monitoring when enabled.
-	if a.mcpHealthChecker != nil {
-		a.stopFuncs = append(a.stopFuncs, a.mcpHealthChecker.Start())
-	}
-
-	// Register Code Mode pool cleanup. Close must be called after all in-flight
-	// executions complete; the LIFO stop order ensures this runs before the
-	// admin server is stopped.
-	if a.adminHandler.CodePool != nil {
-		a.stopFuncs = append(a.stopFuncs, func() {
-			a.adminHandler.CodePool.Close()
-		})
-	}
-
-	// 24h background refresh of tool schemas from upstream MCP servers.
-	if a.adminHandler.ToolCache != nil {
-		a.stopFuncs = append(a.stopFuncs, startTicker(24*time.Hour, func() {
-			refreshCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-			defer cancel()
-			if err := a.adminHandler.ToolCache.RefreshAll(refreshCtx); err != nil {
-				a.log.WarnContext(refreshCtx, "periodic tool cache refresh", slog.String("error", err.Error()))
-			}
-		}))
-	}
-
-	// Start heartbeat if a license key was configured, even if it has expired.
-	// An expired key falls back to community at startup, but the heartbeat can
-	// recover by requesting a fresh JWT from the license server.
-	if a.rawLicenseKey != "" && !a.devMode {
-		instanceID, err := license.GetOrCreateInstanceID(context.Background(), a.database)
-		if err != nil {
-			a.log.Warn("failed to generate instance ID", slog.String("error", err.Error()))
-			instanceID = ""
-		}
-		if instanceID != "" {
-			a.log.Info("instance ID", slog.String("id", instanceID))
-		}
-
-		stop := license.StartHeartbeat(a.licHolder, a.rawLicenseKey, license.HeartbeatConfig{
-			ServerURL:  license.DefaultServerURL,
-			Interval:   license.DefaultInterval,
-			Log:        a.log,
-			DB:         a.database,
-			InstanceID: instanceID,
-		})
-		a.stopFuncs = append(a.stopFuncs, stop)
 	}
 
 	// Start update checker when running a real build (not dev).
@@ -1436,11 +896,8 @@ func (a *Application) cleanup(ctx context.Context) {
 		a.stopFuncs[i]()
 	}
 
-	// Flush buffered usage, MCP, and audit events.
+	// Flush buffered usage and audit events.
 	a.usageLogger.Stop()
-	if a.mcpLogger != nil {
-		a.mcpLogger.Stop()
-	}
 	if a.auditLogger != nil {
 		a.auditLogger.Stop()
 	}
@@ -1456,9 +913,6 @@ func (a *Application) cleanup(ctx context.Context) {
 		}
 		shutdownCancel()
 	}
-
-	// Close all persistent MCP transports before closing the database.
-	a.mcpTransportCache.Close()
 
 	if err := a.database.Close(); err != nil {
 		a.log.LogAttrs(ctx, slog.LevelError, "database close error",

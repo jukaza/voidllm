@@ -19,7 +19,6 @@ type Config struct {
 	Cache      CacheConfig       `yaml:"cache"`
 	Redis      RedisConfig       `yaml:"redis"`
 	Models     []ModelConfig     `yaml:"models"`
-	MCPServers []MCPServerConfig `yaml:"mcp_servers"`
 	Settings   SettingsConfig    `yaml:"settings"`
 	Logging    LoggingConfig     `yaml:"logging"`
 }
@@ -263,164 +262,6 @@ type OTelConfig struct {
 	SampleRate *float64 `yaml:"sample_rate"`
 }
 
-// SSOConfig holds configuration for OIDC/OAuth2 single sign-on.
-// SSO/OIDC is an enterprise feature gated by license.FeatureSSOOIDC.
-type SSOConfig struct {
-	// Enabled controls whether the OIDC login flow is active.
-	Enabled bool `yaml:"enabled"`
-	// Issuer is the OIDC provider's issuer URL used for Discovery (e.g. "https://accounts.google.com").
-	Issuer string `yaml:"issuer"`
-	// ClientID is the OAuth2 client identifier registered with the identity provider.
-	ClientID string `yaml:"client_id"`
-	// ClientSecret is the OAuth2 client secret. It is redacted in logs.
-	ClientSecret string `yaml:"client_secret" json:"-"`
-	// RedirectURL is the absolute callback URL registered with the identity provider
-	// (e.g. "https://voidllm.example.com/api/v1/auth/oidc/callback").
-	RedirectURL string `yaml:"redirect_url"`
-	// Scopes is the list of OAuth2 scopes to request. Defaults to ["openid", "email", "profile"].
-	Scopes []string `yaml:"scopes"`
-	// AllowedDomains restricts login to email addresses belonging to these domains.
-	// An empty slice allows any email domain.
-	AllowedDomains []string `yaml:"allowed_domains"`
-	// AutoProvision controls whether users without a matching DB record are created
-	// automatically on first login. When false, unrecognized users are redirected to
-	// /login?error=not_provisioned.
-	AutoProvision bool `yaml:"auto_provision"`
-	// DefaultRole is the RBAC role assigned to auto-provisioned users.
-	// Defaults to "member".
-	DefaultRole string `yaml:"default_role"`
-	// DefaultOrgSlug is the slug of the organization that auto-provisioned users are
-	// added to. When empty, the first active organization is used.
-	DefaultOrgSlug string `yaml:"default_org_slug"`
-	// GroupSync enables automatic team membership synchronization based on the
-	// group claim in the ID token. When true, the user's team memberships are
-	// updated to match the groups listed in the token on every login.
-	GroupSync bool `yaml:"group_sync"`
-	// GroupClaim is the ID token claim key that contains the user's group list.
-	// Defaults to "groups".
-	GroupClaim string `yaml:"group_claim"`
-}
-
-// LogValue implements slog.LogValuer to prevent the client secret from appearing in logs.
-func (s SSOConfig) LogValue() slog.Value {
-	return slog.GroupValue(
-		slog.Bool("enabled", s.Enabled),
-		slog.String("issuer", s.Issuer),
-		slog.String("client_id", s.ClientID),
-		slog.String("client_secret", "[REDACTED]"),
-		slog.String("redirect_url", s.RedirectURL),
-	)
-}
-
-// MCPServerConfig defines a single MCP server entry in the static registry.
-// Servers declared here are upserted into the database at startup with
-// source="yaml". API-created servers (source="api") are never overwritten by
-// YAML entries.
-type MCPServerConfig struct {
-	// Name is the human-readable display name of the MCP server (required).
-	Name string `yaml:"name"`
-	// Alias is the stable short identifier used in URLs and tool call logs (required).
-	// Must be lowercase alphanumeric and hyphens, e.g. "github".
-	Alias string `yaml:"alias"`
-	// URL is the base endpoint of the MCP server (required). Must start with
-	// http:// or https://.
-	URL string `yaml:"url"`
-	// AuthType controls how VoidLLM authenticates to the upstream server.
-	// Valid values: "none", "bearer", "header", "oauth". Defaults to "none" when empty.
-	AuthType string `yaml:"auth_type"`
-	// AuthHeader is the HTTP header name used when AuthType is "header".
-	AuthHeader string `yaml:"auth_header"`
-	// AuthToken is the plaintext credential. It is encrypted with AES-256-GCM
-	// before being written to the database and is redacted from all logs.
-	AuthToken string `yaml:"auth_token" json:"-"`
-
-	// OAuth Client Credentials Flow fields. Required when AuthType is "oauth".
-	// OAuthClientSecret is encrypted with AES-256-GCM before storage.
-	OAuthTokenURL     string `yaml:"oauth_token_url"`
-	OAuthClientID     string `yaml:"oauth_client_id"`
-	OAuthClientSecret string `yaml:"oauth_client_secret" json:"-"`
-	OAuthScopes       string `yaml:"oauth_scopes"`
-}
-
-// LogValue implements slog.LogValuer to prevent the auth token and OAuth client
-// secret from appearing in log output.
-func (c MCPServerConfig) LogValue() slog.Value {
-	return slog.GroupValue(
-		slog.String("name", c.Name),
-		slog.String("alias", c.Alias),
-		slog.String("url", c.URL),
-		slog.String("auth_token", "[REDACTED]"),
-		slog.String("oauth_client_secret", "[REDACTED]"),
-	)
-}
-
-// CodeModeConfig controls the sandboxed JavaScript execution runtime used
-// by Code Mode to orchestrate multiple MCP tool calls in a single script.
-type CodeModeConfig struct {
-	// Enabled is the master switch for Code Mode. When false, the execute_code,
-	// list_servers, and search_tools MCP tools are not registered.
-	// A nil pointer means "not configured" and defaults to false at startup —
-	// Code Mode must be explicitly opted in to.
-	Enabled *bool `yaml:"enabled"`
-	// MemoryLimitMB is the maximum memory (in megabytes) a single Code Mode
-	// execution may consume inside the WASM sandbox. Default: 16.
-	MemoryLimitMB int `yaml:"memory_limit_mb"`
-	// Timeout is the maximum wall-clock duration for a single Code Mode
-	// execution, including all tool calls. Default: 30s.
-	Timeout time.Duration `yaml:"timeout"`
-	// PoolSize is the number of pre-warmed QuickJS runtimes kept in the pool.
-	// Each runtime handles one concurrent execution. Default: 4.
-	PoolSize int `yaml:"pool_size"`
-	// MaxToolCalls is the maximum number of MCP tool calls allowed within a
-	// single Code Mode execution. Prevents runaway scripts from making
-	// unbounded upstream calls. Default: 50. Valid range: [1, 1000].
-	MaxToolCalls int `yaml:"max_tool_calls"`
-	// SchemaTTL is the maximum age of an inferred output schema before it is
-	// re-inferred on the next tool call. Defaults to 168h (7 days) when unset.
-	// Set explicitly to 0 to disable re-inference after the first successful
-	// inference. Pointer type lets the YAML parser distinguish "absent"
-	// (apply default) from "explicitly zero" (never re-infer).
-	SchemaTTL *time.Duration `yaml:"schema_ttl"`
-}
-
-// IsEnabled returns true only when Code Mode has been explicitly enabled via
-// configuration. A nil pointer (field absent from YAML) returns false so that
-// Code Mode is opt-in rather than on by default.
-func (c CodeModeConfig) IsEnabled() bool {
-	if c.Enabled == nil {
-		return false
-	}
-	return *c.Enabled
-}
-
-// MCPHealthConfig holds configuration for the MCP server health monitoring subsystem.
-type MCPHealthConfig struct {
-	// Enabled controls whether periodic health probes are sent to registered
-	// MCP servers. Defaults to true when not set. A pointer is used so that an
-	// explicit "enabled: false" in YAML can be distinguished from the zero value
-	// after unmarshalling.
-	Enabled *bool `yaml:"enabled"`
-	// Interval is how often each registered MCP server is probed via a
-	// tools/list JSON-RPC request. Defaults to 60 seconds.
-	Interval time.Duration `yaml:"interval"`
-}
-
-// MCPConfig holds configuration for the MCP Gateway subsystem.
-type MCPConfig struct {
-	// CallTimeout is the maximum duration for a single proxied MCP tool call.
-	// Defaults to 30 seconds.
-	CallTimeout time.Duration `yaml:"call_timeout"`
-	// AllowPrivateURLs disables SSRF protection for MCP server URLs, permitting
-	// localhost, private IPs, and link-local addresses. Enable this for internal
-	// deployments where MCP servers run on the same network. Default: false.
-	// This setting is only configurable via YAML/ENV — not via Admin API/UI.
-	AllowPrivateURLs bool `yaml:"allow_private_urls"`
-	// Health configures periodic health probing for registered MCP servers.
-	Health MCPHealthConfig `yaml:"health"`
-	// CodeMode holds configuration for the sandboxed JavaScript execution runtime.
-	CodeMode CodeModeConfig `yaml:"code_mode"`
-}
-
 // HealthCheckConfig holds configuration for the upstream model health monitoring subsystem.
 type HealthCheckConfig struct {
 	// Health configures the lightweight GET / reachability probe.
@@ -563,21 +404,13 @@ func (p PIIConfig) IsEnabled() bool {
 type SettingsConfig struct {
 	AdminKey      string `yaml:"admin_key" json:"-"`
 	EncryptionKey string `yaml:"encryption_key" json:"-"`
-	License       string `yaml:"license" json:"-"`
-	// LicenseFile is the path to a file containing a VoidLLM enterprise
-	// license JWT. When set and License is empty, the file contents are read
-	// at startup and used as the license key. ${ENV_VAR} interpolation is
-	// applied to this field before the file is read.
-	LicenseFile    string               `yaml:"license_file" json:"-"`
 	Bootstrap      BootstrapConfig      `yaml:"bootstrap"`
 	Usage          UsageConfig          `yaml:"usage"`
 	Audit          AuditConfig          `yaml:"audit"`
 	OTel           OTelConfig           `yaml:"otel"`
-	SSO            SSOConfig            `yaml:"sso"`
 	TokenCounting  TokenCountingConfig  `yaml:"token_counting"`
 	CircuitBreaker CircuitBreakerConfig `yaml:"circuit_breaker"`
 	HealthCheck    HealthCheckConfig    `yaml:"health_check"`
-	MCP            MCPConfig            `yaml:"mcp"`
 	Retention      RetentionConfig      `yaml:"retention"`
 	// FallbackMaxDepth limits how deep the model fallback chain can recurse
 	// per request. Default 3, valid range [1, 10]. Ignored when no model has
@@ -596,7 +429,6 @@ func (s SettingsConfig) LogValue() slog.Value {
 	return slog.GroupValue(
 		slog.String("admin_key", "[REDACTED]"),
 		slog.String("encryption_key", "[REDACTED]"),
-		slog.String("license", "[REDACTED]"),
 	)
 }
 
@@ -672,17 +504,6 @@ func Load(path string) (*Config, bool, error) {
 
 	cfg.setDefaults()
 
-	// If license_file is set and the inline license key is empty, read the
-	// JWT from the file. This allows secrets to be mounted as files (e.g.
-	// Kubernetes secrets) without embedding sensitive values in the YAML.
-	if cfg.Settings.LicenseFile != "" && cfg.Settings.License == "" {
-		licenseBytes, readErr := os.ReadFile(cfg.Settings.LicenseFile)
-		if readErr != nil {
-			return nil, false, fmt.Errorf("config: read license_file %q: %w", cfg.Settings.LicenseFile, readErr)
-		}
-		cfg.Settings.License = strings.TrimSpace(string(licenseBytes))
-	}
-
 	if err := cfg.validate(); err != nil {
 		return nil, false, fmt.Errorf("config: %w", err)
 	}
@@ -719,7 +540,6 @@ func loadDefaults() (*Config, error) {
 	var cfg Config
 	cfg.Settings.AdminKey = os.Getenv("VOIDLLM_ADMIN_KEY")
 	cfg.Settings.EncryptionKey = os.Getenv("VOIDLLM_ENCRYPTION_KEY")
-	cfg.Settings.License = os.Getenv("VOIDLLM_LICENSE")
 	cfg.Database.DSN = os.Getenv("VOIDLLM_DATABASE_DSN")
 	cfg.Database.Driver = os.Getenv("VOIDLLM_DATABASE_DRIVER")
 	cfg.setDefaults()
@@ -850,16 +670,6 @@ func (c *Config) setDefaults() {
 		c.Settings.CircuitBreaker.HalfOpenMax = 1
 	}
 
-	// SSO defaults
-	if len(c.Settings.SSO.Scopes) == 0 {
-		c.Settings.SSO.Scopes = []string{"openid", "email", "profile"}
-	}
-	if c.Settings.SSO.DefaultRole == "" {
-		c.Settings.SSO.DefaultRole = "member"
-	}
-	if c.Settings.SSO.GroupClaim == "" {
-		c.Settings.SSO.GroupClaim = "groups"
-	}
 
 	// Health check — only set interval defaults when the probe is explicitly
 	// enabled; never auto-enable a probe that the user has not opted into.
@@ -882,43 +692,6 @@ func (c *Config) setDefaults() {
 	}
 	if c.Settings.HealthCheck.Functional.Enabled && c.Settings.HealthCheck.Functional.Interval < 60*time.Second {
 		c.Settings.HealthCheck.Functional.Interval = 60 * time.Second
-	}
-
-	// MCP Gateway
-	if c.Settings.MCP.CallTimeout == 0 {
-		c.Settings.MCP.CallTimeout = 30 * time.Second
-	}
-
-	// MCP Health — default on with a 60-second probe interval. The pointer
-	// allows "enabled: false" in YAML to be respected; a nil pointer means the
-	// field was not set, which defaults to enabled.
-	if c.Settings.MCP.Health.Enabled == nil {
-		v := true
-		c.Settings.MCP.Health.Enabled = &v
-	}
-	if c.Settings.MCP.Health.Interval == 0 {
-		c.Settings.MCP.Health.Interval = 60 * time.Second
-	}
-
-	// MCP Code Mode — only apply sub-field defaults when Code Mode is explicitly
-	// enabled. IsEnabled returns false for a nil pointer so Code Mode is opt-in.
-	if c.Settings.MCP.CodeMode.IsEnabled() {
-		if c.Settings.MCP.CodeMode.MemoryLimitMB == 0 {
-			c.Settings.MCP.CodeMode.MemoryLimitMB = 16
-		}
-		if c.Settings.MCP.CodeMode.Timeout == 0 {
-			c.Settings.MCP.CodeMode.Timeout = 30 * time.Second
-		}
-		if c.Settings.MCP.CodeMode.PoolSize == 0 {
-			c.Settings.MCP.CodeMode.PoolSize = 8
-		}
-		if c.Settings.MCP.CodeMode.MaxToolCalls == 0 {
-			c.Settings.MCP.CodeMode.MaxToolCalls = 50
-		}
-		if c.Settings.MCP.CodeMode.SchemaTTL == nil {
-			d := 168 * time.Hour
-			c.Settings.MCP.CodeMode.SchemaTTL = &d
-		}
 	}
 
 	// PII anonymization — disabled by default (opt-in).

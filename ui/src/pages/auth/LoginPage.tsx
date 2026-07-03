@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import type { FormEvent } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { Input } from '../../components/ui/Input'
 import { Button } from '../../components/ui/Button'
@@ -9,47 +9,15 @@ import { LOCAL_STORAGE_KEY } from '../../lib/constants'
 import type { MeResponse } from '../../hooks/useMe'
 import { useTranslation } from '../../lib/i18n'
 
-interface AuthProviders {
-  local: boolean
-  oidc: boolean
-}
-
-const SSO_ERROR_MESSAGES: Record<string, string> = {
-  not_provisioned: 'Your account has not been provisioned. Please contact your administrator.',
-  domain_not_allowed: 'Your email domain is not authorized for SSO login.',
-  sso_error: 'SSO authentication failed. Please try again.',
-}
-
 export default function LoginPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const [searchParams] = useSearchParams()
   const { t } = useTranslation()
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [providers, setProviders] = useState<AuthProviders | null>(null)
-
-  // Surface any SSO error from the URL query string
-  const ssoErrorParam = searchParams.get('error')
-  const ssoError =
-    ssoErrorParam !== null ? (SSO_ERROR_MESSAGES[ssoErrorParam] ?? null) : null
-
-  useEffect(() => {
-    fetch('/api/v1/auth/providers')
-      .then((res) => {
-        if (!res.ok) return
-        return res.json() as Promise<AuthProviders>
-      })
-      .then((data) => {
-        if (data !== undefined) setProviders(data)
-      })
-      .catch(() => {
-        // Non-critical — if the endpoint fails we simply don't show the SSO button
-      })
-  }, [])
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -88,10 +56,6 @@ export default function LoginPage() {
           <p className="mt-2 text-sm text-text-tertiary">{t('login.subtitle')}</p>
         </div>
 
-        {ssoError !== null && (
-          <Banner variant="error" title={ssoError} className="mb-5" />
-        )}
-
         <form onSubmit={(e) => void handleSubmit(e)} className="space-y-5">
           <Input
             label={t('login.email')}
@@ -119,22 +83,6 @@ export default function LoginPage() {
             {t('login.sign_in')}
           </Button>
         </form>
-
-        {providers?.oidc === true && (
-          <>
-            <div className="my-6 flex items-center gap-3">
-              <div className="flex-1 h-px bg-white/10" />
-              <span className="text-xs text-text-tertiary">{t('login.or')}</span>
-              <div className="flex-1 h-px bg-white/10" />
-            </div>
-
-            <a href="/api/v1/auth/oidc/login" className="block w-full">
-              <Button variant="secondary" fullWidth size="lg" type="button">
-                {t('login.sso')}
-              </Button>
-            </a>
-          </>
-        )}
       </div>
     </div>
   )

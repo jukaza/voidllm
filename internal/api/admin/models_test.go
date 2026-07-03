@@ -18,7 +18,6 @@ import (
 	"github.com/voidmind-io/voidllm/internal/cache"
 	"github.com/voidmind-io/voidllm/internal/config"
 	"github.com/voidmind-io/voidllm/internal/db"
-	"github.com/voidmind-io/voidllm/internal/license"
 	"github.com/voidmind-io/voidllm/internal/proxy"
 )
 
@@ -60,7 +59,6 @@ func setupModelTestApp(t *testing.T, dsn string) (*fiber.App, *db.DB, *cache.Cac
 		EncryptionKey: testEncryptionKey,
 		Registry:      registry,
 		KeyCache:      keyCache,
-		License:       license.NewHolder(license.Verify("", true)),
 		Log:           slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 
@@ -1581,51 +1579,6 @@ func TestTestConnection_NonAnthropicUsesBearerAuth(t *testing.T) {
 // Fallback model name tests
 // ──────────────────────────────────────────────────────────────────────────────
 
-// setupModelTestAppWithLicense is like setupModelTestApp but accepts an
-// explicit License instead of always using the dev license.
-func setupModelTestAppWithLicense(t *testing.T, dsn string, lic license.License) (*fiber.App, *db.DB, *cache.Cache[string, auth.KeyInfo]) {
-	t.Helper()
-
-	ctx := context.Background()
-	database, err := db.Open(ctx, config.DatabaseConfig{
-		Driver:          "sqlite",
-		DSN:             dsn,
-		MaxOpenConns:    1,
-		MaxIdleConns:    1,
-		ConnMaxLifetime: time.Minute,
-	})
-	if err != nil {
-		t.Fatalf("open test DB: %v", err)
-	}
-	t.Cleanup(func() { _ = database.Close() })
-
-	if err := db.RunMigrations(ctx, database.SQL(), db.SQLiteDialect{}, slog.Default()); err != nil {
-		t.Fatalf("run migrations: %v", err)
-	}
-
-	registry, err := proxy.NewRegistry(nil)
-	if err != nil {
-		t.Fatalf("proxy.NewRegistry: %v", err)
-	}
-
-	keyCache := cache.New[string, auth.KeyInfo]()
-
-	handler := &admin.Handler{
-		DB:            database,
-		HMACSecret:    testHMACSecret,
-		EncryptionKey: testEncryptionKey,
-		Registry:      registry,
-		KeyCache:      keyCache,
-		License:       license.NewHolder(lic),
-		Log:           slog.New(slog.NewTextHandler(io.Discard, nil)),
-	}
-
-	app := fiber.New()
-	admin.RegisterRoutes(app, handler, keyCache, testHMACSecret, nil)
-
-	return app, database, keyCache
-}
-
 // TestCreateModel_WithFallbackLicensed verifies that creating a model with a
 // fallback_model_name succeeds when the license includes FeatureFallbackChains.
 func TestCreateModel_WithFallbackLicensed(t *testing.T) {
@@ -1666,41 +1619,6 @@ func TestCreateModel_WithFallbackLicensed(t *testing.T) {
 	decodeBody(t, resp.Body, &got)
 	if got["fallback_model_name"] != "model-a-target" {
 		t.Errorf("fallback_model_name = %v, want %q", got["fallback_model_name"], "model-a-target")
-	}
-}
-
-// TestCreateModel_WithFallbackNotLicensed verifies that creating a model with a
-// fallback_model_name fails with 403 when the license lacks FeatureFallbackChains.
-func TestCreateModel_WithFallbackNotLicensed(t *testing.T) {
-	t.Parallel()
-
-	dsn := "file:TestCreateModel_WithFallbackNotLicensed?mode=memory&cache=private"
-	// Community license has no enterprise features.
-	app, database, keyCache := setupModelTestAppWithLicense(t, dsn, license.Verify("", false))
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
-
-	mustCreateModelForDeployment(t, database, "some-fallback-target")
-
-	reqBody := map[string]any{
-		"name":                "model-needs-fallback",
-		"provider":            "openai",
-		"base_url":            "https://api.openai.com/v1",
-		"fallback_model_name": "some-fallback-target",
-	}
-
-	req := httptest.NewRequest("POST", modelURL(), bodyJSON(t, reqBody))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+testKey)
-
-	resp, err := app.Test(req, fiber.TestConfig{Timeout: testTimeout})
-	if err != nil {
-		t.Fatalf("app.Test: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != fiber.StatusForbidden {
-		body, _ := io.ReadAll(resp.Body)
-		t.Errorf("status = %d, want 403; body: %s", resp.StatusCode, body)
 	}
 }
 
@@ -1773,38 +1691,6 @@ func TestUpdateModel_WithFallbackLicensed(t *testing.T) {
 	decodeBody(t, resp.Body, &got)
 	if got["fallback_model_name"] != fallbackName {
 		t.Errorf("fallback_model_name = %v, want %q", got["fallback_model_name"], fallbackName)
-	}
-}
-
-// TestUpdateModel_WithFallbackNotLicensed verifies that updating a model to add
-// a fallback fails with 403 when the license lacks FeatureFallbackChains.
-func TestUpdateModel_WithFallbackNotLicensed(t *testing.T) {
-	t.Parallel()
-
-	dsn := "file:TestUpdateModel_WithFallbackNotLicensed?mode=memory&cache=private"
-	app, database, keyCache := setupModelTestAppWithLicense(t, dsn, license.Verify("", false))
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
-
-	mustCreateModelForDeployment(t, database, "fb-target-nolic")
-	source := mustCreateModelForDeployment(t, database, "source-nolic")
-
-	patchBody := map[string]any{
-		"fallback_model_name": "fb-target-nolic",
-	}
-
-	req := httptest.NewRequest("PATCH", modelItemURL(source.ID), bodyJSON(t, patchBody))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+testKey)
-
-	resp, err := app.Test(req, fiber.TestConfig{Timeout: testTimeout})
-	if err != nil {
-		t.Fatalf("app.Test: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != fiber.StatusForbidden {
-		body, _ := io.ReadAll(resp.Body)
-		t.Errorf("status = %d, want 403; body: %s", resp.StatusCode, body)
 	}
 }
 

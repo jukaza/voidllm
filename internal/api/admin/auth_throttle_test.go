@@ -13,7 +13,6 @@ import (
 	"github.com/voidmind-io/voidllm/internal/cache"
 	"github.com/voidmind-io/voidllm/internal/config"
 	"github.com/voidmind-io/voidllm/internal/db"
-	"github.com/voidmind-io/voidllm/internal/license"
 	"log/slog"
 	"time"
 )
@@ -46,7 +45,6 @@ func setupTestAppWithThrottle(t *testing.T, dsn string) (*fiber.App, *db.DB, *ca
 		DB:            database,
 		HMACSecret:    testHMACSecret,
 		KeyCache:      keyCache,
-		License:       license.NewHolder(license.Verify("", true)),
 		Log:           slog.New(slog.NewTextHandler(io.Discard, nil)),
 		LoginThrottle: auth.NewLoginThrottle(),
 	}

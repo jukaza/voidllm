@@ -59,23 +59,6 @@ const MOCK_MODELS_LIST: MockModelResponse[] = [
   makeChatModel({ id: 'model-4', name: 'text-embed-ada', type: 'embedding', provider: 'openai', base_url: 'https://api.openai.com/v1' }),
 ]
 
-const MOCK_LICENSE_NO_FALLBACK = {
-  edition: 'community',
-  valid: true,
-  features: [] as string[],
-  max_orgs: 1,
-  max_teams: 3,
-}
-
-const MOCK_LICENSE_WITH_FALLBACK = {
-  edition: 'enterprise',
-  valid: true,
-  features: ['fallback_chains', 'audit_logs'],
-  max_orgs: -1,
-  max_teams: -1,
-  fallback_max_depth: 3,
-}
-
 // ---------------------------------------------------------------------------
 // Render helpers
 // ---------------------------------------------------------------------------
@@ -141,7 +124,7 @@ function setupFetchMock(entries: FetchMockEntry[], capturedBodies?: Map<string, 
   }))
 }
 
-function defaultEntries(licensePayload = MOCK_LICENSE_NO_FALLBACK, modelsPayload = { data: MOCK_MODELS_LIST, has_more: false }): FetchMockEntry[] {
+function defaultEntries(modelsPayload = { data: MOCK_MODELS_LIST, has_more: false }): FetchMockEntry[] {
   return [
     {
       // GET-only models list (no method guard needed here — POST entries placed BEFORE
@@ -149,10 +132,6 @@ function defaultEntries(licensePayload = MOCK_LICENSE_NO_FALLBACK, modelsPayload
       matcher: (u) => u.includes('/api/v1/models') && !u.includes('/health'),
       method: 'GET',
       response: modelsPayload,
-    },
-    {
-      matcher: (u) => u.includes('/api/v1/license'),
-      response: licensePayload,
     },
     {
       matcher: (u) => u.includes('/api/v1/models/health'),
@@ -240,81 +219,13 @@ describe('CreateModelDialog — Fallback Model field', () => {
     vi.restoreAllMocks()
   })
 
-  describe('without fallback_chains license feature', () => {
-    it('disables the Fallback Model select when license does not include fallback_chains', async () => {
-      setupFetchMock(defaultEntries(MOCK_LICENSE_NO_FALLBACK))
-      renderModelsPage()
-
-      await openCreateDialog()
-      await switchToLoadBalancedTab()
-
-      // Wait for the models list to load (options depend on it)
-      await waitFor(() => {
-        const dialog = getDialog(/add model/i)
-        const select = getFallbackCombobox(dialog)
-        expect(select).toBeDisabled()
-      })
-    })
-
-    it('shows "Enterprise" helper text when license is missing fallback_chains', async () => {
-      setupFetchMock(defaultEntries(MOCK_LICENSE_NO_FALLBACK))
-      renderModelsPage()
-
-      await openCreateDialog()
-      await switchToLoadBalancedTab()
-
-      await waitFor(() => {
-        expect(screen.getByText(/available with an enterprise license/i)).toBeInTheDocument()
-      })
-    })
-
-    it('does not send fallback_model_name on submit when license is missing and field is left at default', async () => {
-      const capturedBodies = new Map<string, string>()
-      const createdModel = makeChatModel({ id: 'new-model', name: 'my-lb-model' })
-      setupFetchMock(
-        [
-          {
-            matcher: (u) => u.includes('/api/v1/models') && !u.includes('/health'),
-            method: 'POST',
-            response: createdModel,
-          },
-          ...defaultEntries(MOCK_LICENSE_NO_FALLBACK),
-        ],
-        capturedBodies,
-      )
-      renderModelsPage()
-
-      await openCreateDialog()
-      await switchToLoadBalancedTab()
-
-      // Fill in required field: name
-      await userEvent.type(screen.getByRole('textbox', { name: /^name$/i }), 'my-lb-model')
-
-      const dialog = getDialog(/add model/i)
-
-      // Load balanced mode requires at least one deployment
-      await addMinimalDeployment(dialog)
-
-      // Submit
-      await submitDialog(dialog, /add model/i)
-
-      await waitFor(() => expect(capturedBodies.has('POST:/api/v1/models')).toBe(true))
-
-      const body = JSON.parse(capturedBodies.get('POST:/api/v1/models')!)
-      // When license is missing and field untouched, fallback_model_name is absent
-      // because `if (fallbackModelName) params.fallback_model_name = fallbackModelName`
-      // and the default value is '' (falsy).
-      expect(body).not.toHaveProperty('fallback_model_name')
-    })
-  })
-
   // ---------------------------------------------------------------------------
   // CreateModelDialog — with Enterprise license
   // ---------------------------------------------------------------------------
 
-  describe('with fallback_chains license feature', () => {
+  describe('fallback model select', () => {
     it('enables the Fallback Model select when license includes fallback_chains', async () => {
-      setupFetchMock(defaultEntries(MOCK_LICENSE_WITH_FALLBACK))
+      setupFetchMock(defaultEntries())
       renderModelsPage()
 
       await openCreateDialog()
@@ -328,7 +239,7 @@ describe('CreateModelDialog — Fallback Model field', () => {
     })
 
     it('shows helpful description text when license includes fallback_chains', async () => {
-      setupFetchMock(defaultEntries(MOCK_LICENSE_WITH_FALLBACK))
+      setupFetchMock(defaultEntries())
       renderModelsPage()
 
       await openCreateDialog()
@@ -340,7 +251,7 @@ describe('CreateModelDialog — Fallback Model field', () => {
     })
 
     it('shows None option and other chat models, excludes embedding models and current model name', async () => {
-      setupFetchMock(defaultEntries(MOCK_LICENSE_WITH_FALLBACK))
+      setupFetchMock(defaultEntries())
       renderModelsPage()
 
       await openCreateDialog()
@@ -386,7 +297,7 @@ describe('CreateModelDialog — Fallback Model field', () => {
             method: 'POST',
             response: createdModel,
           },
-          ...defaultEntries(MOCK_LICENSE_WITH_FALLBACK),
+          ...defaultEntries(),
         ],
         capturedBodies,
       )
@@ -432,7 +343,7 @@ describe('CreateModelDialog — Fallback Model field', () => {
             method: 'POST',
             response: createdModel,
           },
-          ...defaultEntries(MOCK_LICENSE_WITH_FALLBACK),
+          ...defaultEntries(),
         ],
         capturedBodies,
       )
@@ -494,7 +405,7 @@ describe('EditModelDialog — Fallback Model field', () => {
       data: [modelWithFallback, ...MOCK_MODELS_LIST.slice(1)],
       has_more: false,
     }
-    setupFetchMock(defaultEntries(MOCK_LICENSE_WITH_FALLBACK, modelsData))
+    setupFetchMock(defaultEntries(modelsData))
     renderModelsPage()
 
     await openEditDialogForModel('gpt-4o')
@@ -518,7 +429,7 @@ describe('EditModelDialog — Fallback Model field', () => {
     }
     setupFetchMock(
       [
-        ...defaultEntries(MOCK_LICENSE_WITH_FALLBACK, modelsData),
+        ...defaultEntries(modelsData),
         {
           matcher: (u) => u.includes('/api/v1/models/model-1'),
           method: 'PATCH',
@@ -556,7 +467,7 @@ describe('EditModelDialog — Fallback Model field', () => {
     }
     setupFetchMock(
       [
-        ...defaultEntries(MOCK_LICENSE_WITH_FALLBACK, modelsData),
+        ...defaultEntries(modelsData),
         {
           matcher: (u) => u.includes('/api/v1/models/model-1'),
           method: 'PATCH',
@@ -600,7 +511,7 @@ describe('EditModelDialog — Fallback Model field', () => {
     }
     setupFetchMock(
       [
-        ...defaultEntries(MOCK_LICENSE_WITH_FALLBACK, modelsData),
+        ...defaultEntries(modelsData),
         {
           matcher: (u) => u.includes('/api/v1/models/model-1'),
           method: 'PATCH',

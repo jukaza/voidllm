@@ -468,3 +468,19 @@ func (h *Handler) Me(c fiber.Ctx) error {
 		IsSystemAdmin: user.IsSystemAdmin,
 	})
 }
+
+// AuthProviders handles GET /api/v1/auth/providers. It returns which
+// authentication methods are available on this instance.
+//
+// @Summary      List available authentication providers
+// @Description  Returns which login methods are enabled.
+// @Tags         auth
+// @Produce      json
+// @Success      200  {object}  map[string]bool
+// @Router       /auth/providers [get]
+func (h *Handler) AuthProviders(c fiber.Ctx) error {
+	return c.JSON(fiber.Map{
+		"local": true,
+		"oidc":  false,
+	})
+}

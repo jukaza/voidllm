@@ -18,7 +18,8 @@ const modelSelectColumns = "id, name, provider, model_type, base_url, api_key_en
 	"max_context_tokens, input_price_per_1m, output_price_per_1m, " +
 	"azure_deployment, azure_api_version, gcp_project, gcp_location, " +
 	"is_active, source, created_by, created_at, updated_at, deleted_at, aliases, timeout, " +
-	"strategy, max_retries, fallback_model_id, pii_filter"
+	"strategy, max_retries, fallback_model_id, pii_filter, " +
+	"is_public, sell_input_per_1m, sell_output_per_1m, sell_cached_input_per_1m"
 
 // Model represents a model record in the database.
 // This is the storage layer representation; see proxy.Model for the in-memory registry type.
@@ -65,6 +66,16 @@ type Model struct {
 	// routed to this model. Nil means not set — inherit the network-level default.
 	// true enables anonymization; false disables it.
 	PIIFilter *bool
+	// IsPublic marks the model as visible on the public storefront price list.
+	IsPublic bool
+	// SellInputPer1M is the customer-facing price in USD per 1M input tokens.
+	// Nil means no sell pricing configured (requests are not billed).
+	SellInputPer1M *float64
+	// SellOutputPer1M is the customer-facing price in USD per 1M output tokens.
+	SellOutputPer1M *float64
+	// SellCachedInputPer1M is the customer-facing price in USD per 1M cached
+	// input tokens. Nil falls back to SellInputPer1M.
+	SellCachedInputPer1M *float64
 }
 
 // CreateModelParams holds the input for creating a model.
@@ -103,6 +114,14 @@ type CreateModelParams struct {
 	// model. true enables anonymization; false disables it. Nil stores NULL
 	// (inherit network-level default).
 	PIIFilter *bool
+	// IsPublic marks the model as visible on the public storefront price list.
+	IsPublic bool
+	// SellInputPer1M is the customer-facing price in USD per 1M input tokens.
+	SellInputPer1M *float64
+	// SellOutputPer1M is the customer-facing price in USD per 1M output tokens.
+	SellOutputPer1M *float64
+	// SellCachedInputPer1M is the customer-facing price in USD per 1M cached input tokens.
+	SellCachedInputPer1M *float64
 }
 
 // UpdateModelParams holds optional fields for updating a model.
@@ -147,6 +166,14 @@ type UpdateModelParams struct {
 	// of the PIIFilter pointer value. Allows callers to explicitly revert to the
 	// inherit-from-network-default state.
 	ClearPIIFilter bool
+	// IsPublic, when non-nil, replaces the storefront visibility flag.
+	IsPublic *bool
+	// SellInputPer1M, when non-nil, replaces the customer-facing input price.
+	SellInputPer1M *float64
+	// SellOutputPer1M, when non-nil, replaces the customer-facing output price.
+	SellOutputPer1M *float64
+	// SellCachedInputPer1M, when non-nil, replaces the customer-facing cached input price.
+	SellCachedInputPer1M *float64
 }
 
 // CreateModel inserts a new model and returns the persisted record.
@@ -177,13 +204,14 @@ func (d *DB) CreateModel(ctx context.Context, params CreateModelParams) (*Model,
 		"max_context_tokens, input_price_per_1m, output_price_per_1m, " +
 		"azure_deployment, azure_api_version, gcp_project, gcp_location, " +
 		"is_active, source, created_by, aliases, timeout, strategy, max_retries, " +
-		"fallback_model_id, pii_filter, created_at, updated_at) " +
+		"fallback_model_id, pii_filter, is_public, sell_input_per_1m, sell_output_per_1m, sell_cached_input_per_1m, " +
+		"created_at, updated_at) " +
 		"VALUES (" +
 		p(1) + ", " + p(2) + ", " + p(3) + ", " + p(4) + ", " + p(5) + ", " + p(6) + ", " +
 		p(7) + ", " + p(8) + ", " + p(9) + ", " +
 		p(10) + ", " + p(11) + ", " + p(12) + ", " + p(13) + ", " +
 		"1, " + p(14) + ", " + p(15) + ", " + p(16) + ", " + p(17) + ", " + p(18) + ", " + p(19) + ", " +
-		p(20) + ", " + p(21) + ", " +
+		p(20) + ", " + p(21) + ", " + p(22) + ", " + p(23) + ", " + p(24) + ", " + p(25) + ", " +
 		"CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
 
 	selectQuery := "SELECT " + modelSelectColumns +
@@ -213,6 +241,10 @@ func (d *DB) CreateModel(ctx context.Context, params CreateModelParams) (*Model,
 			maxRetries,
 			params.FallbackModelID,
 			boolPtrToNullableInt(params.PIIFilter),
+			boolToInt(params.IsPublic),
+			params.SellInputPer1M,
+			params.SellOutputPer1M,
+			params.SellCachedInputPer1M,
 		)
 		if execErr != nil {
 			return translateError(execErr)
@@ -412,6 +444,26 @@ func (d *DB) UpdateModel(ctx context.Context, id string, params UpdateModelParam
 		args = append(args, boolPtrToNullableInt(params.PIIFilter))
 		argN++
 	}
+	if params.IsPublic != nil {
+		setClauses = append(setClauses, "is_public = "+p(argN))
+		args = append(args, boolToInt(*params.IsPublic))
+		argN++
+	}
+	if params.SellInputPer1M != nil {
+		setClauses = append(setClauses, "sell_input_per_1m = "+p(argN))
+		args = append(args, *params.SellInputPer1M)
+		argN++
+	}
+	if params.SellOutputPer1M != nil {
+		setClauses = append(setClauses, "sell_output_per_1m = "+p(argN))
+		args = append(args, *params.SellOutputPer1M)
+		argN++
+	}
+	if params.SellCachedInputPer1M != nil {
+		setClauses = append(setClauses, "sell_cached_input_per_1m = "+p(argN))
+		args = append(args, *params.SellCachedInputPer1M)
+		argN++
+	}
 
 	if len(setClauses) == 0 {
 		return d.GetModel(ctx, id)
@@ -574,12 +626,22 @@ func nullableIntToBoolPtr(v *int64) *bool {
 	return &b
 }
 
+// boolToInt converts a bool to the 0/1 integer convention used for boolean
+// columns in this schema.
+func boolToInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
+}
+
 // scanModel scans a single model row. The scanner may be a *sql.Row (from
 // QueryRowContext) or *sql.Rows (from QueryContext); both satisfy the interface.
 func scanModel(scanner interface{ Scan(...any) error }) (*Model, error) {
 	var m Model
 	var isActiveInt int
 	var piiFilterInt *int64
+	var isPublicInt int
 	err := scanner.Scan(
 		&m.ID, &m.Name, &m.Provider, &m.ModelType, &m.BaseURL, &m.APIKeyEncrypted,
 		&m.MaxContextTokens, &m.InputPricePer1M, &m.OutputPricePer1M,
@@ -588,12 +650,14 @@ func scanModel(scanner interface{ Scan(...any) error }) (*Model, error) {
 		&m.CreatedAt, &m.UpdatedAt, &m.DeletedAt, &m.Aliases, &m.Timeout,
 		&m.Strategy, &m.MaxRetries, &m.FallbackModelID,
 		&piiFilterInt,
+		&isPublicInt, &m.SellInputPer1M, &m.SellOutputPer1M, &m.SellCachedInputPer1M,
 	)
 	if err != nil {
 		return nil, err
 	}
 	m.IsActive = isActiveInt == 1
 	m.PIIFilter = nullableIntToBoolPtr(piiFilterInt)
+	m.IsPublic = isPublicInt == 1
 	return &m, nil
 }
 
@@ -885,4 +949,30 @@ func (d *DB) syncYAMLDeployments(ctx context.Context, modelID string, cfgDeps []
 // against a different row.
 func deploymentAAD(id string) []byte {
 	return []byte("deployment:" + id)
+}
+
+// ListPublicModels returns all active models flagged is_public, ordered by
+// name. Used by the unauthenticated storefront price list.
+func (d *DB) ListPublicModels(ctx context.Context) ([]Model, error) {
+	query := "SELECT " + modelSelectColumns +
+		" FROM models WHERE is_active = 1 AND is_public = 1 AND deleted_at IS NULL ORDER BY name ASC"
+
+	rows, err := d.sql.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("list public models query: %w", err)
+	}
+	defer rows.Close()
+
+	var models []Model
+	for rows.Next() {
+		m, scanErr := scanModel(rows)
+		if scanErr != nil {
+			return nil, fmt.Errorf("list public models scan: %w", scanErr)
+		}
+		models = append(models, *m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list public models rows: %w", err)
+	}
+	return models, nil
 }
