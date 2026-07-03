@@ -46,33 +46,20 @@ func RegisterRoutes(app *fiber.App, handler *Handler, keyCache *cache.Cache[stri
 	// Dashboard stats — no role restriction.
 	api.Get("/dashboard/stats", handler.DashboardStats)
 
-	// Organizations
-	api.Post("/orgs", auth.RequireRole(auth.RoleSystemAdmin), handler.CreateOrg)
-	api.Get("/orgs", auth.RequireRole(auth.RoleOrgAdmin), handler.ListOrgs)
-	api.Get("/orgs/:org_id", auth.RequireRole(auth.RoleOrgAdmin), handler.GetOrg)
-	api.Patch("/orgs/:org_id", auth.RequireRole(auth.RoleOrgAdmin), handler.UpdateOrg)
-	api.Delete("/orgs/:org_id", auth.RequireRole(auth.RoleSystemAdmin), handler.DeleteOrg)
-
-	// Users
-	api.Post("/users", auth.RequireRole(auth.RoleOrgAdmin), handler.CreateUser)
+	// Users — managed by system admins.
+	api.Post("/users", auth.RequireRole(auth.RoleSystemAdmin), handler.CreateUser)
 	api.Get("/users", auth.RequireRole(auth.RoleSystemAdmin), handler.ListUsers)
-	api.Get("/users/:user_id", auth.RequireRole(auth.RoleOrgAdmin), handler.GetUser)
-	api.Patch("/users/:user_id", auth.RequireRole(auth.RoleOrgAdmin), handler.UpdateUser)
+	api.Get("/users/:user_id", auth.RequireRole(auth.RoleSystemAdmin), handler.GetUser)
+	api.Patch("/users/:user_id", auth.RequireRole(auth.RoleSystemAdmin), handler.UpdateUser)
 	api.Delete("/users/:user_id", auth.RequireRole(auth.RoleSystemAdmin), handler.DeleteUser)
 
-	// Org Memberships
-	api.Post("/orgs/:org_id/members", auth.RequireRole(auth.RoleOrgAdmin), handler.CreateOrgMembership)
-	api.Get("/orgs/:org_id/members", auth.RequireRole(auth.RoleOrgAdmin), handler.ListOrgMemberships)
-	api.Patch("/orgs/:org_id/members/:membership_id", auth.RequireRole(auth.RoleOrgAdmin), handler.UpdateOrgMembership)
-	api.Delete("/orgs/:org_id/members/:membership_id", auth.RequireRole(auth.RoleOrgAdmin), handler.DeleteOrgMembership)
-
 	// API Keys
-	api.Post("/orgs/:org_id/keys", auth.RequireRole(auth.RoleMember), handler.CreateAPIKey)
-	api.Get("/orgs/:org_id/keys", auth.RequireRole(auth.RoleMember), handler.ListAPIKeys)
-	api.Get("/orgs/:org_id/keys/:key_id", auth.RequireRole(auth.RoleMember), handler.GetAPIKey)
-	api.Patch("/orgs/:org_id/keys/:key_id", auth.RequireRole(auth.RoleMember), handler.UpdateAPIKey)
-	api.Delete("/orgs/:org_id/keys/:key_id", auth.RequireRole(auth.RoleMember), handler.DeleteAPIKey)
-	api.Post("/orgs/:org_id/keys/:key_id/rotate", auth.RequireRole(auth.RoleMember), handler.RotateAPIKey)
+	api.Post("/keys", auth.RequireRole(auth.RoleMember), handler.CreateAPIKey)
+	api.Get("/keys", auth.RequireRole(auth.RoleMember), handler.ListAPIKeys)
+	api.Get("/keys/:key_id", auth.RequireRole(auth.RoleMember), handler.GetAPIKey)
+	api.Patch("/keys/:key_id", auth.RequireRole(auth.RoleMember), handler.UpdateAPIKey)
+	api.Delete("/keys/:key_id", auth.RequireRole(auth.RoleMember), handler.DeleteAPIKey)
+	api.Post("/keys/:key_id/rotate", auth.RequireRole(auth.RoleMember), handler.RotateAPIKey)
 
 	// Models — global resources managed by system admins only.
 	// An org_admin in a multi-org deployment must not be able to add or modify
@@ -96,19 +83,16 @@ func RegisterRoutes(app *fiber.App, handler *Handler, keyCache *cache.Cache[stri
 	api.Delete("/models/:model_id/deployments/:deployment_id", auth.RequireRole(auth.RoleSystemAdmin), handler.deleteDeployment)
 
 	// Model Access Control
-	api.Get("/orgs/:org_id/model-access", auth.RequireRole(auth.RoleOrgAdmin), handler.GetOrgModelAccess)
-	api.Put("/orgs/:org_id/model-access", auth.RequireRole(auth.RoleOrgAdmin), handler.SetOrgModelAccess)
-	api.Get("/orgs/:org_id/keys/:key_id/model-access", auth.RequireRole(auth.RoleOrgAdmin), handler.GetKeyModelAccess)
-	api.Put("/orgs/:org_id/keys/:key_id/model-access", auth.RequireRole(auth.RoleOrgAdmin), handler.SetKeyModelAccess)
+	api.Get("/keys/:key_id/model-access", auth.RequireRole(auth.RoleMember), handler.GetKeyModelAccess)
+	api.Put("/keys/:key_id/model-access", auth.RequireRole(auth.RoleMember), handler.SetKeyModelAccess)
 
 	// Model Aliases
-	api.Post("/orgs/:org_id/model-aliases", auth.RequireRole(auth.RoleOrgAdmin), handler.CreateOrgAlias)
-	api.Get("/orgs/:org_id/model-aliases", auth.RequireRole(auth.RoleOrgAdmin), handler.ListOrgAliases)
-	api.Delete("/orgs/:org_id/model-aliases/:alias_id", auth.RequireRole(auth.RoleOrgAdmin), handler.DeleteOrgAlias)
+	api.Post("/model-aliases", auth.RequireRole(auth.RoleMember), handler.CreateOrgAlias)
+	api.Get("/model-aliases", auth.RequireRole(auth.RoleMember), handler.ListOrgAliases)
+	api.Delete("/model-aliases/:alias_id", auth.RequireRole(auth.RoleMember), handler.DeleteOrgAlias)
 
 	// Usage
 	api.Get("/usage", auth.RequireRole(auth.RoleSystemAdmin), handler.SystemAdminUsage)
-	api.Get("/orgs/:org_id/usage", auth.RequireRole(auth.RoleOrgAdmin), handler.GetOrgUsage)
 
 	// Providers (upstream partners) — system_admin only.
 	api.Post("/providers", auth.RequireRole(auth.RoleSystemAdmin), handler.CreateProvider)

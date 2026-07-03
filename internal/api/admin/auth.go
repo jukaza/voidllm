@@ -57,7 +57,6 @@ type meResponse struct {
 	Email         string `json:"email"`
 	DisplayName   string `json:"display_name"`
 	Role          string `json:"role"`
-	OrgID         string `json:"org_id,omitempty"`
 	IsSystemAdmin bool   `json:"is_system_admin"`
 }
 
@@ -142,28 +141,10 @@ func (h *Handler) Login(c fiber.Ctx) error {
 		return apierror.Send(c, fiber.StatusUnauthorized, "unauthorized", "invalid email or password")
 	}
 
-	role, orgID, err := h.DB.ResolveUserRole(ctx, userID)
+	role, _, err := h.DB.ResolveUserRole(ctx, userID)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
-			h.auditLoginFailed(c, req.Email, fiber.StatusUnauthorized)
-			return apierror.Send(c, fiber.StatusUnauthorized, "unauthorized", "user has no organization membership")
-		}
 		h.Log.ErrorContext(ctx, "login: resolve user role", slog.String("error", err.Error()))
 		return apierror.InternalError(c, "authentication failed")
-	}
-
-	// Defense-in-depth guard for legacy/inconsistent data: under the current
-	// invariant every user belongs to an org, so orgID is never empty here.
-	// Deployments affected by the old bug may have org-less users in their DB.
-	// Return the same generic 401 as a wrong password to prevent enumeration —
-	// an attacker who already supplied the correct password must not learn that
-	// the account exists but has no org. The specific reason is written to the
-	// server log for operators.
-	if orgID == "" {
-		h.Log.WarnContext(ctx, "login: user has no organization membership",
-			slog.String("email", req.Email))
-		h.auditLoginFailed(c, req.Email, fiber.StatusUnauthorized)
-		return apierror.Send(c, fiber.StatusUnauthorized, "unauthorized", "invalid email or password")
 	}
 
 	// Revoke previous session keys for this user so only one session exists.
@@ -188,7 +169,6 @@ func (h *Handler) Login(c fiber.Ctx) error {
 		KeyHint:   keyHint,
 		KeyType:   keygen.KeyTypeSession,
 		Name:      "Login session",
-		OrgID:     orgID,
 		UserID:    &userID,
 		ExpiresAt: &expiresAtStr,
 		CreatedBy: userID,
@@ -202,7 +182,6 @@ func (h *Handler) Login(c fiber.Ctx) error {
 		ID:        apiKey.ID,
 		KeyType:   keygen.KeyTypeSession,
 		Role:      role,
-		OrgID:     orgID,
 		UserID:    userID,
 		Name:      "Login session",
 		ExpiresAt: &expiresAt,
@@ -221,7 +200,6 @@ func (h *Handler) Login(c fiber.Ctx) error {
 	if h.AuditLogger != nil {
 		h.AuditLogger.Log(audit.Event{
 			Timestamp:    time.Now().UTC(),
-			OrgID:        orgID,
 			ActorID:      user.ID,
 			ActorType:    "user",
 			ActorKeyID:   apiKey.ID,
@@ -243,7 +221,6 @@ func (h *Handler) Login(c fiber.Ctx) error {
 			Email:         user.Email,
 			DisplayName:   user.DisplayName,
 			Role:          role,
-			OrgID:         orgID,
 			IsSystemAdmin: user.IsSystemAdmin,
 		},
 	})
@@ -283,7 +260,7 @@ func (h *Handler) AvailableModels(c fiber.Ctx) error {
 
 	models := make([]availableModel, 0, len(allModels))
 	for _, m := range allModels {
-		if h.AccessCache == nil || h.AccessCache.Check(keyInfo.OrgID, keyInfo.TeamID, keyInfo.ID, m.Name) {
+		if h.AccessCache == nil || h.AccessCache.Check("", "", keyInfo.ID, m.Name) {
 			modelType := m.Type
 			if modelType == "" {
 				modelType = "chat"
@@ -414,7 +391,7 @@ func (h *Handler) ChangeOwnPassword(c fiber.Ctx) error {
 	if h.AuditLogger != nil {
 		h.AuditLogger.Log(audit.Event{
 			Timestamp:    time.Now().UTC(),
-			OrgID:        keyInfo.OrgID,
+			OrgID:        "",
 			ActorID:      keyInfo.UserID,
 			ActorType:    "user",
 			ActorKeyID:   keyInfo.ID,
@@ -464,7 +441,6 @@ func (h *Handler) Me(c fiber.Ctx) error {
 		Email:         user.Email,
 		DisplayName:   user.DisplayName,
 		Role:          keyInfo.Role,
-		OrgID:         keyInfo.OrgID,
 		IsSystemAdmin: user.IsSystemAdmin,
 	})
 }

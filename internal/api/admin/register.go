@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/voidmind-io/voidllm/internal/apierror"
@@ -100,28 +99,6 @@ func (h *Handler) Register(c fiber.Ctx) error {
 		return apierror.InternalError(c, "signup failed")
 	}
 
-	// Personal org: every customer gets an invisible single-member org so all
-	// existing org-scoped queries (usage, keys, access) work unchanged. The
-	// slug must be unique — derive it from a fresh UUID.
-	orgSlug := "cust-" + uuid.NewString()[:13]
-	org, err := h.DB.CreateOrg(ctx, db.CreateOrgParams{
-		Name: req.DisplayName,
-		Slug: orgSlug,
-	})
-	if err != nil {
-		h.Log.ErrorContext(ctx, "register: create org", slog.String("error", err.Error()))
-		return apierror.InternalError(c, "signup failed")
-	}
-
-	if _, err := h.DB.CreateOrgMembership(ctx, db.CreateOrgMembershipParams{
-		OrgID:  org.ID,
-		UserID: user.ID,
-		Role:   auth.RoleMember,
-	}); err != nil {
-		h.Log.ErrorContext(ctx, "register: create membership", slog.String("error", err.Error()))
-		return apierror.InternalError(c, "signup failed")
-	}
-
 	// Empty prepaid wallet; requests are rejected with 402 until topped up.
 	if _, err := h.DB.CreateWallet(ctx, user.ID, ""); err != nil {
 		h.Log.ErrorContext(ctx, "register: create wallet", slog.String("error", err.Error()))
@@ -143,7 +120,6 @@ func (h *Handler) Register(c fiber.Ctx) error {
 		KeyHint:   keygen.Hint(apiKeyPlain),
 		KeyType:   keygen.KeyTypeUser,
 		Name:      "Default key",
-		OrgID:     org.ID,
 		UserID:    &user.ID,
 		CreatedBy: user.ID,
 	})
@@ -155,7 +131,6 @@ func (h *Handler) Register(c fiber.Ctx) error {
 		ID:      apiKeyRec.ID,
 		KeyType: keygen.KeyTypeUser,
 		Role:    auth.RoleMember,
-		OrgID:   org.ID,
 		UserID:  user.ID,
 		Name:    apiKeyRec.Name,
 	})
@@ -174,7 +149,6 @@ func (h *Handler) Register(c fiber.Ctx) error {
 		KeyHint:   keygen.Hint(sessionKey),
 		KeyType:   keygen.KeyTypeSession,
 		Name:      "Login session",
-		OrgID:     org.ID,
 		UserID:    &user.ID,
 		ExpiresAt: &expiresAtStr,
 		CreatedBy: user.ID,
@@ -187,7 +161,6 @@ func (h *Handler) Register(c fiber.Ctx) error {
 		ID:        sessionRec.ID,
 		KeyType:   keygen.KeyTypeSession,
 		Role:      auth.RoleMember,
-		OrgID:     org.ID,
 		UserID:    user.ID,
 		Name:      "Login session",
 		ExpiresAt: &expiresAt,
@@ -199,7 +172,6 @@ func (h *Handler) Register(c fiber.Ctx) error {
 
 	h.Log.InfoContext(ctx, "customer registered",
 		slog.String("user_id", user.ID),
-		slog.String("org_id", org.ID),
 	)
 
 	return c.Status(fiber.StatusCreated).JSON(registerResponse{
@@ -211,7 +183,6 @@ func (h *Handler) Register(c fiber.Ctx) error {
 			Email:       user.Email,
 			DisplayName: user.DisplayName,
 			Role:        auth.RoleMember,
-			OrgID:       org.ID,
 		},
 	})
 }

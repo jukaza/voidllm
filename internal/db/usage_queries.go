@@ -184,9 +184,11 @@ func (d *DB) GetScopedUsageAggregates(ctx context.Context, filter UsageFilter, f
 	var conditions []string
 	var args []any
 
-	conditions = append(conditions, "org_id = "+p(argN))
-	args = append(args, filter.OrgID)
-	argN++
+	if filter.OrgID != "" {
+		conditions = append(conditions, "org_id = "+p(argN))
+		args = append(args, filter.OrgID)
+		argN++
+	}
 
 	conditions = append(conditions, "created_at >= "+p(argN))
 	args = append(args, fromStr)

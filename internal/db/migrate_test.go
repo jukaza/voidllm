@@ -110,16 +110,9 @@ func TestRunMigrations_TablesExist(t *testing.T) {
 	// Spot-check that key tables from the initial schema were created.
 	tables := []string{
 		"users",
-		"organizations",
-		"org_memberships",
-		"teams",
-		"team_memberships",
-		"service_accounts",
 		"models",
 		"model_aliases",
 		"api_keys",
-		"org_model_access",
-		"team_model_access",
 		"key_model_access",
 		"usage_events",
 	}

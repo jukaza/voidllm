@@ -42,10 +42,7 @@ func TestKeyInfoFromCtx_AfterMiddleware(t *testing.T) {
 		ID:                "ctx-key-001",
 		KeyType:           keygen.KeyTypeUser,
 		Role:              RoleOrgAdmin,
-		OrgID:             "org-ctx",
-		TeamID:            "team-ctx",
 		UserID:            "user-ctx",
-		ServiceAccountID:  "",
 		Name:              "context test key",
 		DailyTokenLimit:   1000,
 		MonthlyTokenLimit: 10000,
@@ -83,12 +80,6 @@ func TestKeyInfoFromCtx_AfterMiddleware(t *testing.T) {
 	}
 	if got.Role != want.Role {
 		t.Errorf("KeyInfo.Role = %q, want %q", got.Role, want.Role)
-	}
-	if got.OrgID != want.OrgID {
-		t.Errorf("KeyInfo.OrgID = %q, want %q", got.OrgID, want.OrgID)
-	}
-	if got.TeamID != want.TeamID {
-		t.Errorf("KeyInfo.TeamID = %q, want %q", got.TeamID, want.TeamID)
 	}
 	if got.UserID != want.UserID {
 		t.Errorf("KeyInfo.UserID = %q, want %q", got.UserID, want.UserID)

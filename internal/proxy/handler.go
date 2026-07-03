@@ -287,9 +287,6 @@ func (p *ProxyHandler) Handle(c fiber.Ctx) error {
 		// here, orgID defaults to "" which still produces valid pseudonyms scoped
 		// to the empty-string tenant; anonymization is still applied.
 		orgID := ""
-		if keyInfo != nil {
-			orgID = keyInfo.OrgID
-		}
 		piiFilter = p.PIIEngine.NewFilter(orgID)
 		var anonErr error
 		anonBody, anonErr = piiFilter.AnonymizeJSON(body)
@@ -423,7 +420,7 @@ func (p *ProxyHandler) Handle(c fiber.Ctx) error {
 		// here — instead we silently stop the chain and preserve the primary's
 		// error, so the existence of the fallback target is not disclosed.
 		if p.AccessCache != nil && keyInfo != nil {
-			if !p.AccessCache.Check(keyInfo.OrgID, keyInfo.TeamID, keyInfo.ID, next.Name) {
+			if !p.AccessCache.Check("", "", keyInfo.ID, next.Name) {
 				p.Log.LogAttrs(c.Context(), slog.LevelInfo, "fallback target not permitted by access policy",
 					slog.String("requested", requestedModelName),
 					slog.String("target", next.Name),
@@ -800,18 +797,8 @@ func (p *ProxyHandler) checkLimits(c fiber.Ctx, keyInfo *auth.KeyInfo) error {
 		DailyTokenLimit:   keyInfo.DailyTokenLimit,
 		MonthlyTokenLimit: keyInfo.MonthlyTokenLimit,
 	}
-	teamLimits := ratelimit.Limits{
-		RequestsPerMinute: keyInfo.TeamRequestsPerMinute,
-		RequestsPerDay:    keyInfo.TeamRequestsPerDay,
-		DailyTokenLimit:   keyInfo.TeamDailyTokenLimit,
-		MonthlyTokenLimit: keyInfo.TeamMonthlyTokenLimit,
-	}
-	orgLimits := ratelimit.Limits{
-		RequestsPerMinute: keyInfo.OrgRequestsPerMinute,
-		RequestsPerDay:    keyInfo.OrgRequestsPerDay,
-		DailyTokenLimit:   keyInfo.OrgDailyTokenLimit,
-		MonthlyTokenLimit: keyInfo.OrgMonthlyTokenLimit,
-	}
+	teamLimits := ratelimit.Limits{}
+	orgLimits := ratelimit.Limits{}
 
 	if p.Wallet != nil && keyInfo.UserID != "" {
 		if err := p.Wallet.Check(keyInfo.UserID); err != nil {
@@ -828,11 +815,10 @@ func (p *ProxyHandler) checkLimits(c fiber.Ctx, keyInfo *auth.KeyInfo) error {
 	}
 
 	if p.RateLimiter != nil {
-		if err := p.RateLimiter.CheckRate(keyInfo.ID, keyInfo.TeamID, keyInfo.OrgID, keyLimits, teamLimits, orgLimits); err != nil {
+		if err := p.RateLimiter.CheckRate(keyInfo.ID, "", "", keyLimits, teamLimits, orgLimits); err != nil {
 			metrics.RateLimitRejectionsTotal.WithLabelValues("request").Inc()
 			p.Log.LogAttrs(c.Context(), slog.LevelWarn, "rate limit exceeded",
 				slog.String("key_id", keyInfo.ID),
-				slog.String("org_id", keyInfo.OrgID),
 			)
 			if err := apierror.Send(c, fiber.StatusTooManyRequests, "rate_limit_exceeded", "rate limit exceeded"); err != nil {
 				return err
@@ -842,11 +828,10 @@ func (p *ProxyHandler) checkLimits(c fiber.Ctx, keyInfo *auth.KeyInfo) error {
 	}
 
 	if p.TokenCounter != nil {
-		if err := p.TokenCounter.CheckTokens(keyInfo.ID, keyInfo.TeamID, keyInfo.OrgID, keyLimits, teamLimits, orgLimits); err != nil {
+		if err := p.TokenCounter.CheckTokens(keyInfo.ID, "", "", keyLimits, teamLimits, orgLimits); err != nil {
 			metrics.RateLimitRejectionsTotal.WithLabelValues("token").Inc()
 			p.Log.LogAttrs(c.Context(), slog.LevelWarn, "token budget exceeded",
 				slog.String("key_id", keyInfo.ID),
-				slog.String("org_id", keyInfo.OrgID),
 			)
 			if err := apierror.Send(c, fiber.StatusTooManyRequests, "token_limit_exceeded", "token budget exceeded"); err != nil {
 				return err
@@ -864,7 +849,7 @@ func (p *ProxyHandler) checkLimits(c fiber.Ctx, keyInfo *auth.KeyInfo) error {
 func (p *ProxyHandler) resolveModel(c fiber.Ctx, keyInfo *auth.KeyInfo, modelName string) (Model, error) {
 	// Scoped alias resolution: team → org (before global YAML aliases).
 	if p.AliasCache != nil && keyInfo != nil {
-		if canonical, ok := p.AliasCache.Resolve(keyInfo.OrgID, keyInfo.TeamID, modelName); ok {
+		if canonical, ok := p.AliasCache.Resolve("", "", modelName); ok {
 			modelName = canonical
 		}
 	}
@@ -889,7 +874,7 @@ func (p *ProxyHandler) resolveModel(c fiber.Ctx, keyInfo *auth.KeyInfo, modelNam
 	}
 
 	if p.AccessCache != nil && keyInfo != nil {
-		if !p.AccessCache.Check(keyInfo.OrgID, keyInfo.TeamID, keyInfo.ID, model.Name) {
+		if !p.AccessCache.Check("", "", keyInfo.ID, model.Name) {
 			if err := apierror.Send(c, fiber.StatusForbidden, "model_access_denied", "model access denied"); err != nil {
 				return Model{}, err
 			}
@@ -1639,10 +1624,10 @@ func (p *ProxyHandler) logUsageEvent(keyInfo *auth.KeyInfo, model Model, ui Usag
 	p.UsageLogger.Log(usage.Event{
 		KeyID:              keyInfo.ID,
 		KeyType:            keyInfo.KeyType,
-		OrgID:              keyInfo.OrgID,
-		TeamID:             keyInfo.TeamID,
+		OrgID:              "",
+		TeamID:             "",
 		UserID:             keyInfo.UserID,
-		ServiceAccountID:   keyInfo.ServiceAccountID,
+		ServiceAccountID:   "",
 		ModelName:          model.Name,
 		RequestedModelName: requestedModelName,
 		PromptTokens:       ui.PromptTokens,

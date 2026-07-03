@@ -16,20 +16,14 @@ import (
 )
 
 // createUserRequest is the JSON body accepted by CreateUser.
-// OrgID is required for all users, including system admins. Every user belongs
-// to exactly one organization; there are no org-less users. Role is the
-// organization membership role (defaults to "member" when omitted).
 type createUserRequest struct {
 	Email         string `json:"email"`
 	DisplayName   string `json:"display_name"`
 	Password      string `json:"password"`
 	IsSystemAdmin bool   `json:"is_system_admin"`
-	OrgID         string `json:"org_id"`
-	Role          string `json:"role"`
 }
 
 // updateUserRequest is the JSON body accepted by UpdateUser.
-// All fields are optional; a nil pointer means the field is left unchanged.
 type updateUserRequest struct {
 	Email         *string `json:"email"`
 	DisplayName   *string `json:"display_name"`
@@ -38,7 +32,6 @@ type updateUserRequest struct {
 }
 
 // userResponse is the JSON representation of a user returned by the API.
-// password_hash and external_id are never included.
 type userResponse struct {
 	ID            string  `json:"id"`
 	Email         string  `json:"email"`
@@ -72,28 +65,12 @@ func userToResponse(u *db.User) userResponse {
 }
 
 // CreateUser handles POST /api/v1/users.
-// Requires org_admin or higher. Only system admins may create system admin users.
-//
-// @Summary      Create a user
-// @Description  Creates a new user account. Only system admins may set is_system_admin=true.
-// @Tags         users
-// @Accept       json
-// @Produce      json
-// @Param        body  body      createUserRequest  true  "User parameters"
-// @Success      201   {object}  userResponse
-// @Failure      400   {object}  swaggerErrorResponse
-// @Failure      401   {object}  swaggerErrorResponse
-// @Failure      403   {object}  swaggerErrorResponse
-// @Failure      409   {object}  swaggerErrorResponse
-// @Failure      500   {object}  swaggerErrorResponse
-// @Security     BearerAuth
-// @Router       /users [post]
 func (h *Handler) CreateUser(c fiber.Ctx) error {
 	keyInfo := auth.KeyInfoFromCtx(c)
 	if keyInfo == nil {
 		return apierror.Send(c, fiber.StatusUnauthorized, "unauthorized", "missing authentication")
 	}
-	if !auth.HasRole(keyInfo.Role, auth.RoleOrgAdmin) {
+	if !auth.HasRole(keyInfo.Role, auth.RoleSystemAdmin) {
 		return apierror.Send(c, fiber.StatusForbidden, "forbidden", "insufficient permissions")
 	}
 
@@ -120,38 +97,6 @@ func (h *Handler) CreateUser(c fiber.Ctx) error {
 	if len(req.Password) > 72 {
 		return apierror.BadRequest(c, "password must be at most 72 bytes")
 	}
-	if req.IsSystemAdmin && !auth.HasRole(keyInfo.Role, auth.RoleSystemAdmin) {
-		return apierror.Send(c, fiber.StatusForbidden, "forbidden", "only system admins may create system admin users")
-	}
-
-	// Every user must belong to an org — there are no org-less users.
-	if req.OrgID == "" {
-		return apierror.BadRequest(c, "org_id is required")
-	}
-
-	// Non-system-admin callers may only assign users to their own org.
-	if !auth.HasRole(keyInfo.Role, auth.RoleSystemAdmin) {
-		if req.OrgID != keyInfo.OrgID {
-			return apierror.Send(c, fiber.StatusForbidden, "forbidden", "org_id must match your organization")
-		}
-	}
-
-	// Validate and default the membership role.
-	membershipRole := req.Role
-	if membershipRole == "" {
-		membershipRole = auth.RoleMember
-	}
-	switch membershipRole {
-	case auth.RoleMember, auth.RoleTeamAdmin:
-		// valid membership roles for all callers
-	case auth.RoleOrgAdmin:
-		// only system admins may grant the org_admin membership role
-		if !auth.HasRole(keyInfo.Role, auth.RoleSystemAdmin) {
-			return apierror.Send(c, fiber.StatusForbidden, "forbidden", "only system admins may assign the org_admin role")
-		}
-	default:
-		return apierror.BadRequest(c, "role must be one of: member, team_admin, org_admin")
-	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
@@ -163,19 +108,16 @@ func (h *Handler) CreateUser(c fiber.Ctx) error {
 	}
 	hashStr := string(hash)
 
-	user, err := h.DB.CreateUserWithMembership(c.Context(), db.CreateUserParams{
+	user, err := h.DB.CreateUser(c.Context(), db.CreateUserParams{
 		Email:         req.Email,
 		DisplayName:   req.DisplayName,
 		PasswordHash:  &hashStr,
 		AuthProvider:  "local",
 		IsSystemAdmin: req.IsSystemAdmin,
-	}, req.OrgID, membershipRole)
+	})
 	if err != nil {
 		if errors.Is(err, db.ErrConflict) {
 			return apierror.Conflict(c, "email already in use")
-		}
-		if errors.Is(err, db.ErrForeignKey) {
-			return apierror.BadRequest(c, "organization not found")
 		}
 		h.Log.ErrorContext(c.Context(), "create user", slog.String("error", err.Error()))
 		return apierror.InternalError(c, "failed to create user")
@@ -184,7 +126,6 @@ func (h *Handler) CreateUser(c fiber.Ctx) error {
 	if h.AuditLogger != nil {
 		h.AuditLogger.Log(audit.Event{
 			Timestamp:    time.Now().UTC(),
-			OrgID:        req.OrgID,
 			ActorID:      keyInfo.UserID,
 			ActorType:    "user",
 			ActorKeyID:   keyInfo.ID,
@@ -193,8 +134,6 @@ func (h *Handler) CreateUser(c fiber.Ctx) error {
 			ResourceID:   user.ID,
 			Description: marshalDescription(map[string]string{
 				"email":           req.Email,
-				"org_id":          req.OrgID,
-				"role":            membershipRole,
 				"is_system_admin": strconv.FormatBool(req.IsSystemAdmin),
 			}),
 			IPAddress:  c.IP(),
@@ -207,27 +146,12 @@ func (h *Handler) CreateUser(c fiber.Ctx) error {
 }
 
 // GetUser handles GET /api/v1/users/:user_id.
-// Requires org_admin or higher. org_admin callers may only fetch users who are
-// members of their own organization; system_admin may fetch any user.
-//
-// @Summary      Get a user
-// @Description  Returns a single user. Org admins may only fetch users within their org; system admins may fetch any user.
-// @Tags         users
-// @Produce      json
-// @Param        user_id  path      string  true  "User ID"
-// @Success      200      {object}  userResponse
-// @Failure      401      {object}  swaggerErrorResponse
-// @Failure      403      {object}  swaggerErrorResponse
-// @Failure      404      {object}  swaggerErrorResponse
-// @Failure      500      {object}  swaggerErrorResponse
-// @Security     BearerAuth
-// @Router       /users/{user_id} [get]
 func (h *Handler) GetUser(c fiber.Ctx) error {
 	keyInfo := auth.KeyInfoFromCtx(c)
 	if keyInfo == nil {
 		return apierror.Send(c, fiber.StatusUnauthorized, "unauthorized", "missing authentication")
 	}
-	if !auth.HasRole(keyInfo.Role, auth.RoleOrgAdmin) {
+	if !auth.HasRole(keyInfo.Role, auth.RoleSystemAdmin) {
 		return apierror.Send(c, fiber.StatusForbidden, "forbidden", "insufficient permissions")
 	}
 
@@ -242,36 +166,10 @@ func (h *Handler) GetUser(c fiber.Ctx) error {
 		return apierror.InternalError(c, "failed to get user")
 	}
 
-	if !auth.HasRole(keyInfo.Role, auth.RoleSystemAdmin) {
-		if _, err := h.DB.GetUserOrgRole(c.Context(), id, keyInfo.OrgID); err != nil {
-			if errors.Is(err, db.ErrNotFound) {
-				return apierror.NotFound(c, "user not found")
-			}
-			h.Log.ErrorContext(c.Context(), "get user: verify org membership", slog.String("error", err.Error()))
-			return apierror.InternalError(c, "failed to verify user access")
-		}
-	}
-
 	return c.JSON(userToResponse(user))
 }
 
 // ListUsers handles GET /api/v1/users.
-// Requires system_admin. Accepts query parameters: limit, cursor, include_deleted (system_admin only).
-//
-// @Summary      List users
-// @Description  Returns a cursor-paginated list of all users. Requires system admin.
-// @Tags         users
-// @Produce      json
-// @Param        limit            query     int     false  "Page size (default 20, max 100)"
-// @Param        cursor           query     string  false  "Pagination cursor (UUIDv7 of the last seen user)"
-// @Param        include_deleted  query     bool    false  "Include soft-deleted users"
-// @Success      200              {object}  paginatedUsersResponse
-// @Failure      400              {object}  swaggerErrorResponse
-// @Failure      401              {object}  swaggerErrorResponse
-// @Failure      403              {object}  swaggerErrorResponse
-// @Failure      500              {object}  swaggerErrorResponse
-// @Security     BearerAuth
-// @Router       /users [get]
 func (h *Handler) ListUsers(c fiber.Ctx) error {
 	keyInfo := auth.KeyInfoFromCtx(c)
 	if keyInfo == nil {
@@ -312,54 +210,20 @@ func (h *Handler) ListUsers(c fiber.Ctx) error {
 }
 
 // UpdateUser handles PATCH /api/v1/users/:user_id.
-// Requires org_admin or higher. org_admin callers may only update users who are
-// members of their own organization; system_admin may update any user.
-// Only system admins may change is_system_admin.
-//
-// @Summary      Update a user
-// @Description  Updates user profile fields. Only system admins may change is_system_admin.
-// @Tags         users
-// @Accept       json
-// @Produce      json
-// @Param        user_id  path      string             true  "User ID"
-// @Param        body     body      updateUserRequest  true  "Fields to update"
-// @Success      200      {object}  userResponse
-// @Failure      400      {object}  swaggerErrorResponse
-// @Failure      401      {object}  swaggerErrorResponse
-// @Failure      403      {object}  swaggerErrorResponse
-// @Failure      404      {object}  swaggerErrorResponse
-// @Failure      409      {object}  swaggerErrorResponse
-// @Failure      500      {object}  swaggerErrorResponse
-// @Security     BearerAuth
-// @Router       /users/{user_id} [patch]
 func (h *Handler) UpdateUser(c fiber.Ctx) error {
 	keyInfo := auth.KeyInfoFromCtx(c)
 	if keyInfo == nil {
 		return apierror.Send(c, fiber.StatusUnauthorized, "unauthorized", "missing authentication")
 	}
-	if !auth.HasRole(keyInfo.Role, auth.RoleOrgAdmin) {
+	if !auth.HasRole(keyInfo.Role, auth.RoleSystemAdmin) {
 		return apierror.Send(c, fiber.StatusForbidden, "forbidden", "insufficient permissions")
 	}
 
 	id := c.Params("user_id")
 
-	if !auth.HasRole(keyInfo.Role, auth.RoleSystemAdmin) {
-		if _, err := h.DB.GetUserOrgRole(c.Context(), id, keyInfo.OrgID); err != nil {
-			if errors.Is(err, db.ErrNotFound) {
-				return apierror.NotFound(c, "user not found")
-			}
-			h.Log.ErrorContext(c.Context(), "update user: verify org membership", slog.String("error", err.Error()))
-			return apierror.InternalError(c, "failed to verify user access")
-		}
-	}
-
 	var req updateUserRequest
 	if err := c.Bind().JSON(&req); err != nil {
 		return apierror.BadRequest(c, "invalid request body")
-	}
-
-	if req.IsSystemAdmin != nil && !auth.HasRole(keyInfo.Role, auth.RoleSystemAdmin) {
-		return apierror.Send(c, fiber.StatusForbidden, "forbidden", "only system admins may change is_system_admin")
 	}
 
 	if req.Email != nil {
@@ -421,20 +285,6 @@ func (h *Handler) UpdateUser(c fiber.Ctx) error {
 }
 
 // DeleteUser handles DELETE /api/v1/users/:user_id.
-// Requires system_admin. Deletion is a soft-delete.
-//
-// @Summary      Delete a user
-// @Description  Soft-deletes a user. Requires system admin.
-// @Tags         users
-// @Produce      json
-// @Param        user_id  path  string  true  "User ID"
-// @Success      204      "No Content"
-// @Failure      401      {object}  swaggerErrorResponse
-// @Failure      403      {object}  swaggerErrorResponse
-// @Failure      404      {object}  swaggerErrorResponse
-// @Failure      500      {object}  swaggerErrorResponse
-// @Security     BearerAuth
-// @Router       /users/{user_id} [delete]
 func (h *Handler) DeleteUser(c fiber.Ctx) error {
 	keyInfo := auth.KeyInfoFromCtx(c)
 	if keyInfo == nil {

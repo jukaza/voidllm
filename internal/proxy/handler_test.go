@@ -1655,7 +1655,6 @@ func TestHandle_FallbackBlockedByAccessCache(t *testing.T) {
 
 	keyInfo := auth.KeyInfo{
 		ID:    testKeyID,
-		OrgID: "test-org",
 		Role:  "member",
 	}
 	app, rawKey := testAppWithAuth(t, handler, keyInfo)
@@ -2083,7 +2082,6 @@ func TestHandle_FallbackChainBlockedAtMidHop(t *testing.T) {
 
 	keyInfo := auth.KeyInfo{
 		ID:    testKeyID,
-		OrgID: "test-org",
 		Role:  "member",
 	}
 	app, rawKey := testAppWithAuth(t, handler, keyInfo)

@@ -132,7 +132,7 @@ func injectSession(
 	}
 	hash := keygen.Hash(raw, testHMACSecret)
 
-	role, orgID, err := database.ResolveUserRole(context.Background(), user.ID)
+	role, _, err := database.ResolveUserRole(context.Background(), user.ID)
 	if err != nil {
 		t.Fatalf("injectSession ResolveUserRole: %v", err)
 	}
@@ -145,7 +145,6 @@ func injectSession(
 		KeyHint:   keygen.Hint(raw),
 		KeyType:   keygen.KeyTypeSession,
 		Name:      name,
-		OrgID:     orgID,
 		UserID:    &user.ID,
 		ExpiresAt: &expStr,
 		CreatedBy: user.ID,
@@ -158,7 +157,6 @@ func injectSession(
 		ID:        apiKey.ID,
 		KeyType:   keygen.KeyTypeSession,
 		Role:      role,
-		OrgID:     orgID,
 		UserID:    user.ID,
 		Name:      name,
 		ExpiresAt: &exp,

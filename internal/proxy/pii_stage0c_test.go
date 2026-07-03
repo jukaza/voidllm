@@ -599,7 +599,6 @@ func TestPII_Stage0c_StreamIncomplete_StatusBadGateway(t *testing.T) {
 	keyInfo := &auth.KeyInfo{
 		ID:      "key-stage0c-incomplete",
 		KeyType: "user_key",
-		OrgID:   "org-stage0c-incomplete",
 	}
 	model := Model{Name: "ext-model"}
 	ui := UsageInfo{PromptTokens: 4, CompletionTokens: 2, TotalTokens: 6}

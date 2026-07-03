@@ -13,7 +13,7 @@ import (
 // It must match the scan order in scanAPIKey exactly.
 // key_hash is included for cache population; it must never be exposed in API responses.
 const apiKeySelectColumns = "id, key_hash, key_hint, key_type, name, " +
-	"org_id, team_id, user_id, service_account_id, " +
+	"user_id, " +
 	"daily_token_limit, monthly_token_limit, requests_per_minute, requests_per_day, " +
 	"expires_at, last_used_at, created_by, created_at, updated_at, deleted_at"
 
@@ -25,10 +25,7 @@ type APIKey struct {
 	KeyHint           string
 	KeyType           string
 	Name              string
-	OrgID             string
-	TeamID            *string
 	UserID            *string
-	ServiceAccountID  *string
 	DailyTokenLimit   int64
 	MonthlyTokenLimit int64
 	RequestsPerMinute int
@@ -48,10 +45,7 @@ type CreateAPIKeyParams struct {
 	KeyHint           string
 	KeyType           string
 	Name              string
-	OrgID             string
-	TeamID            *string
 	UserID            *string
-	ServiceAccountID  *string
 	DailyTokenLimit   int64
 	MonthlyTokenLimit int64
 	RequestsPerMinute int
@@ -81,14 +75,14 @@ func (d *DB) CreateAPIKey(ctx context.Context, params CreateAPIKeyParams) (*APIK
 	p := d.dialect.Placeholder
 	insertQuery := "INSERT INTO api_keys " +
 		"(id, key_hash, key_hint, key_type, name, " +
-		"org_id, team_id, user_id, service_account_id, " +
+		"user_id, " +
 		"daily_token_limit, monthly_token_limit, requests_per_minute, requests_per_day, " +
 		"expires_at, created_by, created_at, updated_at) " +
 		"VALUES (" +
 		p(1) + ", " + p(2) + ", " + p(3) + ", " + p(4) + ", " + p(5) + ", " +
-		p(6) + ", " + p(7) + ", " + p(8) + ", " + p(9) + ", " +
-		p(10) + ", " + p(11) + ", " + p(12) + ", " + p(13) + ", " +
-		p(14) + ", " + p(15) + ", " +
+		p(6) + ", " +
+		p(7) + ", " + p(8) + ", " + p(9) + ", " + p(10) + ", " +
+		p(11) + ", " + p(12) + ", " +
 		"CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
 
 	selectQuery := "SELECT " + apiKeySelectColumns +
@@ -102,10 +96,7 @@ func (d *DB) CreateAPIKey(ctx context.Context, params CreateAPIKeyParams) (*APIK
 			params.KeyHint,
 			params.KeyType,
 			params.Name,
-			params.OrgID,
-			params.TeamID,
 			params.UserID,
-			params.ServiceAccountID,
 			params.DailyTokenLimit,
 			params.MonthlyTokenLimit,
 			params.RequestsPerMinute,
@@ -142,20 +133,15 @@ func (d *DB) GetAPIKey(ctx context.Context, id string) (*APIKey, error) {
 	return key, nil
 }
 
-// ListAPIKeys returns a page of API keys for the given org, ordered by ID ascending.
+// ListAPIKeys returns a page of API keys for the given user, ordered by ID ascending.
 // cursor is an exclusive lower bound on ID for keyset pagination; pass "" to start from the beginning.
 // limit controls the maximum number of records returned.
 // includeDeleted controls whether soft-deleted keys are included.
-// userID and teamID are optional equality filters; an empty string means no filter is applied.
-func (d *DB) ListAPIKeys(ctx context.Context, orgID, userID, teamID, cursor string, limit int, includeDeleted bool) ([]APIKey, error) {
+func (d *DB) ListAPIKeys(ctx context.Context, userID, cursor string, limit int, includeDeleted bool) ([]APIKey, error) {
 	p := d.dialect.Placeholder
 	argN := 1
 	var conditions []string
 	var args []any
-
-	conditions = append(conditions, "org_id = "+p(argN))
-	args = append(args, orgID)
-	argN++
 
 	// Session keys are internal (login tokens) — never expose them in the API list.
 	conditions = append(conditions, "key_type != 'session_key'")
@@ -166,11 +152,6 @@ func (d *DB) ListAPIKeys(ctx context.Context, orgID, userID, teamID, cursor stri
 	if userID != "" {
 		conditions = append(conditions, "user_id = "+p(argN))
 		args = append(args, userID)
-		argN++
-	}
-	if teamID != "" {
-		conditions = append(conditions, "team_id = "+p(argN))
-		args = append(args, teamID)
 		argN++
 	}
 	if cursor != "" {
@@ -195,7 +176,7 @@ func (d *DB) ListAPIKeys(ctx context.Context, orgID, userID, teamID, cursor stri
 		var k APIKey
 		if err := rows.Scan(
 			&k.ID, &k.KeyHash, &k.KeyHint, &k.KeyType, &k.Name,
-			&k.OrgID, &k.TeamID, &k.UserID, &k.ServiceAccountID,
+			&k.UserID,
 			&k.DailyTokenLimit, &k.MonthlyTokenLimit,
 			&k.RequestsPerMinute, &k.RequestsPerDay,
 			&k.ExpiresAt, &k.LastUsedAt,
@@ -387,14 +368,14 @@ func (d *DB) RotateKeyTx(ctx context.Context, oldID string, oldExpiresAt string,
 
 	insertQuery := "INSERT INTO api_keys " +
 		"(id, key_hash, key_hint, key_type, name, " +
-		"org_id, team_id, user_id, service_account_id, " +
+		"user_id, " +
 		"daily_token_limit, monthly_token_limit, requests_per_minute, requests_per_day, " +
 		"expires_at, created_by, created_at, updated_at) " +
 		"VALUES (" +
 		p(1) + ", " + p(2) + ", " + p(3) + ", " + p(4) + ", " + p(5) + ", " +
-		p(6) + ", " + p(7) + ", " + p(8) + ", " + p(9) + ", " +
-		p(10) + ", " + p(11) + ", " + p(12) + ", " + p(13) + ", " +
-		p(14) + ", " + p(15) + ", " +
+		p(6) + ", " +
+		p(7) + ", " + p(8) + ", " + p(9) + ", " + p(10) + ", " +
+		p(11) + ", " + p(12) + ", " +
 		"CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
 
 	updateQuery := "UPDATE api_keys SET expires_at = " + p(1) + ", updated_at = CURRENT_TIMESTAMP" +
@@ -411,10 +392,7 @@ func (d *DB) RotateKeyTx(ctx context.Context, oldID string, oldExpiresAt string,
 			newParams.KeyHint,
 			newParams.KeyType,
 			newParams.Name,
-			newParams.OrgID,
-			newParams.TeamID,
 			newParams.UserID,
-			newParams.ServiceAccountID,
 			newParams.DailyTokenLimit,
 			newParams.MonthlyTokenLimit,
 			newParams.RequestsPerMinute,
@@ -459,10 +437,9 @@ func (d *DB) RotateKeyTx(ctx context.Context, oldID string, oldExpiresAt string,
 	return &result, nil
 }
 
-// GetUserOrgRole resolves the effective RBAC role for a user in an organization.
+// GetUserOrgRole resolves the effective RBAC role for a user.
 // It checks users.is_system_admin first (returns "system_admin" if true),
-// then falls back to org_memberships.role. Returns ErrNotFound if the user
-// has no membership in the org and is not a system admin.
+// otherwise defaults to "member".
 func (d *DB) GetUserOrgRole(ctx context.Context, userID string, orgID string) (string, error) {
 	p := d.dialect.Placeholder
 
@@ -471,33 +448,18 @@ func (d *DB) GetUserOrgRole(ctx context.Context, userID string, orgID string) (s
 		"SELECT is_system_admin FROM users WHERE id = "+p(1)+" AND deleted_at IS NULL",
 		userID).Scan(&isAdmin)
 	if err != nil {
-		return "", fmt.Errorf("get user org role user %s: %w", userID, translateError(err))
+		return "", fmt.Errorf("get user role user %s: %w", userID, translateError(err))
 	}
 	if isAdmin == 1 {
 		return "system_admin", nil
 	}
-
-	var role string
-	err = d.sql.QueryRowContext(ctx,
-		"SELECT role FROM org_memberships WHERE user_id = "+p(1)+" AND org_id = "+p(2),
-		userID, orgID).Scan(&role)
-	if err != nil {
-		return "", fmt.Errorf("get user org role user %s org %s: %w", userID, orgID, translateError(err))
-	}
-	return role, nil
+	return "member", nil
 }
 
 // IsTeamMember reports whether a user is a member of the given team.
-// It returns false (not an error) if the user has no membership row.
+// It is deprecated and always returns false.
 func (d *DB) IsTeamMember(ctx context.Context, userID string, teamID string) (bool, error) {
-	p := d.dialect.Placeholder
-	query := "SELECT COUNT(*) FROM team_memberships WHERE user_id = " +
-		p(1) + " AND team_id = " + p(2)
-	var count int
-	if err := d.sql.QueryRowContext(ctx, query, userID, teamID).Scan(&count); err != nil {
-		return false, fmt.Errorf("is team member: %w", err)
-	}
-	return count > 0, nil
+	return false, nil
 }
 
 // scanAPIKey scans a single API key row returned by QueryRowContext.
@@ -505,7 +467,7 @@ func scanAPIKey(row *sql.Row) (*APIKey, error) {
 	var k APIKey
 	err := row.Scan(
 		&k.ID, &k.KeyHash, &k.KeyHint, &k.KeyType, &k.Name,
-		&k.OrgID, &k.TeamID, &k.UserID, &k.ServiceAccountID,
+		&k.UserID,
 		&k.DailyTokenLimit, &k.MonthlyTokenLimit,
 		&k.RequestsPerMinute, &k.RequestsPerDay,
 		&k.ExpiresAt, &k.LastUsedAt,

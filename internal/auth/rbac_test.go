@@ -89,7 +89,6 @@ func storeKeyWithRole(t *testing.T, kc *cache.Cache[string, KeyInfo], role strin
 		ID:      "rbac-key-" + role,
 		KeyType: keygen.KeyTypeUser,
 		Role:    role,
-		OrgID:   "org-rbac",
 	}
 	return storeKey(t, kc, info, keygen.KeyTypeUser)
 }
@@ -201,7 +200,7 @@ func TestRequireRoleWithNoAuth(t *testing.T) {
 
 	// Populate the cache with a valid key so the only missing piece is the
 	// Middleware, not the key itself.
-	info := KeyInfo{ID: "x", KeyType: keygen.KeyTypeUser, Role: RoleSystemAdmin, OrgID: "o"}
+	info := KeyInfo{ID: "x", KeyType: keygen.KeyTypeUser, Role: RoleSystemAdmin}
 	_ = storeKey(t, keyCache, info, keygen.KeyTypeUser)
 
 	req := httptest.NewRequest("GET", "/", nil)

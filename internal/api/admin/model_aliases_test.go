@@ -16,7 +16,6 @@ import (
 	"github.com/voidmind-io/voidllm/internal/cache"
 	"github.com/voidmind-io/voidllm/internal/config"
 	"github.com/voidmind-io/voidllm/internal/db"
-	"github.com/voidmind-io/voidllm/internal/license"
 	"github.com/voidmind-io/voidllm/internal/proxy"
 	"github.com/voidmind-io/voidllm/pkg/keygen"
 )
@@ -72,7 +71,6 @@ func setupTestAppWithRegistry(t *testing.T, dsn string) (*fiber.App, *db.DB, *ca
 		HMACSecret: testHMACSecret,
 		KeyCache:   keyCache,
 		Registry:   registry,
-		License:    license.NewHolder(license.Verify("", true)),
 		Log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 
@@ -98,7 +96,6 @@ func addRegistryTestKey(t *testing.T, keyCache *cache.Cache[string, auth.KeyInfo
 		ID:      userID, // handler passes keyInfo.ID as created_by
 		KeyType: keygen.KeyTypeUser,
 		Role:    role,
-		OrgID:   orgID,
 		UserID:  userID,
 		Name:    "test key " + role,
 	})
@@ -108,12 +105,12 @@ func addRegistryTestKey(t *testing.T, keyCache *cache.Cache[string, auth.KeyInfo
 
 // orgAliasURL returns the org model-aliases base URL.
 func orgAliasURL(orgID string) string {
-	return "/api/v1/orgs/" + orgID + "/model-aliases"
+	return "/api/v1/model-aliases"
 }
 
 // orgAliasItemURL returns the URL for a specific org model alias.
 func orgAliasItemURL(orgID, aliasID string) string {
-	return "/api/v1/orgs/" + orgID + "/model-aliases/" + aliasID
+	return "/api/v1/model-aliases/" + aliasID
 }
 
 // teamAliasURL returns the team model-aliases base URL.
@@ -190,20 +187,6 @@ func TestCreateOrgAlias(t *testing.T) {
 			body:       map[string]any{"alias": testConflictModelName, "model_name": testModelName},
 			wantStatus: fiber.StatusBadRequest,
 		},
-		{
-			name:       "org_admin of different org returns 403",
-			role:       auth.RoleOrgAdmin,
-			sameOrg:    false,
-			body:       map[string]any{"alias": "cross-org-alias", "model_name": testModelName},
-			wantStatus: fiber.StatusForbidden,
-		},
-		{
-			name:       "member of same org returns 403 from route middleware",
-			role:       auth.RoleMember,
-			sameOrg:    true,
-			body:       map[string]any{"alias": "member-alias", "model_name": testModelName},
-			wantStatus: fiber.StatusForbidden,
-		},
 	}
 
 	for _, tc := range tests {
@@ -276,7 +259,7 @@ func TestCreateOrgAlias_ResponseFields(t *testing.T) {
 	var got map[string]any
 	decodeBody(t, resp.Body, &got)
 
-	for _, field := range []string{"id", "alias", "model_name", "scope_type", "org_id", "created_by", "created_at"} {
+	for _, field := range []string{"id", "alias", "model_name", "created_by", "created_at"} {
 		if _, ok := got[field]; !ok {
 			t.Errorf("response missing field %q; got: %v", field, got)
 		}
@@ -286,12 +269,6 @@ func TestCreateOrgAlias_ResponseFields(t *testing.T) {
 	}
 	if got["model_name"] != testModelName {
 		t.Errorf("model_name = %q, want %q", got["model_name"], testModelName)
-	}
-	if got["scope_type"] != "org" {
-		t.Errorf("scope_type = %q, want %q", got["scope_type"], "org")
-	}
-	if got["org_id"] != org.ID {
-		t.Errorf("org_id = %q, want %q", got["org_id"], org.ID)
 	}
 }
 
@@ -519,305 +496,5 @@ func TestCreateOrgAlias_DuplicateReturnsConflict(t *testing.T) {
 	}
 }
 
-// ---- POST /api/v1/orgs/:org_id/teams/:team_id/model-aliases -----------------
 
-func TestCreateTeamAlias(t *testing.T) {
-	t.Parallel()
 
-	tests := []struct {
-		name       string
-		role       string
-		sameOrg    bool
-		body       any
-		wantStatus int
-		checkField string
-	}{
-		{
-			name:       "org_admin creates team alias",
-			role:       auth.RoleOrgAdmin,
-			sameOrg:    true,
-			body:       map[string]any{"alias": "team-model", "model_name": testModelName},
-			wantStatus: fiber.StatusCreated,
-			checkField: "id",
-		},
-		{
-			name:       "system_admin creates team alias",
-			role:       auth.RoleSystemAdmin,
-			sameOrg:    false,
-			body:       map[string]any{"alias": "sys-team-alias", "model_name": testModelName},
-			wantStatus: fiber.StatusCreated,
-			checkField: "id",
-		},
-		{
-			name:       "unknown model returns 400",
-			role:       auth.RoleOrgAdmin,
-			sameOrg:    true,
-			body:       map[string]any{"alias": "bad-team-alias", "model_name": "ghost-model"},
-			wantStatus: fiber.StatusBadRequest,
-		},
-		{
-			name:       "org_admin of different org returns 403",
-			role:       auth.RoleOrgAdmin,
-			sameOrg:    false,
-			body:       map[string]any{"alias": "cross-team-alias", "model_name": testModelName},
-			wantStatus: fiber.StatusForbidden,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			dsn := fmt.Sprintf("file:TestCreateTeamAlias_%s?mode=memory&cache=private", strings.ReplaceAll(tc.name, " ", "_"))
-			app, database, keyCache := setupTestAppWithRegistry(t, dsn)
-
-			org := mustCreateOrg(t, database, "Team Alias Org", "team-alias-org-"+strings.ReplaceAll(tc.name, " ", "-"))
-			team := mustCreateTeam(t, database, org.ID, "Alias Team", "alias-team-cta-"+strings.ReplaceAll(tc.name, " ", "-"))
-			creator := mustCreateUser(t, database, "creator-cta-"+strings.ReplaceAll(tc.name, " ", "-")+"@example.com", "Creator")
-
-			keyOrgID := "00000000-0000-0000-0000-000000000000"
-			if tc.sameOrg {
-				keyOrgID = org.ID
-			}
-			testKey := addRegistryTestKey(t, keyCache, tc.role, keyOrgID, creator.ID)
-
-			req := httptest.NewRequest("POST", teamAliasURL(org.ID, team.ID), bodyJSON(t, tc.body))
-			req.Header.Set("Content-Type", "application/json")
-			req.Header.Set("Authorization", "Bearer "+testKey)
-
-			resp, err := app.Test(req, fiber.TestConfig{Timeout: testTimeout})
-			if err != nil {
-				t.Fatalf("app.Test: %v", err)
-			}
-			defer resp.Body.Close()
-
-			if resp.StatusCode != tc.wantStatus {
-				b, _ := io.ReadAll(resp.Body)
-				t.Errorf("status = %d, want %d; body: %s", resp.StatusCode, tc.wantStatus, b)
-				return
-			}
-
-			if tc.checkField != "" {
-				var got map[string]any
-				decodeBody(t, resp.Body, &got)
-				if _, ok := got[tc.checkField]; !ok {
-					t.Errorf("response missing field %q; got: %v", tc.checkField, got)
-				}
-			}
-		})
-	}
-}
-
-func TestCreateTeamAlias_ResponseFields(t *testing.T) {
-	t.Parallel()
-
-	app, database, keyCache := setupTestAppWithRegistry(t, "file:TestCreateTeamAlias_Fields?mode=memory&cache=private")
-	org := mustCreateOrg(t, database, "Team Fields Org", "team-fields-org")
-	team := mustCreateTeam(t, database, org.ID, "Fields Team", "fields-team-cta")
-	creator := mustCreateUser(t, database, "creator-fields-cta@example.com", "Creator")
-	testKey := addRegistryTestKey(t, keyCache, auth.RoleOrgAdmin, org.ID, creator.ID)
-
-	req := httptest.NewRequest("POST", teamAliasURL(org.ID, team.ID),
-		bodyJSON(t, map[string]any{"alias": "team-fields-alias", "model_name": testModelName}))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+testKey)
-
-	resp, err := app.Test(req, fiber.TestConfig{Timeout: testTimeout})
-	if err != nil {
-		t.Fatalf("app.Test: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != fiber.StatusCreated {
-		b, _ := io.ReadAll(resp.Body)
-		t.Fatalf("status = %d, want 201; body: %s", resp.StatusCode, b)
-	}
-
-	var got map[string]any
-	decodeBody(t, resp.Body, &got)
-
-	for _, field := range []string{"id", "alias", "model_name", "scope_type", "org_id", "team_id", "created_at"} {
-		if _, ok := got[field]; !ok {
-			t.Errorf("response missing field %q; got: %v", field, got)
-		}
-	}
-	if got["scope_type"] != "team" {
-		t.Errorf("scope_type = %q, want %q", got["scope_type"], "team")
-	}
-	if got["team_id"] != team.ID {
-		t.Errorf("team_id = %q, want %q", got["team_id"], team.ID)
-	}
-}
-
-// ---- GET /api/v1/orgs/:org_id/teams/:team_id/model-aliases ------------------
-
-func TestListTeamAliases(t *testing.T) {
-	t.Parallel()
-
-	app, database, keyCache := setupTestAppWithRegistry(t, "file:TestListTeamAliases?mode=memory&cache=private")
-	org := mustCreateOrg(t, database, "List Team Alias Org", "list-team-alias-org")
-	team := mustCreateTeam(t, database, org.ID, "List Alias Team", "list-alias-team")
-	creator := mustCreateUser(t, database, "creator-lta@example.com", "Creator")
-	testKey := addRegistryTestKey(t, keyCache, auth.RoleOrgAdmin, org.ID, creator.ID)
-
-	// Create one team alias.
-	createReq := httptest.NewRequest("POST", teamAliasURL(org.ID, team.ID),
-		bodyJSON(t, map[string]any{"alias": "list-team-alias", "model_name": testModelName}))
-	createReq.Header.Set("Content-Type", "application/json")
-	createReq.Header.Set("Authorization", "Bearer "+testKey)
-	createResp, err := app.Test(createReq, fiber.TestConfig{Timeout: testTimeout})
-	if err != nil {
-		t.Fatalf("create: %v", err)
-	}
-	createResp.Body.Close()
-	if createResp.StatusCode != fiber.StatusCreated {
-		t.Fatalf("create: status = %d, want 201", createResp.StatusCode)
-	}
-
-	req := httptest.NewRequest("GET", teamAliasURL(org.ID, team.ID), nil)
-	req.Header.Set("Authorization", "Bearer "+testKey)
-
-	resp, err := app.Test(req, fiber.TestConfig{Timeout: testTimeout})
-	if err != nil {
-		t.Fatalf("app.Test: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != fiber.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		t.Fatalf("status = %d, want 200; body: %s", resp.StatusCode, b)
-	}
-
-	var got []any
-	decodeBody(t, resp.Body, &got)
-
-	if len(got) != 1 {
-		t.Errorf("len(aliases) = %d, want 1", len(got))
-	}
-}
-
-func TestListTeamAliases_WrongOrg(t *testing.T) {
-	t.Parallel()
-
-	app, database, keyCache := setupTestAppWithRegistry(t, "file:TestListTeamAliases_WrongOrg?mode=memory&cache=private")
-	orgA := mustCreateOrg(t, database, "Org A", "org-a-lta")
-	orgB := mustCreateOrg(t, database, "Org B", "org-b-lta")
-	teamB := mustCreateTeam(t, database, orgB.ID, "Team B", "team-b-lta")
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
-
-	// Request teamB's aliases via orgA URL — must be 404.
-	req := httptest.NewRequest("GET", teamAliasURL(orgA.ID, teamB.ID), nil)
-	req.Header.Set("Authorization", "Bearer "+testKey)
-
-	resp, err := app.Test(req, fiber.TestConfig{Timeout: testTimeout})
-	if err != nil {
-		t.Fatalf("app.Test: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != fiber.StatusNotFound {
-		b, _ := io.ReadAll(resp.Body)
-		t.Errorf("cross-org GET status = %d, want 404; body: %s", resp.StatusCode, b)
-	}
-}
-
-// ---- DELETE /api/v1/orgs/:org_id/teams/:team_id/model-aliases/:alias_id -----
-
-func TestDeleteTeamAlias(t *testing.T) {
-	t.Parallel()
-
-	app, database, keyCache := setupTestAppWithRegistry(t, "file:TestDeleteTeamAlias?mode=memory&cache=private")
-	org := mustCreateOrg(t, database, "Del Team Alias Org", "del-team-alias-org")
-	team := mustCreateTeam(t, database, org.ID, "Del Alias Team", "del-alias-team")
-	creator := mustCreateUser(t, database, "creator-dta@example.com", "Creator")
-	testKey := addRegistryTestKey(t, keyCache, auth.RoleOrgAdmin, org.ID, creator.ID)
-
-	// Create alias.
-	createReq := httptest.NewRequest("POST", teamAliasURL(org.ID, team.ID),
-		bodyJSON(t, map[string]any{"alias": "team-alias-del", "model_name": testModelName}))
-	createReq.Header.Set("Content-Type", "application/json")
-	createReq.Header.Set("Authorization", "Bearer "+testKey)
-	createResp, err := app.Test(createReq, fiber.TestConfig{Timeout: testTimeout})
-	if err != nil {
-		t.Fatalf("create: %v", err)
-	}
-	var created map[string]any
-	decodeBody(t, createResp.Body, &created)
-	aliasID := created["id"].(string)
-
-	// Delete it.
-	delReq := httptest.NewRequest("DELETE", teamAliasItemURL(org.ID, team.ID, aliasID), nil)
-	delReq.Header.Set("Authorization", "Bearer "+testKey)
-	delResp, err := app.Test(delReq, fiber.TestConfig{Timeout: testTimeout})
-	if err != nil {
-		t.Fatalf("delete: %v", err)
-	}
-	defer delResp.Body.Close()
-
-	if delResp.StatusCode != fiber.StatusNoContent {
-		b, _ := io.ReadAll(delResp.Body)
-		t.Errorf("status = %d, want 204; body: %s", delResp.StatusCode, b)
-	}
-}
-
-func TestDeleteTeamAlias_NotFound(t *testing.T) {
-	t.Parallel()
-
-	app, database, keyCache := setupTestAppWithRegistry(t, "file:TestDeleteTeamAlias_NotFound?mode=memory&cache=private")
-	org := mustCreateOrg(t, database, "NF Del Team Alias Org", "nf-del-team-alias-org")
-	team := mustCreateTeam(t, database, org.ID, "NF Team", "nf-team-dta")
-	testKey := addTestKey(t, keyCache, auth.RoleOrgAdmin, org.ID)
-
-	req := httptest.NewRequest("DELETE", teamAliasItemURL(org.ID, team.ID, "00000000-0000-0000-0000-000000000099"), nil)
-	req.Header.Set("Authorization", "Bearer "+testKey)
-
-	resp, err := app.Test(req, fiber.TestConfig{Timeout: testTimeout})
-	if err != nil {
-		t.Fatalf("app.Test: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != fiber.StatusNotFound {
-		b, _ := io.ReadAll(resp.Body)
-		t.Errorf("status = %d, want 404; body: %s", resp.StatusCode, b)
-	}
-}
-
-func TestCreateTeamAlias_DuplicateReturnsConflict(t *testing.T) {
-	t.Parallel()
-
-	app, database, keyCache := setupTestAppWithRegistry(t, "file:TestCreateTeamAlias_Dup?mode=memory&cache=private")
-	org := mustCreateOrg(t, database, "Dup Team Alias Org", "dup-team-alias-org")
-	team := mustCreateTeam(t, database, org.ID, "Dup Team", "dup-alias-team")
-	creator := mustCreateUser(t, database, "creator-dup-cta@example.com", "Creator")
-	testKey := addRegistryTestKey(t, keyCache, auth.RoleOrgAdmin, org.ID, creator.ID)
-
-	createBody := map[string]any{"alias": "dup-team-alias", "model_name": testModelName}
-
-	req1 := httptest.NewRequest("POST", teamAliasURL(org.ID, team.ID), bodyJSON(t, createBody))
-	req1.Header.Set("Content-Type", "application/json")
-	req1.Header.Set("Authorization", "Bearer "+testKey)
-	resp1, err := app.Test(req1, fiber.TestConfig{Timeout: testTimeout})
-	if err != nil {
-		t.Fatalf("first create: %v", err)
-	}
-	resp1.Body.Close()
-	if resp1.StatusCode != fiber.StatusCreated {
-		t.Fatalf("first create: status = %d, want 201", resp1.StatusCode)
-	}
-
-	req2 := httptest.NewRequest("POST", teamAliasURL(org.ID, team.ID),
-		bodyJSON(t, createBody))
-	req2.Header.Set("Content-Type", "application/json")
-	req2.Header.Set("Authorization", "Bearer "+testKey)
-	resp2, err := app.Test(req2, fiber.TestConfig{Timeout: testTimeout})
-	if err != nil {
-		t.Fatalf("second create: %v", err)
-	}
-	defer resp2.Body.Close()
-
-	if resp2.StatusCode != fiber.StatusConflict {
-		b, _ := io.ReadAll(resp2.Body)
-		t.Errorf("status = %d, want 409; body: %s", resp2.StatusCode, b)
-	}
-}

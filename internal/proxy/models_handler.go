@@ -39,7 +39,7 @@ func (p *ProxyHandler) ModelsHandler(c fiber.Ctx) error {
 	} else {
 		accessible = make([]ModelInfo, 0, len(allModels))
 		for _, m := range allModels {
-			if p.AccessCache.Check(keyInfo.OrgID, keyInfo.TeamID, keyInfo.ID, m.Name) {
+			if p.AccessCache.Check("", "", keyInfo.ID, m.Name) {
 				accessible = append(accessible, m)
 			}
 		}

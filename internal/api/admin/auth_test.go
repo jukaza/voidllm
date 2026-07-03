@@ -264,18 +264,18 @@ func TestLogin_TokenWorks(t *testing.T) {
 	}
 
 	// Step 2: use the token to call an authenticated endpoint.
-	getReq := httptest.NewRequest("GET", "/api/v1/orgs/"+org.ID, nil)
+	getReq := httptest.NewRequest("GET", "/api/v1/keys", nil)
 	getReq.Header.Set("Authorization", "Bearer "+token)
 
 	getResp, err := app.Test(getReq, fiber.TestConfig{Timeout: testTimeout})
 	if err != nil {
-		t.Fatalf("get org app.Test: %v", err)
+		t.Fatalf("get keys app.Test: %v", err)
 	}
 	defer getResp.Body.Close()
 
 	if getResp.StatusCode != fiber.StatusOK {
 		raw, _ := io.ReadAll(getResp.Body)
-		t.Errorf("GET /orgs/:id with session token status = %d, want 200; body: %s", getResp.StatusCode, raw)
+		t.Errorf("GET /keys with session token status = %d, want 200; body: %s", getResp.StatusCode, raw)
 	}
 }
 

@@ -101,7 +101,6 @@ func TestMiddleware(t *testing.T) {
 		ID:      "key-001",
 		KeyType: keygen.KeyTypeUser,
 		Role:    RoleMember,
-		OrgID:   "org-001",
 	}
 
 	past := time.Now().Add(-1 * time.Hour)

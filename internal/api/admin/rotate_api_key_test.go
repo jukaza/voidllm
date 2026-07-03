@@ -15,9 +15,9 @@ import (
 	"github.com/voidmind-io/voidllm/pkg/keygen"
 )
 
-// rotateKeyURL returns the rotate endpoint URL for a given key within an org.
+// rotateKeyURL returns the rotate endpoint URL for a given key.
 func rotateKeyURL(orgID, keyID string) string {
-	return "/api/v1/orgs/" + orgID + "/keys/" + keyID + "/rotate"
+	return "/api/v1/keys/" + keyID + "/rotate"
 }
 
 // mustCreateUserKeyViaAPI creates a user_key by calling the CreateAPIKey handler
@@ -28,7 +28,6 @@ func mustCreateUserKeyViaAPI(t *testing.T, app *fiber.App, orgID, userID, teamID
 		"name":     "rotate-test-key",
 		"key_type": keygen.KeyTypeUser,
 		"user_id":  userID,
-		"team_id":  teamID,
 	}
 	req := httptest.NewRequest("POST", keysURL(orgID), bodyJSON(t, body))
 	req.Header.Set("Content-Type", "application/json")
@@ -67,7 +66,6 @@ func mustCreateSessionKeyInDB(t *testing.T, database *db.DB, orgID, userID, crea
 		KeyHint:   keyHint,
 		KeyType:   keygen.KeyTypeSession,
 		Name:      "session-key-for-rotate-test",
-		OrgID:     orgID,
 		UserID:    &userID,
 		CreatedBy: createdBy,
 	})
@@ -300,8 +298,8 @@ func TestRotateAPIKey_SessionKeyReturns400(t *testing.T) {
 	// Error envelope: {"error": {"code": "...", "message": "..."}}
 	errObj, _ := body["error"].(map[string]any)
 	msg, _ := errObj["message"].(string)
-	if !strings.Contains(msg, "only user, team, and service account keys can be rotated") {
-		t.Errorf("error message = %q, want it to mention 'only user, team, and service account keys can be rotated'", msg)
+	if !strings.Contains(msg, "only user keys can be rotated") {
+		t.Errorf("error message = %q, want it to mention 'only user keys can be rotated'", msg)
 	}
 }
 
@@ -525,9 +523,6 @@ func TestRotateAPIKey_NewKeyHasSameMetadata(t *testing.T) {
 	if newKeyDetails["key_type"] != keygen.KeyTypeUser {
 		t.Errorf("new key key_type = %q, want %q", newKeyDetails["key_type"], keygen.KeyTypeUser)
 	}
-	if newKeyDetails["org_id"] != org.ID {
-		t.Errorf("new key org_id = %q, want %q", newKeyDetails["org_id"], org.ID)
-	}
 	if newKeyDetails["daily_token_limit"] != float64(5000) {
 		t.Errorf("new key daily_token_limit = %v, want 5000", newKeyDetails["daily_token_limit"])
 	}
@@ -542,38 +537,6 @@ func TestRotateAPIKey_NewKeyHasSameMetadata(t *testing.T) {
 	}
 }
 
-func TestRotateAPIKey_OrgAdminCanRotateAnyKeyInOrg(t *testing.T) {
-	t.Parallel()
-
-	app, database, keyCache := setupTestApp(t, "file:TestRotateAPIKey_OrgAdmin?mode=memory&cache=private")
-
-	org := mustCreateOrg(t, database, "Acme", "rotate-orgadmin-org")
-	owner := mustCreateUser(t, database, "rotate-owner2@example.com", "Owner2")
-	admin := mustCreateUser(t, database, "rotate-admin@example.com", "Admin")
-	team := mustCreateTeam(t, database, org.ID, "Dev", "rotate-orgadmin-team")
-	mustCreateUserMemberships(t, database, org.ID, team.ID, owner.ID)
-	mustCreateUserMemberships(t, database, org.ID, team.ID, admin.ID)
-
-	// Use org_admin key to create a key owned by 'owner'.
-	adminKey := addTestKeyWithUser(t, keyCache, auth.RoleOrgAdmin, org.ID, admin.ID)
-	keyID, _ := mustCreateUserKeyViaAPI(t, app, org.ID, owner.ID, team.ID, adminKey)
-
-	// The org_admin (admin user) rotates a key they don't own — must succeed.
-	req := httptest.NewRequest("POST", rotateKeyURL(org.ID, keyID), nil)
-	req.Header.Set("Authorization", "Bearer "+adminKey)
-
-	resp, err := app.Test(req, fiber.TestConfig{Timeout: testTimeout})
-	if err != nil {
-		t.Fatalf("app.Test: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != fiber.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		t.Errorf("status = %d, want 200; body: %s", resp.StatusCode, b)
-	}
-}
-
 func TestRotateAPIKey_NotFound(t *testing.T) {
 	t.Parallel()
 
@@ -584,41 +547,6 @@ func TestRotateAPIKey_NotFound(t *testing.T) {
 
 	req := httptest.NewRequest("POST", rotateKeyURL(org.ID, "00000000-0000-0000-0000-000000000000"), nil)
 	req.Header.Set("Authorization", "Bearer "+callerKey)
-
-	resp, err := app.Test(req, fiber.TestConfig{Timeout: testTimeout})
-	if err != nil {
-		t.Fatalf("app.Test: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != fiber.StatusNotFound {
-		b, _ := io.ReadAll(resp.Body)
-		t.Errorf("status = %d, want 404; body: %s", resp.StatusCode, b)
-	}
-}
-
-func TestRotateAPIKey_CrossOrgKeyReturns404(t *testing.T) {
-	t.Parallel()
-
-	app, database, keyCache := setupTestApp(t, "file:TestRotateAPIKey_CrossOrg?mode=memory&cache=private")
-
-	orgA := mustCreateOrg(t, database, "Org A", "rotate-cross-org-a")
-	orgB := mustCreateOrg(t, database, "Org B", "rotate-cross-org-b")
-	userA := mustCreateUser(t, database, "rotate-cross-a@example.com", "User A")
-	userB := mustCreateUser(t, database, "rotate-cross-b@example.com", "User B")
-	teamA := mustCreateTeam(t, database, orgA.ID, "Dev A", "rotate-cross-team-a")
-	teamB := mustCreateTeam(t, database, orgB.ID, "Dev B", "rotate-cross-team-b")
-	mustCreateUserMemberships(t, database, orgA.ID, teamA.ID, userA.ID)
-	mustCreateUserMemberships(t, database, orgB.ID, teamB.ID, userB.ID)
-
-	// Create a key in orgB.
-	adminKeyB := addTestKeyWithUser(t, keyCache, auth.RoleOrgAdmin, orgB.ID, userB.ID)
-	keyIDInOrgB, _ := mustCreateUserKeyViaAPI(t, app, orgB.ID, userB.ID, teamB.ID, adminKeyB)
-
-	// Try to rotate orgB's key using orgA's admin.
-	adminKeyA := addTestKeyWithUser(t, keyCache, auth.RoleOrgAdmin, orgA.ID, userA.ID)
-	req := httptest.NewRequest("POST", rotateKeyURL(orgA.ID, keyIDInOrgB), nil)
-	req.Header.Set("Authorization", "Bearer "+adminKeyA)
 
 	resp, err := app.Test(req, fiber.TestConfig{Timeout: testTimeout})
 	if err != nil {
@@ -721,9 +649,7 @@ func TestRotateAPIKey_KeyTypeVariants(t *testing.T) {
 					KeyHint:   keygen.Hint(plaintext),
 					KeyType:   keygen.KeyTypeUser,
 					Name:      "variant-user-key",
-					OrgID:     org.ID,
 					UserID:    &user.ID,
-					TeamID:    &team.ID,
 					CreatedBy: callerID,
 				})
 				if err != nil {
@@ -732,30 +658,6 @@ func TestRotateAPIKey_KeyTypeVariants(t *testing.T) {
 				return apiKey.ID
 			},
 			wantPrefix: keygen.PrefixUser,
-		},
-		{
-			name: "rotate team_key",
-			setupKey: func(t *testing.T, database *db.DB, org *db.Org, user *db.User, team *db.Team, callerID string) string {
-				t.Helper()
-				plaintext, err := keygen.Generate(keygen.KeyTypeTeam)
-				if err != nil {
-					t.Fatalf("generate team key: %v", err)
-				}
-				apiKey, err := database.CreateAPIKey(context.Background(), db.CreateAPIKeyParams{
-					KeyHash:   keygen.Hash(plaintext, testHMACSecret),
-					KeyHint:   keygen.Hint(plaintext),
-					KeyType:   keygen.KeyTypeTeam,
-					Name:      "variant-team-key",
-					OrgID:     org.ID,
-					TeamID:    &team.ID,
-					CreatedBy: callerID,
-				})
-				if err != nil {
-					t.Fatalf("CreateAPIKey team: %v", err)
-				}
-				return apiKey.ID
-			},
-			wantPrefix: "vl_tk_",
 		},
 	}
 

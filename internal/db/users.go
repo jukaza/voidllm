@@ -3,7 +3,6 @@ package db
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -119,75 +118,7 @@ func (d *DB) CreateUser(ctx context.Context, params CreateUserParams) (*User, er
 // allowing callers to map this to a 400 "organization not found" response
 // without an additional pre-flight SELECT.
 func (d *DB) CreateUserWithMembership(ctx context.Context, userParams CreateUserParams, orgID, role string) (*User, error) {
-	userID, err := uuid.NewV7()
-	if err != nil {
-		return nil, fmt.Errorf("create user with membership: generate user id: %w", err)
-	}
-
-	authProvider := userParams.AuthProvider
-	if authProvider == "" {
-		authProvider = "local"
-	}
-
-	p := d.dialect.Placeholder
-
-	insertUserQuery := "INSERT INTO users " +
-		"(id, email, display_name, password_hash, auth_provider, external_id, is_system_admin, created_at, updated_at) " +
-		"VALUES (" +
-		p(1) + ", " + p(2) + ", " + p(3) + ", " + p(4) + ", " +
-		p(5) + ", " + p(6) + ", " + p(7) + ", " +
-		"CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
-
-	selectUserQuery := "SELECT " + userSelectColumns +
-		" FROM users WHERE id = " + p(1) + " AND deleted_at IS NULL"
-
-	isSystemAdminInt := 0
-	if userParams.IsSystemAdmin {
-		isSystemAdminInt = 1
-	}
-
-	var user *User
-	err = d.WithTx(ctx, func(q Querier) error {
-		_, execErr := q.ExecContext(ctx, insertUserQuery,
-			userID.String(),
-			userParams.Email,
-			userParams.DisplayName,
-			userParams.PasswordHash,
-			authProvider,
-			userParams.ExternalID,
-			isSystemAdminInt,
-		)
-		if execErr != nil {
-			return translateError(execErr)
-		}
-
-		membershipID, idErr := uuid.NewV7()
-		if idErr != nil {
-			return fmt.Errorf("generate membership id: %w", idErr)
-		}
-
-		insertMembershipQuery := "INSERT INTO org_memberships (id, org_id, user_id, role, created_at) " +
-			"VALUES (" + p(1) + ", " + p(2) + ", " + p(3) + ", " + p(4) + ", CURRENT_TIMESTAMP)"
-
-		_, execErr = q.ExecContext(ctx, insertMembershipQuery,
-			membershipID.String(),
-			orgID,
-			userID.String(),
-			role,
-		)
-		if execErr != nil {
-			return translateError(execErr)
-		}
-
-		row := q.QueryRowContext(ctx, selectUserQuery, userID.String())
-		var scanErr error
-		user, scanErr = scanUser(row)
-		return scanErr
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create user with membership: %w", err)
-	}
-	return user, nil
+	return d.CreateUser(ctx, userParams)
 }
 
 // GetUser retrieves an active user by their ID.
@@ -426,10 +357,6 @@ func (d *DB) GetUserPasswordHashByID(ctx context.Context, userID string) (authPr
 	return authProvider, *passwordHash, nil
 }
 
-// ResolveUserRole determines the effective RBAC role and organization for a user.
-// If the user is a system admin, it returns RoleSystemAdmin with the first org (if any).
-// Otherwise, it returns the role from the user's first org membership.
-// Returns ErrNotFound if the user has no org membership and is not a system admin.
 func (d *DB) ResolveUserRole(ctx context.Context, userID string) (role string, orgID string, err error) {
 	p := d.dialect.Placeholder
 
@@ -443,28 +370,9 @@ func (d *DB) ResolveUserRole(ctx context.Context, userID string) (role string, o
 	}
 
 	if isAdmin == 1 {
-		// Best-effort: pick the first org this admin belongs to, but do not
-		// fail if they have none (system admins are not required to be members).
-		var firstOrg string
-		scanErr := d.sql.QueryRowContext(ctx,
-			"SELECT org_id FROM org_memberships WHERE user_id = "+p(1)+" LIMIT 1",
-			userID,
-		).Scan(&firstOrg)
-		if scanErr != nil && !errors.Is(scanErr, sql.ErrNoRows) {
-			return "", "", fmt.Errorf("ResolveUserRole get admin org: %w", scanErr)
-		}
-		return "system_admin", firstOrg, nil
+		return "system_admin", "", nil
 	}
-
-	var memberOrgID, memberRole string
-	scanErr := d.sql.QueryRowContext(ctx,
-		"SELECT org_id, role FROM org_memberships WHERE user_id = "+p(1)+" LIMIT 1",
-		userID,
-	).Scan(&memberOrgID, &memberRole)
-	if scanErr != nil {
-		return "", "", fmt.Errorf("ResolveUserRole get membership: %w", translateError(scanErr))
-	}
-	return memberRole, memberOrgID, nil
+	return "member", "", nil
 }
 
 // scanUser scans a single user row returned by QueryRowContext.

@@ -105,11 +105,8 @@ func Middleware(logger *Logger) fiber.Handler {
 		var actorID, actorType, actorKeyID, orgID string
 		if keyInfo != nil {
 			actorKeyID = keyInfo.ID
-			orgID = keyInfo.OrgID
-			if keyInfo.ServiceAccountID != "" {
-				actorID = keyInfo.ServiceAccountID
-				actorType = "service_account"
-			} else if keyInfo.UserID != "" {
+			orgID = ""
+			if keyInfo.UserID != "" {
 				actorID = keyInfo.UserID
 				actorType = "user"
 			} else {

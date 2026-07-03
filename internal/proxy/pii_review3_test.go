@@ -307,7 +307,6 @@ func TestPII_Review3_TruncatedStream_UsageStatus(t *testing.T) {
 	keyInfo := &auth.KeyInfo{
 		ID:      "key-review3-trunc",
 		KeyType: "user_key",
-		OrgID:   "org-review3-trunc",
 	}
 	model := Model{Name: "ext-model"}
 	ui := UsageInfo{PromptTokens: 3, CompletionTokens: 1, TotalTokens: 4}

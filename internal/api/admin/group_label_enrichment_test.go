@@ -3,7 +3,7 @@ package admin_test
 import (
 	"context"
 	"encoding/json"
-
+	"fmt"
 	"io"
 	"net/http/httptest"
 	"strings"
@@ -55,10 +55,9 @@ func myUsageURL(from, to, groupBy string) string {
 	return u
 }
 
-// addTestKeyWithIDAndUserAndOrg generates a key with a specific key ID, user ID,
-// and org ID in the cache. Used to seed MyUsage tests where the handler uses
-// keyInfo.UserID and keyInfo.ID to build the scoped filter.
-func addTestKeyWithIDAndUserAndOrg(t *testing.T, keyCache *cache.Cache[string, auth.KeyInfo], role, orgID, keyID, userID string) string {
+// addTestKeyWithIDAndUser generates a key with a specific key ID and user ID
+// in the cache. Used to seed MyUsage tests.
+func addTestKeyWithIDAndUser(t *testing.T, keyCache *cache.Cache[string, auth.KeyInfo], role, keyID, userID string) string {
 	t.Helper()
 
 	plaintext, err := keygen.Generate(keygen.KeyTypeUser)
@@ -71,7 +70,6 @@ func addTestKeyWithIDAndUserAndOrg(t *testing.T, keyCache *cache.Cache[string, a
 		ID:      keyID,
 		KeyType: keygen.KeyTypeUser,
 		Role:    role,
-		OrgID:   orgID,
 		UserID:  userID,
 		Name:    "test key " + role,
 	})
@@ -150,70 +148,6 @@ func TestSystemAdminUsage_GroupByUser_HasGroupLabel(t *testing.T) {
 	}
 }
 
-// TestSystemAdminUsage_GroupByOrg_HasGroupLabel verifies that the system-wide
-// GET /api/v1/usage endpoint sets group_label to the org's name when
-// group_by=org and a matching org row exists.
-func TestSystemAdminUsage_GroupByOrg_HasGroupLabel(t *testing.T) {
-	t.Parallel()
-
-	app, database, keyCache := setupTestApp(t, "file:TestSysUsage_GBOrg_Label?mode=memory&cache=private")
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
-
-	// Create a real org so ResolveGroupLabels can find it by ID.
-	org := mustCreateOrg(t, database, "Known Org Name", "known-org-name")
-
-	now := time.Now().UTC()
-	from := now.Add(-2 * time.Hour).Format(time.RFC3339)
-	to := now.Add(time.Minute).Format(time.RFC3339)
-
-	// Seed a usage event in that org.
-	insertUsageEventHTTP(t, database, "sys-gl-org-1", "key-sys-org", "", org.ID, "gpt-4",
-		100, 50, 150, now.Add(-30*time.Minute))
-
-	req := httptest.NewRequest("GET", systemUsageURL(from, to, "org"), nil)
-	req.Header.Set("Authorization", "Bearer "+testKey)
-
-	resp, err := app.Test(req, fiber.TestConfig{Timeout: testTimeout})
-	if err != nil {
-		t.Fatalf("app.Test: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != fiber.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("status = %d, want 200; body: %s", resp.StatusCode, body)
-	}
-
-	var envelope struct {
-		Data []struct {
-			GroupKey   string `json:"group_key"`
-			GroupLabel string `json:"group_label"`
-		} `json:"data"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if len(envelope.Data) == 0 {
-		t.Fatal("data is empty, want at least one row")
-	}
-
-	var found bool
-	for _, row := range envelope.Data {
-		if row.GroupKey == org.ID {
-			found = true
-			if row.GroupLabel != "Known Org Name" {
-				t.Errorf("group_label = %q, want %q", row.GroupLabel, "Known Org Name")
-			}
-			break
-		}
-	}
-	if !found {
-		t.Errorf("no data point with group_key = %q; all data: %v", org.ID, envelope.Data)
-	}
-}
-
-// ---- MyUsage group_label enrichment tests ------------------------------------
-
 // TestMyUsage_GroupByKey_HasGroupLabel verifies that GET /api/v1/usage/me with
 // group_by=key returns a data point whose group_label equals the key's Name when
 // the calling key has a user_id and the key exists in api_keys.
@@ -221,7 +155,6 @@ func TestMyUsage_GroupByKey_HasGroupLabel(t *testing.T) {
 	t.Parallel()
 
 	app, database, keyCache := setupTestApp(t, "file:TestMyUsage_GBKey_Label?mode=memory&cache=private")
-	org := mustCreateOrg(t, database, "My Usage Org", "my-usage-org")
 
 	// Create a real user and a real api_key row so the label resolver finds them.
 	creator, err := database.CreateUser(context.Background(), db.CreateUserParams{
@@ -236,23 +169,20 @@ func TestMyUsage_GroupByKey_HasGroupLabel(t *testing.T) {
 		KeyHint:   "vl_uk_...mu",
 		KeyType:   "user_key",
 		Name:      "My Labeled Key",
-		OrgID:     org.ID,
 		CreatedBy: creator.ID,
 	})
 	if err != nil {
 		t.Fatalf("CreateAPIKey: %v", err)
 	}
 
-	// The test key in the cache must have UserID set (so MyUsage scopes by user_id)
-	// and have the same OrgID so the scoped query targets the right org.
-	testKey := addTestKeyWithIDAndUserAndOrg(t, keyCache, auth.RoleMember, org.ID, apiKey.ID, creator.ID)
+	testKey := addTestKeyWithIDAndUser(t, keyCache, auth.RoleMember, apiKey.ID, creator.ID)
 
 	now := time.Now().UTC()
 	from := now.Add(-2 * time.Hour).Format(time.RFC3339)
 	to := now.Add(time.Minute).Format(time.RFC3339)
 
 	// Seed usage events with the user_id so that the scoped-by-user filter picks them up.
-	insertUsageEventWithUserHTTP(t, database, "my-gl-key-1", apiKey.ID, creator.ID, org.ID, "gpt-4",
+	insertUsageEventWithUserHTTP(t, database, "my-gl-key-1", apiKey.ID, creator.ID, "org-id", "gpt-4",
 		150, now.Add(-30*time.Minute))
 
 	req := httptest.NewRequest("GET", myUsageURL(from, to, "key"), nil)
@@ -290,3 +220,26 @@ func TestMyUsage_GroupByKey_HasGroupLabel(t *testing.T) {
 		t.Errorf("group_label = %q, want %q", row.GroupLabel, "My Labeled Key")
 	}
 }
+
+func insertUsageEventWithUserHTTP(t *testing.T, database *db.DB, id, keyID, userID, orgID, modelName string, totalTokens int64, createdAt time.Time) {
+	t.Helper()
+	valOrgID := orgID
+	if valOrgID == "" {
+		valOrgID = "default_org"
+	}
+	query := fmt.Sprintf(
+		`INSERT INTO usage_events
+			(id, key_id, key_type, org_id, user_id, model_name,
+			 prompt_tokens, completion_tokens, total_tokens, status_code, created_at)
+		 VALUES
+			('%s', '%s', 'user_key', '%s', '%s', '%s',
+			 0, %d, %d, 200, '%s')`,
+		id, keyID, valOrgID, userID, modelName,
+		totalTokens, totalTokens,
+		createdAt.UTC().Format(time.RFC3339),
+	)
+	if _, err := database.SQL().ExecContext(context.Background(), query); err != nil {
+		t.Fatalf("insertUsageEventWithUserHTTP id=%q: %v", id, err)
+	}
+}
+

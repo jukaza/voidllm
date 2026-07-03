@@ -48,23 +48,11 @@ func Bootstrap(ctx context.Context, sqlDB *sql.DB, dialect db.Dialect,
 		return nil, errors.New("admin key must be at least 32 characters")
 	}
 
-	orgName := cfg.Bootstrap.OrgName
-	orgSlug := cfg.Bootstrap.OrgSlug
 	adminEmail := cfg.Bootstrap.AdminEmail
-
-	orgID, err := uuid.NewV7()
-	if err != nil {
-		return nil, fmt.Errorf("bootstrap: generate org id: %w", err)
-	}
 
 	userID, err := uuid.NewV7()
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: generate user id: %w", err)
-	}
-
-	membershipID, err := uuid.NewV7()
-	if err != nil {
-		return nil, fmt.Errorf("bootstrap: generate membership id: %w", err)
 	}
 
 	keyID, err := uuid.NewV7()
@@ -108,14 +96,6 @@ func Bootstrap(ctx context.Context, sqlDB *sql.DB, dialect db.Dialect,
 		return nil, nil
 	}
 
-	insertOrg := "INSERT INTO organizations (id, name, slug, created_at, updated_at) VALUES (" +
-		dialect.Placeholder(1) + ", " +
-		dialect.Placeholder(2) + ", " +
-		dialect.Placeholder(3) + ", CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
-	if _, err = tx.ExecContext(ctx, insertOrg, orgID.String(), orgName, orgSlug); err != nil {
-		return nil, fmt.Errorf("bootstrap: insert organization: %w", err)
-	}
-
 	insertUser := "INSERT INTO users (id, email, display_name, password_hash, auth_provider, is_system_admin, created_at, updated_at) VALUES (" +
 		dialect.Placeholder(1) + ", " +
 		dialect.Placeholder(2) + ", " +
@@ -134,36 +114,20 @@ func Bootstrap(ctx context.Context, sqlDB *sql.DB, dialect db.Dialect,
 		return nil, fmt.Errorf("bootstrap: insert user: %w", err)
 	}
 
-	insertMembership := "INSERT INTO org_memberships (id, org_id, user_id, role, created_at) VALUES (" +
-		dialect.Placeholder(1) + ", " +
-		dialect.Placeholder(2) + ", " +
-		dialect.Placeholder(3) + ", " +
-		dialect.Placeholder(4) + ", CURRENT_TIMESTAMP)"
-	if _, err = tx.ExecContext(ctx, insertMembership,
-		membershipID.String(),
-		orgID.String(),
-		userID.String(),
-		RoleOrgAdmin,
-	); err != nil {
-		return nil, fmt.Errorf("bootstrap: insert org membership: %w", err)
-	}
-
-	insertKey := "INSERT INTO api_keys (id, key_hash, key_hint, key_type, name, org_id, user_id, created_by, created_at, updated_at) VALUES (" +
+	insertKey := "INSERT INTO api_keys (id, key_hash, key_hint, key_type, name, user_id, created_by, created_at, updated_at) VALUES (" +
 		dialect.Placeholder(1) + ", " +
 		dialect.Placeholder(2) + ", " +
 		dialect.Placeholder(3) + ", " +
 		dialect.Placeholder(4) + ", " +
 		dialect.Placeholder(5) + ", " +
 		dialect.Placeholder(6) + ", " +
-		dialect.Placeholder(7) + ", " +
-		dialect.Placeholder(8) + ", CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+		dialect.Placeholder(7) + ", CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
 	if _, err = tx.ExecContext(ctx, insertKey,
 		keyID.String(),
 		keyHash,
 		keyHint,
 		keygen.KeyTypeUser,
 		"Bootstrap Admin Key",
-		orgID.String(),
 		userID.String(),
 		userID.String(),
 	); err != nil {
@@ -178,7 +142,6 @@ func Bootstrap(ctx context.Context, sqlDB *sql.DB, dialect db.Dialect,
 		ID:      keyID.String(),
 		KeyType: keygen.KeyTypeUser,
 		Role:    RoleSystemAdmin,
-		OrgID:   orgID.String(),
 		UserID:  userID.String(),
 		Name:    "Bootstrap Admin Key",
 	})
