@@ -1,6 +1,6 @@
 // VoidLLM Benchmark CLI
 //
-// Measures proxy overhead for LLM and MCP paths using embedded mock servers
+// Measures proxy overhead for LLM paths using embedded mock servers
 // and the Vegeta load testing library.
 //
 // Usage:
@@ -13,7 +13,7 @@
 //	sustained      5000 RPS, 5 min — memory leaks, GC pressure
 //	burst          200→10k→200 RPS — spike and recovery
 //	large-payload  100KB bodies, 100 RPS — allocation overhead
-//	mixed          60% LLM + 30% MCP + 10% Code Mode (parallel)
+//	mixed          direct + proxy LLM paths (parallel)
 //	endurance      500 RPS, 30 min — long-running stability
 //	realistic      50 RPS, 2 min — SSE streaming with 30-50ms inter-token delay
 //	all            Run all scenarios sequentially
@@ -28,13 +28,10 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	stdjson "encoding/json"
 	"flag"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -45,7 +42,6 @@ import (
 // endpointSet holds URLs and credentials for all benchmark targets.
 type endpointSet struct {
 	mockLLM string
-	mockMCP string
 	proxy   string
 	apiKey  string
 }
@@ -106,13 +102,6 @@ func main() {
 	}
 	defer mockLLM.Close()
 
-	mockMCP, err := startMockMCP(10 * time.Millisecond)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error starting mock MCP: %v\n", err)
-		os.Exit(1)
-	}
-	defer mockMCP.Close()
-
 	// ─── Build and start VoidLLM ─────────────────────────────────
 	if !*jsonOutput {
 		fmt.Printf("%sBuilding VoidLLM...%s\n", dim, reset)
@@ -129,7 +118,7 @@ func main() {
 		fmt.Printf("%sStarting VoidLLM proxy...%s\n", dim, reset)
 	}
 
-	proxyAddr, apiKey, proxyCmd, err := startProxy(proxyBin, mockLLM.URL(), mockMCP.URL())
+	proxyAddr, apiKey, proxyCmd, err := startProxy(proxyBin, mockLLM.URL())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error starting proxy: %v\n", err)
 		os.Exit(1)
@@ -141,17 +130,8 @@ func main() {
 
 	endpoints := &endpointSet{
 		mockLLM: mockLLM.URL(),
-		mockMCP: mockMCP.URL(),
 		proxy:   proxyAddr,
 		apiKey:  apiKey,
-	}
-
-	// Grant MCP access: register the bench MCP server as org-scoped via API
-	// (YAML servers are global and require explicit org_mcp_access grants).
-	if err := registerOrgMCPServer(endpoints, mockMCP.URL()); err != nil {
-		if !*jsonOutput {
-			fmt.Fprintf(os.Stderr, "%sWARN: could not register org MCP server: %v%s\n", dim, err, reset)
-		}
 	}
 
 	if !*jsonOutput {
@@ -262,7 +242,7 @@ func buildProxy() (string, error) {
 	return out, nil
 }
 
-func startProxy(bin, llmURL, mcpURL string) (addr, apiKey string, cmd *exec.Cmd, err error) {
+func startProxy(bin, llmURL string) (addr, apiKey string, cmd *exec.Cmd, err error) {
 	proxyPort := "8081"
 	addr = "http://127.0.0.1:" + proxyPort
 
@@ -277,18 +257,9 @@ models:
     provider: custom
     base_url: %s/v1
     aliases: [default]
-mcp_servers:
-  - name: bench-mcp
-    alias: bench
-    url: %s
-    auth_type: none
 settings:
   admin_key: bench-admin-key-12345678901234567890
   encryption_key: bench-encryption-key-1234567890
-  mcp:
-    allow_private_urls: true
-    code_mode:
-      enabled: true
   health_check:
     health:
       enabled: false
@@ -296,7 +267,7 @@ settings:
       enabled: false
   audit:
     enabled: false
-`, proxyPort, llmURL, mcpURL)
+`, proxyPort, llmURL)
 
 	configFile, err := os.CreateTemp("", "bench-proxy-*.yaml")
 	if err != nil {
@@ -365,70 +336,6 @@ settings:
 		time.Sleep(2 * time.Second)
 		return addr, key, cmd, nil
 	}
-}
-
-// registerOrgMCPServer creates the bench MCP server as org-scoped via the
-// Admin API. Org-scoped servers don't need explicit org_mcp_access grants
-// (visibility = access), avoiding the closed-by-default restriction on global servers.
-func registerOrgMCPServer(ep *endpointSet, mcpURL string) error {
-	// 1. Get bootstrap org ID
-	client := &http.Client{Timeout: 5 * time.Second}
-
-	req, err := http.NewRequest("GET", ep.proxy+"/api/v1/orgs", nil)
-	if err != nil {
-		return fmt.Errorf("build orgs request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+ep.apiKey)
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("list orgs: %w", err)
-	}
-	body, _ := io.ReadAll(resp.Body)
-	resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("list orgs: status %d: %s", resp.StatusCode, body)
-	}
-
-	var orgsResp struct {
-		Data []struct {
-			ID string `json:"id"`
-		} `json:"data"`
-	}
-	if err := stdjson.Unmarshal(body, &orgsResp); err != nil {
-		return fmt.Errorf("parse orgs response: %w", err)
-	}
-	if len(orgsResp.Data) == 0 {
-		return fmt.Errorf("no organizations found")
-	}
-	orgID := orgsResp.Data[0].ID
-
-	// 2. Create org-scoped MCP server
-	createBody, _ := stdjson.Marshal(map[string]string{
-		"name":      "bench-mcp",
-		"alias":     "bench-org",
-		"url":       mcpURL,
-		"auth_type": "none",
-	})
-	req, err = http.NewRequest("POST", ep.proxy+"/api/v1/orgs/"+orgID+"/mcp-servers", bytes.NewReader(createBody))
-	if err != nil {
-		return fmt.Errorf("build create request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+ep.apiKey)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err = client.Do(req)
-	if err != nil {
-		return fmt.Errorf("create mcp server: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// 409 = alias already exists (idempotent re-run), treat as success.
-	if resp.StatusCode != 201 && resp.StatusCode != 409 {
-		body, _ = io.ReadAll(resp.Body)
-		return fmt.Errorf("create mcp server: status %d: %s", resp.StatusCode, body)
-	}
-
-	return nil
 }
 
 func printBanner(scenario string) {

@@ -31,29 +31,13 @@ func printTextReport(result *benchResult) {
 	}
 
 	// Overhead calculation (if we have calibration + proxy pairs)
-	calibLLM := findPhase(result, "LLM Calibration", "Large Calibration")
-	proxyLLM := findPhase(result, "LLM Proxy", "Large Proxy", "LLM Burst", "LLM Endurance", "LLM (60%)")
-	calibMCP := findPhase(result, "MCP Calibration")
-	proxyMCP := findPhase(result, "MCP Proxy", "MCP (30%)")
+	calibLLM := findPhase(result, "LLM Calibration", "Large Calibration", "LLM Calibration (stream)")
+	proxyLLM := findPhase(result, "LLM Proxy", "Large Proxy", "LLM Burst", "LLM Endurance", "LLM Proxy (stream)")
 
 	if calibLLM != nil && proxyLLM != nil {
 		overhead := proxyLLM.Latencies.P50 - calibLLM.Latencies.P50
 		fmt.Printf("%s%sOverhead:%s\n", yellow, bold, reset)
 		fmt.Printf("  LLM Proxy:  %s (P50)\n", formatDuration(overhead))
-	}
-	if calibMCP != nil && proxyMCP != nil {
-		overhead := proxyMCP.Latencies.P50 - calibMCP.Latencies.P50
-		fmt.Printf("  MCP Proxy:  %s (P50)\n", formatDuration(overhead))
-	}
-
-	// Code Mode results
-	if result.CodeMode != nil {
-		cm := result.CodeMode
-		fmt.Printf("\n%s%sCode Mode:%s\n", cyan, bold, reset)
-		fmt.Printf("  Pure JS:        %8.2f ms\n", cm.PureJSMs)
-		fmt.Printf("  With Tool Call: %8.2f ms\n", cm.WithToolCallMs)
-		fmt.Printf("  Warm Eval:      %8.0f µs\n", cm.WarmEvalUs)
-		fmt.Printf("  Pool Cycle:     %8.2f ms\n", cm.PoolCycleMs)
 	}
 
 	fmt.Printf("\n%sDuration: %s%s\n", dim, result.Duration.Round(time.Second), reset)
@@ -99,7 +83,6 @@ type jsonReport struct {
 	Timestamp string                 `json:"timestamp"`
 	Duration  string                 `json:"duration"`
 	Results   map[string]jsonMetrics `json:"results"`
-	CodeMode  *codeModeResult        `json:"code_mode,omitempty"`
 }
 
 type jsonMetrics struct {
@@ -119,7 +102,6 @@ func printJSONReport(result *benchResult) {
 		Timestamp: result.StartedAt.UTC().Format(time.RFC3339),
 		Duration:  result.Duration.Round(time.Second).String(),
 		Results:   make(map[string]jsonMetrics),
-		CodeMode:  result.CodeMode,
 	}
 
 	for _, pr := range result.PhaseResults {

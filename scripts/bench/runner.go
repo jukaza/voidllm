@@ -3,9 +3,6 @@ package main
 import (
 	"fmt"
 	"net/http"
-	"os/exec"
-	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -25,15 +22,6 @@ type benchResult struct {
 	StartedAt    time.Time
 	Duration     time.Duration
 	PhaseResults []phaseResult
-	CodeMode     *codeModeResult // nil if not measured
-}
-
-// codeModeResult holds Code Mode benchmark numbers (in-process, not HTTP).
-type codeModeResult struct {
-	PureJSMs       float64 `json:"pure_js_ms"`
-	WithToolCallMs float64 `json:"with_tool_call_ms"`
-	WarmEvalUs     float64 `json:"warm_eval_us"`
-	PoolCycleMs    float64 `json:"pool_cycle_ms"`
 }
 
 // warmup sends a few requests to each target to prime caches and connection pools.
@@ -78,12 +66,6 @@ func runScenario(s *scenario, endpoints *endpointSet) *benchResult {
 				Metrics: metrics,
 			})
 		}
-	}
-
-	// Run Code Mode benchmarks for scenarios that include them.
-	if s.IncludeCodeMode {
-		fmt.Printf("  ▸ Code Mode (go test -bench)\n")
-		result.CodeMode = runCodeModeBench()
 	}
 
 	result.Duration = time.Since(result.StartedAt)
@@ -170,26 +152,8 @@ func buildTargeter(p phase, ep *endpointSet) vegeta.Targeter {
 			body = makeLLMBody(p.BodySize)
 		}
 
-	case "mcp-direct":
-		url = ep.mockMCP + "/"
-		headers = http.Header{"Content-Type": []string{"application/json"}}
-		body = []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"mock_tool","arguments":{"input":"bench"}}}`)
-
-	case "mcp-proxy":
-		url = ep.proxy + "/api/v1/mcp/bench-org"
-		headers = http.Header{
-			"Content-Type":  []string{"application/json"},
-			"Authorization": []string{"Bearer " + ep.apiKey},
-		}
-		body = []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"mock_tool","arguments":{"input":"bench"}}}`)
-
-	case "codemode-proxy":
-		url = ep.proxy + "/api/v1/mcp"
-		headers = http.Header{
-			"Content-Type":  []string{"application/json"},
-			"Authorization": []string{"Bearer " + ep.apiKey},
-		}
-		body = []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"execute_code","arguments":{"code":"1+1"}}}`)
+	default:
+		panic(fmt.Sprintf("unknown phase target: %q", p.Target))
 	}
 
 	target := vegeta.Target{
@@ -200,45 +164,6 @@ func buildTargeter(p phase, ep *endpointSet) vegeta.Targeter {
 	}
 
 	return vegeta.NewStaticTargeter(target)
-}
-
-// runCodeModeBench runs the Code Mode go test benchmarks as a subprocess
-// and parses the output into a codeModeResult.
-func runCodeModeBench() *codeModeResult {
-	cmd := exec.Command("go", "test", "./internal/mcp/...",
-		"-bench=Benchmark", "-benchtime=3s", "-count=1", "-timeout=120s")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		fmt.Printf("  %sCode Mode bench failed: %v%s\n", dim, err, reset)
-		return nil
-	}
-
-	result := &codeModeResult{}
-	re := regexp.MustCompile(`^(Benchmark\S+)\s+\d+\s+([\d.]+)\s+ns/op`)
-
-	for _, line := range strings.Split(string(out), "\n") {
-		m := re.FindStringSubmatch(line)
-		if m == nil {
-			continue
-		}
-		name := m[1]
-		ns, _ := strconv.ParseFloat(m[2], 64)
-		ms := ns / 1e6
-		us := ns / 1e3
-
-		switch {
-		case strings.Contains(name, "Execute_NoTools"):
-			result.PureJSMs = ms
-		case strings.Contains(name, "Execute_WithToolCall"):
-			result.WithToolCallMs = ms
-		case strings.Contains(name, "WarmEval"):
-			result.WarmEvalUs = us
-		case strings.Contains(name, "AcquireRelease"):
-			result.PoolCycleMs = ms
-		}
-	}
-
-	return result
 }
 
 // makeLLMBody creates an OpenAI chat completion request body.

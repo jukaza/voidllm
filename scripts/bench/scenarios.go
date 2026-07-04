@@ -21,10 +21,9 @@ type phase struct {
 
 // scenario defines a complete benchmark run with one or more phases.
 type scenario struct {
-	Name            string
-	Description     string
-	Phases          []phase
-	IncludeCodeMode bool // deprecated; always false after marketplace pivot
+	Name        string
+	Description string
+	Phases      []phase
 }
 
 // burstPacer implements vegeta.Pacer with a step function:
