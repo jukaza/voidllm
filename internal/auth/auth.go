@@ -16,9 +16,9 @@ import (
 type KeyInfo struct {
 	// ID is the unique identifier of the API key record.
 	ID string
-	// KeyType is the category of the key: keygen.KeyTypeUser, KeyTypeTeam, or KeyTypeSA.
+	// KeyType is the category of the key: keygen.KeyTypeUser or KeyTypeSession.
 	KeyType string
-	// Role is the RBAC role assigned to this key: RoleSystemAdmin, RoleOrgAdmin, RoleTeamAdmin, or RoleMember.
+	// Role is the RBAC role assigned to this key: RoleSystemAdmin or RoleMember.
 	Role string
 	// UserID is the user this key belongs to.
 	UserID string

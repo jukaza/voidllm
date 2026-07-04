@@ -131,11 +131,11 @@ func TestMiddleware_Redaction_NonSensitiveBodyPreserved(t *testing.T) {
 
 	logger, database := setupMiddlewareLogger(t, "TestMiddleware_Redaction_NonSensitive")
 	app := buildApp(t, logger, []middlewareRoute{
-		{method: "PATCH", path: "/orgs/:org_id", handler: handlerWithStatus(200)},
+		{method: "PATCH", path: "/users/:user_id", handler: handlerWithStatus(200)},
 	})
 
 	body := `{"display_name":"Acme Corp","max_tokens":4096}`
-	req := httptest.NewRequest("PATCH", "/api/v1/orgs/org-abc",
+	req := httptest.NewRequest("PATCH", "/api/v1/users/user-abc",
 		strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
@@ -177,11 +177,11 @@ func TestMiddleware_Redaction_MultipleSecretsInOneRequest(t *testing.T) {
 
 	logger, database := setupMiddlewareLogger(t, "TestMiddleware_Redaction_MultipleSecrets")
 	app := buildApp(t, logger, []middlewareRoute{
-		{method: "PUT", path: "/orgs/:org_id/sso", handler: handlerWithStatus(200)},
+		{method: "PUT", path: "/models/:model_id", handler: handlerWithStatus(200)},
 	})
 
 	body := `{"client_secret":"cs-plaintext","api_key":"ak-plaintext","issuer":"https://idp.example"}`
-	req := httptest.NewRequest("PUT", "/api/v1/orgs/org-sso/sso",
+	req := httptest.NewRequest("PUT", "/api/v1/models/model-sso",
 		strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 

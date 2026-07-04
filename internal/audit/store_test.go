@@ -15,15 +15,14 @@ import (
 func insertAuditLog(t *testing.T, database *db.DB, ev audit.Event) {
 	t.Helper()
 	const insertSQL = `INSERT INTO audit_logs
-		(id, timestamp, org_id, actor_id, actor_type, actor_key_id,
+		(id, timestamp, actor_id, actor_type, actor_key_id,
 		 action, resource_type, resource_id, description, ip_address, status_code, request_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	ts := ev.Timestamp.UTC().Format(time.RFC3339)
 	_, err := database.SQL().ExecContext(context.Background(), insertSQL,
 		ev.ID,
 		ts,
-		ev.OrgID,
 		ev.ActorID,
 		ev.ActorType,
 		ev.ActorKeyID,
@@ -42,11 +41,10 @@ func insertAuditLog(t *testing.T, database *db.DB, ev audit.Event) {
 
 // makeEvent is a convenience constructor for test events. id must be a valid
 // non-empty string; it is used directly as the audit_logs.id value.
-func makeEvent(id, orgID, actorID, action, resourceType string, ts time.Time) audit.Event {
+func makeEvent(id, actorID, action, resourceType string, ts time.Time) audit.Event {
 	return audit.Event{
 		ID:           id,
 		Timestamp:    ts,
-		OrgID:        orgID,
 		ActorID:      actorID,
 		ActorType:    "user",
 		ActorKeyID:   "key-" + id,
@@ -68,9 +66,9 @@ func TestQuery_NoFilters(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 
 	events := []audit.Event{
-		makeEvent("aaaa-0001", "org-a", "actor-1", "create", "org", now.Add(-3*time.Minute)),
-		makeEvent("aaaa-0002", "org-b", "actor-2", "delete", "team", now.Add(-2*time.Minute)),
-		makeEvent("aaaa-0003", "org-a", "actor-1", "update", "user", now.Add(-1*time.Minute)),
+		makeEvent("aaaa-0001", "actor-1", "create", "org", now.Add(-3*time.Minute)),
+		makeEvent("aaaa-0002", "actor-2", "delete", "team", now.Add(-2*time.Minute)),
+		makeEvent("aaaa-0003", "actor-1", "update", "user", now.Add(-1*time.Minute)),
 	}
 	for _, ev := range events {
 		insertAuditLog(t, database, ev)
@@ -88,30 +86,30 @@ func TestQuery_NoFilters(t *testing.T) {
 	}
 }
 
-// TestQuery_FilterByOrg verifies that the OrgID filter returns only events
-// belonging to the specified organisation.
-func TestQuery_FilterByOrg(t *testing.T) {
+// TestQuery_FilterByActor verifies that the ActorID filter returns only events
+// performed by the specified actor.
+func TestQuery_FilterByActor(t *testing.T) {
 	t.Parallel()
 
-	database := newTestDB(t, "TestQuery_FilterByOrg")
+	database := newTestDB(t, "TestQuery_FilterByActor")
 	now := time.Now().UTC().Truncate(time.Second)
 
-	insertAuditLog(t, database, makeEvent("b001", "org-alpha", "actor-1", "create", "org", now.Add(-3*time.Minute)))
-	insertAuditLog(t, database, makeEvent("b002", "org-beta", "actor-2", "delete", "team", now.Add(-2*time.Minute)))
-	insertAuditLog(t, database, makeEvent("b003", "org-alpha", "actor-1", "update", "user", now.Add(-1*time.Minute)))
+	insertAuditLog(t, database, makeEvent("b001", "actor-1", "create", "user", now.Add(-3*time.Minute)))
+	insertAuditLog(t, database, makeEvent("b002", "actor-2", "delete", "key", now.Add(-2*time.Minute)))
+	insertAuditLog(t, database, makeEvent("b003", "actor-1", "update", "user", now.Add(-1*time.Minute)))
 
 	result, err := audit.Query(context.Background(), database, audit.QueryParams{
-		OrgID: "org-alpha",
+		ActorID: "actor-1",
 	})
 	if err != nil {
 		t.Fatalf("Query() error = %v, want nil", err)
 	}
 	if len(result.Events) != 2 {
-		t.Errorf("len(Events) = %d, want 2 (only org-alpha events)", len(result.Events))
+		t.Errorf("len(Events) = %d, want 2 (only actor-1 events)", len(result.Events))
 	}
 	for _, ev := range result.Events {
-		if ev.OrgID != "org-alpha" {
-			t.Errorf("Event OrgID = %q, want %q", ev.OrgID, "org-alpha")
+		if ev.ActorID != "actor-1" {
+			t.Errorf("Event ActorID = %q, want %q", ev.ActorID, "actor-1")
 		}
 	}
 }
@@ -124,9 +122,9 @@ func TestQuery_FilterByAction(t *testing.T) {
 	database := newTestDB(t, "TestQuery_FilterByAction")
 	now := time.Now().UTC().Truncate(time.Second)
 
-	insertAuditLog(t, database, makeEvent("c001", "org-x", "actor-1", "create", "org", now.Add(-3*time.Minute)))
-	insertAuditLog(t, database, makeEvent("c002", "org-x", "actor-2", "delete", "team", now.Add(-2*time.Minute)))
-	insertAuditLog(t, database, makeEvent("c003", "org-x", "actor-1", "create", "user", now.Add(-1*time.Minute)))
+	insertAuditLog(t, database, makeEvent("c001", "actor-1", "create", "org", now.Add(-3*time.Minute)))
+	insertAuditLog(t, database, makeEvent("c002", "actor-2", "delete", "team", now.Add(-2*time.Minute)))
+	insertAuditLog(t, database, makeEvent("c003", "actor-1", "create", "user", now.Add(-1*time.Minute)))
 
 	result, err := audit.Query(context.Background(), database, audit.QueryParams{
 		Action: "create",
@@ -157,7 +155,7 @@ func TestQuery_CursorPagination(t *testing.T) {
 	// order gives a deterministic newest-first sequence: d005 > d004 > ... > d001.
 	for i := 1; i <= 5; i++ {
 		id := fmt.Sprintf("d%03d", i)
-		insertAuditLog(t, database, makeEvent(id, "org-p", "actor-1", "create", "org",
+		insertAuditLog(t, database, makeEvent(id, "actor-1", "create", "org",
 			now.Add(time.Duration(i)*time.Minute)))
 	}
 
@@ -227,7 +225,7 @@ func TestQuery_CursorAtEnd(t *testing.T) {
 	database := newTestDB(t, "TestQuery_CursorAtEnd")
 	now := time.Now().UTC().Truncate(time.Second)
 
-	insertAuditLog(t, database, makeEvent("z001", "org-e", "actor-1", "create", "org", now))
+	insertAuditLog(t, database, makeEvent("z001", "actor-1", "create", "org", now))
 
 	result, err := audit.Query(context.Background(), database, audit.QueryParams{
 		Limit:  10,
@@ -253,9 +251,9 @@ func TestQuery_TimeRange(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 
 	// Three events: one before, one within, one after the query window.
-	insertAuditLog(t, database, makeEvent("e001", "org-t", "actor-1", "create", "org", now.Add(-2*time.Hour)))
-	insertAuditLog(t, database, makeEvent("e002", "org-t", "actor-1", "update", "org", now.Add(-30*time.Minute)))
-	insertAuditLog(t, database, makeEvent("e003", "org-t", "actor-1", "delete", "org", now.Add(1*time.Hour)))
+	insertAuditLog(t, database, makeEvent("e001", "actor-1", "create", "org", now.Add(-2*time.Hour)))
+	insertAuditLog(t, database, makeEvent("e002", "actor-1", "update", "org", now.Add(-30*time.Minute)))
+	insertAuditLog(t, database, makeEvent("e003", "actor-1", "delete", "org", now.Add(1*time.Hour)))
 
 	from := now.Add(-1 * time.Hour)
 	to := now.Add(0)
@@ -286,9 +284,9 @@ func TestQuery_OrderedByIDDesc(t *testing.T) {
 
 	// IDs are lexicographically ordered to match timestamp order: f001 is oldest,
 	// f003 is newest. Descending id order therefore gives newest-first results.
-	insertAuditLog(t, database, makeEvent("f001", "org-o", "actor-1", "create", "org", now.Add(-3*time.Minute)))
-	insertAuditLog(t, database, makeEvent("f002", "org-o", "actor-1", "update", "org", now.Add(-2*time.Minute)))
-	insertAuditLog(t, database, makeEvent("f003", "org-o", "actor-1", "delete", "org", now.Add(-1*time.Minute)))
+	insertAuditLog(t, database, makeEvent("f001", "actor-1", "create", "org", now.Add(-3*time.Minute)))
+	insertAuditLog(t, database, makeEvent("f002", "actor-1", "update", "org", now.Add(-2*time.Minute)))
+	insertAuditLog(t, database, makeEvent("f003", "actor-1", "delete", "org", now.Add(-1*time.Minute)))
 
 	result, err := audit.Query(context.Background(), database, audit.QueryParams{})
 	if err != nil {
@@ -314,20 +312,20 @@ func TestQuery_MultipleFilters(t *testing.T) {
 	database := newTestDB(t, "TestQuery_MultipleFilters")
 	now := time.Now().UTC().Truncate(time.Second)
 
-	insertAuditLog(t, database, makeEvent("g001", "org-m", "actor-1", "create", "org", now.Add(-3*time.Minute)))
-	insertAuditLog(t, database, makeEvent("g002", "org-m", "actor-2", "create", "org", now.Add(-2*time.Minute)))
-	insertAuditLog(t, database, makeEvent("g003", "org-n", "actor-1", "create", "org", now.Add(-1*time.Minute)))
+	insertAuditLog(t, database, makeEvent("g001", "actor-1", "create", "org", now.Add(-3*time.Minute)))
+	insertAuditLog(t, database, makeEvent("g002", "actor-2", "create", "org", now.Add(-2*time.Minute)))
+	insertAuditLog(t, database, makeEvent("g003", "actor-1", "update", "org", now.Add(-1*time.Minute)))
 
-	// Filter by both org and actor — should match only g001.
+	// Filter by both actor and action — should match only g001.
 	result, err := audit.Query(context.Background(), database, audit.QueryParams{
-		OrgID:   "org-m",
 		ActorID: "actor-1",
+		Action:  "create",
 	})
 	if err != nil {
 		t.Fatalf("Query() error = %v, want nil", err)
 	}
 	if len(result.Events) != 1 {
-		t.Errorf("len(Events) = %d, want 1 (only g001 matches both org-m and actor-1)", len(result.Events))
+		t.Errorf("len(Events) = %d, want 1 (only g001 matches actor-1 and create)", len(result.Events))
 	}
 }
 
@@ -341,7 +339,7 @@ func TestQuery_LimitClamping(t *testing.T) {
 	// Insert 3 rows — we only need to confirm the clamp does not error.
 	for i := 0; i < 3; i++ {
 		id := fmt.Sprintf("h%03d", i)
-		insertAuditLog(t, database, makeEvent(id, "org-c", "actor-1", "create", "org",
+		insertAuditLog(t, database, makeEvent(id, "actor-1", "create", "org",
 			now.Add(time.Duration(-i)*time.Minute)))
 	}
 
@@ -367,7 +365,7 @@ func TestQuery_HasMoreExact(t *testing.T) {
 
 	for i := 1; i <= 3; i++ {
 		id := fmt.Sprintf("i%03d", i)
-		insertAuditLog(t, database, makeEvent(id, "org-x", "actor-1", "create", "org",
+		insertAuditLog(t, database, makeEvent(id, "actor-1", "create", "org",
 			now.Add(time.Duration(i)*time.Minute)))
 	}
 

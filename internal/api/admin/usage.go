@@ -153,7 +153,7 @@ func (h *Handler) SystemAdminUsage(c fiber.Ctx) error {
 		return nil
 	}
 
-	aggregates, err := h.DB.GetCrossOrgUsageAggregates(c.Context(), from, to, groupBy)
+	aggregates, err := h.DB.GetSystemUsageAggregates(c.Context(), from, to, groupBy)
 	if err != nil {
 		h.Log.ErrorContext(c.Context(), "system admin usage: get aggregates",
 			slog.String("error", err.Error()),

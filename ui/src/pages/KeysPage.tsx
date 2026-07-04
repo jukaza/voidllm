@@ -24,15 +24,11 @@ import { useToast } from '../hooks/useToast'
 
 const keyTypeBadgeVariant: Record<string, 'default' | 'info' | 'warning' | 'muted'> = {
   user_key: 'default',
-  team_key: 'info',
-  sa_key: 'warning',
   session_key: 'muted',
 }
 
 const keyTypeLabels: Record<string, string> = {
   user_key: 'User',
-  team_key: 'Team',
-  sa_key: 'Service Acct',
   session_key: 'Session',
 }
 
@@ -777,7 +773,7 @@ export default function KeysPage() {
     })
   }
 
-  // Empty state (not loading, no keys, orgId resolved)
+  // Empty state (not loading, no keys)
   const showEmptyState = !isLoading && allKeys.length === 0 && !keys?.has_more
 
   return (

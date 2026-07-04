@@ -125,17 +125,15 @@ func apiKeyVisibleToCallerKey(key *db.APIKey, caller *auth.KeyInfo) bool {
 	return key.UserID != nil && *key.UserID == caller.UserID
 }
 
-// CreateAPIKey handles POST /api/v1/orgs/:org_id/keys.
-// Org admins and system admins may create any key type.
+// CreateAPIKey handles POST /api/v1/keys.
 // Members may only create user_key for themselves (user_id is forced to their own ID).
 // The plaintext key is returned exactly once in the response body.
 //
 // @Summary      Create an API key
-// @Description  Creates a new API key for the organization. Members may only create user keys for themselves. The plaintext key is returned exactly once.
+// @Description  Creates a new API key. Members may only create user keys for themselves. The plaintext key is returned exactly once.
 // @Tags         keys
 // @Accept       json
 // @Produce      json
-// @Param        org_id  path      string               true  "Organization ID"
 // @Param        body    body      createAPIKeyRequest  true  "API key parameters"
 // @Success      201     {object}  createAPIKeyResponse
 // @Failure      400     {object}  swaggerErrorResponse
@@ -143,9 +141,9 @@ func apiKeyVisibleToCallerKey(key *db.APIKey, caller *auth.KeyInfo) bool {
 // @Failure      403     {object}  swaggerErrorResponse
 // @Failure      500     {object}  swaggerErrorResponse
 // @Security     BearerAuth
-// @Router       /orgs/{org_id}/keys [post]
+// @Router       /keys [post]
 func (h *Handler) CreateAPIKey(c fiber.Ctx) error {
-	keyInfo, ok := requireOrgAccess(c, "")
+	keyInfo, ok := requireAuth(c)
 	if !ok {
 		return nil
 	}
@@ -214,7 +212,7 @@ func (h *Handler) CreateAPIKey(c fiber.Ctx) error {
 	// Resolve RBAC role for the new key.
 	resolvedRole := auth.RoleMember
 	if req.UserID != nil {
-		role, err := h.DB.GetUserOrgRole(ctx, *req.UserID, "")
+		role, err := h.DB.GetUserRole(ctx, *req.UserID)
 		if err == nil {
 			resolvedRole = role
 		}
@@ -260,16 +258,13 @@ func (h *Handler) CreateAPIKey(c fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(resp)
 }
 
-// GetAPIKey handles GET /api/v1/orgs/:org_id/keys/:key_id.
-// Org admins see any key in the org. Team admins see keys belonging to their team
-// or owned by themselves. Members see only their own keys.
-// Returns 404 if the key belongs to a different org or the caller lacks access.
+// GetAPIKey handles GET /api/v1/keys/:key_id.
+// System admins see any key. Members see only their own keys.
 //
 // @Summary      Get an API key
-// @Description  Returns a single API key. Visibility is scoped by role: org admins see all keys, team admins see their team keys, members see only their own.
+// @Description  Returns a single API key scoped by role.
 // @Tags         keys
 // @Produce      json
-// @Param        org_id  path      string  true  "Organization ID"
 // @Param        key_id  path      string  true  "API key ID"
 // @Success      200     {object}  apiKeyResponse
 // @Failure      401     {object}  swaggerErrorResponse
@@ -277,11 +272,11 @@ func (h *Handler) CreateAPIKey(c fiber.Ctx) error {
 // @Failure      404     {object}  swaggerErrorResponse
 // @Failure      500     {object}  swaggerErrorResponse
 // @Security     BearerAuth
-// @Router       /orgs/{org_id}/keys/{key_id} [get]
+// @Router       /keys/{key_id} [get]
 func (h *Handler) GetAPIKey(c fiber.Ctx) error {
 	keyID := c.Params("key_id")
 
-	keyInfo, ok := requireOrgAccess(c, "")
+	keyInfo, ok := requireAuth(c)
 	if !ok {
 		return nil
 	}
@@ -305,7 +300,7 @@ func (h *Handler) GetAPIKey(c fiber.Ctx) error {
 }
 
 func (h *Handler) ListAPIKeys(c fiber.Ctx) error {
-	keyInfo, ok := requireOrgAccess(c, "")
+	keyInfo, ok := requireAuth(c)
 	if !ok {
 		return nil
 	}
@@ -351,7 +346,7 @@ func (h *Handler) ListAPIKeys(c fiber.Ctx) error {
 func (h *Handler) UpdateAPIKey(c fiber.Ctx) error {
 	keyID := c.Params("key_id")
 
-	keyInfo, ok := requireOrgAccess(c, "")
+	keyInfo, ok := requireAuth(c)
 	if !ok {
 		return nil
 	}
@@ -430,7 +425,7 @@ type rotatedKeyInfo struct {
 func (h *Handler) RotateAPIKey(c fiber.Ctx) error {
 	keyID := c.Params("key_id")
 
-	keyInfo, ok := requireOrgAccess(c, "")
+	keyInfo, ok := requireAuth(c)
 	if !ok {
 		return nil
 	}
@@ -496,7 +491,7 @@ func (h *Handler) RotateAPIKey(c fiber.Ctx) error {
 
 	resolvedRole := auth.RoleMember
 	if existing.UserID != nil {
-		role, err := h.DB.GetUserOrgRole(ctx, *existing.UserID, "")
+		role, err := h.DB.GetUserRole(ctx, *existing.UserID)
 		if err == nil {
 			resolvedRole = role
 		}
@@ -555,7 +550,7 @@ func (h *Handler) RotateAPIKey(c fiber.Ctx) error {
 func (h *Handler) DeleteAPIKey(c fiber.Ctx) error {
 	keyID := c.Params("key_id")
 
-	keyInfo, ok := requireOrgAccess(c, "")
+	keyInfo, ok := requireAuth(c)
 	if !ok {
 		return nil
 	}

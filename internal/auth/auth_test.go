@@ -190,21 +190,11 @@ func TestMiddleware(t *testing.T) {
 			wantStatus: fiber.StatusOK,
 		},
 		{
-			name: "valid team key",
+			name: "valid session key",
 			setup: func(t *testing.T, kc *cache.Cache[string, KeyInfo]) string {
 				info := baseInfo
-				info.KeyType = keygen.KeyTypeTeam
-				raw := storeKey(t, kc, info, keygen.KeyTypeTeam)
-				return "Bearer " + raw
-			},
-			wantStatus: fiber.StatusOK,
-		},
-		{
-			name: "valid service account key",
-			setup: func(t *testing.T, kc *cache.Cache[string, KeyInfo]) string {
-				info := baseInfo
-				info.KeyType = keygen.KeyTypeSA
-				raw := storeKey(t, kc, info, keygen.KeyTypeSA)
+				info.KeyType = keygen.KeyTypeSession
+				raw := storeKey(t, kc, info, keygen.KeyTypeSession)
 				return "Bearer " + raw
 			},
 			wantStatus: fiber.StatusOK,

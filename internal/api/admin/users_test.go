@@ -37,7 +37,7 @@ func TestCreateUser(t *testing.T) {
 		t.Parallel()
 
 		app, _, keyCache := setupTestApp(t, "file:TestCreateUser_SysAdmin201?mode=memory&cache=private")
-		testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+		testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 		req := httptest.NewRequest("POST", "/api/v1/users", bodyJSON(t, map[string]any{
 			"email":        "newuser@example.com",
@@ -63,7 +63,7 @@ func TestCreateUser(t *testing.T) {
 		t.Parallel()
 
 		app, _, keyCache := setupTestApp(t, "file:TestCreateUser_MissingEmail?mode=memory&cache=private")
-		testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+		testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 		req := httptest.NewRequest("POST", "/api/v1/users", bodyJSON(t, map[string]any{
 			"display_name": "No Email",
@@ -88,7 +88,7 @@ func TestCreateUser(t *testing.T) {
 		t.Parallel()
 
 		app, _, keyCache := setupTestApp(t, "file:TestCreateUser_ShortPassword?mode=memory&cache=private")
-		testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+		testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 		req := httptest.NewRequest("POST", "/api/v1/users", bodyJSON(t, map[string]any{
 			"email":        "shortpwd@example.com",
@@ -138,7 +138,7 @@ func TestCreateUser_DuplicateEmail(t *testing.T) {
 	t.Parallel()
 
 	app, database, keyCache := setupTestApp(t, "file:TestCreateUser_DupEmail?mode=memory&cache=private")
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 	mustCreateUser(t, database, "existing@example.com", "Existing User")
 
 	req := httptest.NewRequest("POST", "/api/v1/users", bodyJSON(t, map[string]any{
@@ -165,7 +165,7 @@ func TestCreateUser_ResponseHasNoPassword(t *testing.T) {
 	t.Parallel()
 
 	app, _, keyCache := setupTestApp(t, "file:TestCreateUser_ResponseNoPwd?mode=memory&cache=private")
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	req := httptest.NewRequest("POST", "/api/v1/users", bodyJSON(t, map[string]any{
 		"email":        "nopwdresp@example.com",
@@ -203,7 +203,7 @@ func TestCreateUser_PasswordTooLong(t *testing.T) {
 	t.Parallel()
 
 	app, _, keyCache := setupTestApp(t, "file:TestCreateUser_PwdTooLong?mode=memory&cache=private")
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	tooLongPwd := strings.Repeat("a", 73)
 	req := httptest.NewRequest("POST", "/api/v1/users", bodyJSON(t, map[string]any{
@@ -232,7 +232,7 @@ func TestGetUser(t *testing.T) {
 	t.Parallel()
 
 	app, database, keyCache := setupTestApp(t, "file:TestGetUser?mode=memory&cache=private")
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 	user := mustCreateUser(t, database, "getuser@example.com", "Get User")
 
 	t.Run("system_admin gets user returns 200", func(t *testing.T) {
@@ -272,7 +272,7 @@ func TestListUsers(t *testing.T) {
 	t.Parallel()
 
 	app, database, keyCache := setupTestApp(t, "file:TestListUsers?mode=memory&cache=private")
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 	mustCreateUser(t, database, "listuser1@example.com", "List User 1")
 	mustCreateUser(t, database, "listuser2@example.com", "List User 2")
 
@@ -307,7 +307,7 @@ func TestUpdateUser(t *testing.T) {
 	t.Parallel()
 
 	app, database, keyCache := setupTestApp(t, "file:TestUpdateUser?mode=memory&cache=private")
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 	user := mustCreateUser(t, database, "updateuser@example.com", "Update User")
 
 	t.Run("system_admin updates user returns 200", func(t *testing.T) {
@@ -353,7 +353,7 @@ func TestDeleteUser(t *testing.T) {
 	t.Parallel()
 
 	app, database, keyCache := setupTestApp(t, "file:TestDeleteUser?mode=memory&cache=private")
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 	user := mustCreateUser(t, database, "deleteuser@example.com", "Delete User")
 
 	t.Run("system_admin deletes user returns 204", func(t *testing.T) {

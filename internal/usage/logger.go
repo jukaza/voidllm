@@ -115,7 +115,7 @@ func (l *Logger) Log(event Event) {
 	// Increment the in-memory token counter immediately so that subsequent
 	// CheckTokens calls reflect this request even before it reaches the DB.
 	if l.tokenCounter != nil && event.TotalTokens > 0 {
-		l.tokenCounter.Add(event.KeyID, event.TeamID, event.OrgID, int64(event.TotalTokens))
+		l.tokenCounter.Add(event.KeyID, int64(event.TotalTokens))
 	}
 
 	// Reduce the in-memory wallet balance immediately so that subsequent
@@ -215,16 +215,15 @@ func (l *Logger) flush(events []Event) error {
 	p := l.database.Dialect().Placeholder
 
 	query := "INSERT INTO usage_events " +
-		"(id, key_id, key_type, org_id, team_id, user_id, service_account_id, " +
+		"(id, key_id, key_type, user_id, " +
 		"model_name, prompt_tokens, completion_tokens, total_tokens, " +
 		"cost_estimate, request_duration_ms, ttft_ms, tokens_per_second, status_code, request_id, " +
 		"requested_model_name, cached_tokens, revenue, deployment_id) " +
 		"VALUES (" +
 		p(1) + ", " + p(2) + ", " + p(3) + ", " + p(4) + ", " +
 		p(5) + ", " + p(6) + ", " + p(7) + ", " + p(8) + ", " +
-		p(9) + ", " + p(10) + ", " + p(11) + ", " +
-		p(12) + ", " + p(13) + ", " + p(14) + ", " + p(15) + ", " + p(16) + ", " + p(17) + ", " +
-		p(18) + ", " + p(19) + ", " + p(20) + ", " + p(21) + ")"
+		p(9) + ", " + p(10) + ", " + p(11) + ", " + p(12) + ", " + p(13) + ", " + p(14) + ", " +
+		p(15) + ", " + p(16) + ", " + p(17) + ", " + p(18) + ")"
 
 	ctx := context.Background()
 
@@ -235,18 +234,13 @@ func (l *Logger) flush(events []Event) error {
 				return fmt.Errorf("usage flush: generate id: %w", err)
 			}
 
-			teamID := nullableString(ev.TeamID)
 			userID := nullableString(ev.UserID)
-			saID := nullableString(ev.ServiceAccountID)
 
 			_, err = q.ExecContext(ctx, query,
 				id.String(),
 				ev.KeyID,
 				ev.KeyType,
-				ev.OrgID,
-				teamID,
 				userID,
-				saID,
 				ev.ModelName,
 				ev.PromptTokens,
 				ev.CompletionTokens,
@@ -297,8 +291,6 @@ func (l *Logger) flush(events []Event) error {
 		r, exists := rollups[key]
 		if !exists {
 			r = &db.HourlyRollup{
-				OrgID:      ev.OrgID,
-				TeamID:     ev.TeamID,
 				UserID:     ev.UserID,
 				KeyID:      ev.KeyID,
 				ModelName:  ev.ModelName,

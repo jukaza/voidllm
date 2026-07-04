@@ -16,7 +16,7 @@ import (
 
 func TestProviderConnections_CRUD(t *testing.T) {
 	app, database, keyCache := setupTestAppWithEncKey(t, "file:provider-conn-api?mode=memory&cache=private")
-	adminKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	adminKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	prov, err := database.CreateProvider(context.Background(), db.CreateProviderParams{Name: "OpenAI Test", Status: "active"})
 	if err != nil {
@@ -109,7 +109,7 @@ func TestProviderConnections_CRUD(t *testing.T) {
 
 func TestProviderConnections_BulkCreate(t *testing.T) {
 	app, database, keyCache := setupTestAppWithEncKey(t, "file:provider-bulk?mode=memory&cache=private")
-	adminKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	adminKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	prov, err := database.CreateProvider(context.Background(), db.CreateProviderParams{Name: "Bulk Test", Status: "active"})
 	if err != nil {
@@ -144,7 +144,7 @@ func TestProviderConnections_BulkCreate(t *testing.T) {
 
 func TestProviderUpstreamModels_CRUD(t *testing.T) {
 	app, database, keyCache := setupTestAppWithEncKey(t, "file:upstream-api?mode=memory&cache=private")
-	adminKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	adminKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	prov, err := database.CreateProvider(context.Background(), db.CreateProviderParams{Name: "Upstream Test", Status: "active"})
 	if err != nil {

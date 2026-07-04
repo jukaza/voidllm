@@ -134,6 +134,17 @@ func Bootstrap(ctx context.Context, sqlDB *sql.DB, dialect db.Dialect,
 		return nil, fmt.Errorf("bootstrap: insert api key: %w", err)
 	}
 
+	walletID, err := uuid.NewV7()
+	if err != nil {
+		return nil, fmt.Errorf("bootstrap: generate wallet id: %w", err)
+	}
+	insertWallet := "INSERT INTO wallets (id, user_id, balance, currency, created_at, updated_at) VALUES (" +
+		dialect.Placeholder(1) + ", " + dialect.Placeholder(2) + ", 0, " + dialect.Placeholder(3) +
+		", CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+	if _, err = tx.ExecContext(ctx, insertWallet, walletID.String(), userID.String(), "USD"); err != nil {
+		return nil, fmt.Errorf("bootstrap: insert wallet: %w", err)
+	}
+
 	if err = tx.Commit(); err != nil {
 		return nil, fmt.Errorf("bootstrap: commit transaction: %w", err)
 	}
@@ -148,7 +159,7 @@ func Bootstrap(ctx context.Context, sqlDB *sql.DB, dialect db.Dialect,
 
 	os.Unsetenv("VOIDLLM_ADMIN_KEY")
 
-	log.Warn("bootstrap complete, default organization and system admin created",
+	log.Warn("bootstrap complete, system admin and wallet created",
 		slog.String("key_hint", keyHint))
 
 	return &BootstrapResult{

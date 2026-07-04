@@ -380,17 +380,4 @@ func TestResolveGroupLabels_AllResolvableDimensions(t *testing.T) {
 	}
 }
 
-func TestResolveOrgActorLabels(t *testing.T) {
-	t.Parallel()
 
-	d := openMigratedDB(t)
-	user := mustCreateUser(t, d, CreateUserParams{Email: "actor@example.com", DisplayName: "Actor Display"})
-
-	got, err := d.ResolveOrgActorLabels(context.Background(), "mock-org-id", []string{user.ID}, nil)
-	if err != nil {
-		t.Fatalf("ResolveOrgActorLabels error = %v, want nil", err)
-	}
-	if got[user.ID] != "Actor Display" {
-		t.Errorf("label = %q, want %q", got[user.ID], "Actor Display")
-	}
-}

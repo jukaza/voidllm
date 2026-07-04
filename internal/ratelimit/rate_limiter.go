@@ -10,23 +10,18 @@ import (
 // ErrRateLimitExceeded is returned by CheckRate when a rate limit is exceeded.
 var ErrRateLimitExceeded = errors.New("rate limit exceeded")
 
-// counterEntry holds an atomic request counter and the start of its current
-// sliding window, both stored as Unix seconds. mu is held only during the
-// window rollover path; the common case (same window) is entirely lock-free.
 type counterEntry struct {
 	count       atomic.Int64
 	windowStart atomic.Int64
 	mu          sync.Mutex
 }
 
-// Compile-time assertion: RateLimiter must implement Checker.
 var _ Checker = (*RateLimiter)(nil)
 
-// RateLimiter enforces requests-per-minute and requests-per-day limits using
-// in-memory atomic counters. It never calls the database.
+// RateLimiter enforces per-key RPM/RPD limits using in-memory atomic counters.
 type RateLimiter struct {
-	minuteCounters sync.Map // scope string → *counterEntry
-	dayCounters    sync.Map // scope string → *counterEntry
+	minuteCounters sync.Map
+	dayCounters    sync.Map
 }
 
 // NewRateLimiter constructs a RateLimiter ready for use.
@@ -34,65 +29,39 @@ func NewRateLimiter() *RateLimiter {
 	return &RateLimiter{}
 }
 
-// scopeLimits pairs a counter scope with the rate limits that apply to it.
-type scopeLimits struct {
-	scope string
-	rpm   int
-	rpd   int
-}
-
-// CheckRate verifies rate limits for the key, team (if non-empty), and org
-// scopes. Each scope is checked against its own limits independently; a request
-// must pass all scopes, so the most restrictive limit in the hierarchy
-// effectively wins. Counters are incremented atomically on success via a CAS
-// loop. Scopes already incremented when a later scope fails are not rolled back
-// — the over-count by 1 is self-correcting at the next window reset.
-// Returns ErrRateLimitExceeded if any limit is exceeded.
-func (r *RateLimiter) CheckRate(keyID, teamID, orgID string, keyLimits, teamLimits, orgLimits Limits) error {
+// CheckRate verifies rate limits for the API key scope.
+func (r *RateLimiter) CheckRate(keyID string, keyLimits Limits) error {
 	now := time.Now().UTC()
 	minuteWindow := now.Truncate(time.Minute).Unix()
 	dayWindow := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC).Unix()
 
-	checks := make([]scopeLimits, 0, 3)
-	checks = append(checks, scopeLimits{
-		scope: "key:" + keyID,
-		rpm:   keyLimits.RequestsPerMinute,
-		rpd:   keyLimits.RequestsPerDay,
-	})
-	if teamID != "" {
-		checks = append(checks, scopeLimits{
-			scope: "team:" + teamID,
-			rpm:   teamLimits.RequestsPerMinute,
-			rpd:   teamLimits.RequestsPerDay,
-		})
-	}
-	checks = append(checks, scopeLimits{
-		scope: "org:" + orgID,
-		rpm:   orgLimits.RequestsPerMinute,
-		rpd:   orgLimits.RequestsPerDay,
-	})
+	scope := "key:" + keyID
 
-	for _, c := range checks {
-		if c.rpm > 0 {
-			entry := r.loadOrCreate(&r.minuteCounters, c.scope)
-			if !r.tryIncrement(entry, minuteWindow, int64(c.rpm)) {
-				return ErrRateLimitExceeded
-			}
-		}
-		if c.rpd > 0 {
-			entry := r.loadOrCreate(&r.dayCounters, c.scope)
-			if !r.tryIncrement(entry, dayWindow, int64(c.rpd)) {
-				return ErrRateLimitExceeded
-			}
+	if keyLimits.RequestsPerMinute > 0 {
+		entry := r.loadOrCreate(&r.minuteCounters, scope)
+		if !r.tryIncrement(entry, minuteWindow, int64(keyLimits.RequestsPerMinute)) {
+			return ErrRateLimitExceeded
 		}
 	}
-
+	if keyLimits.RequestsPerDay > 0 {
+		entry := r.loadOrCreate(&r.dayCounters, scope)
+		if !r.tryIncrement(entry, dayWindow, int64(keyLimits.RequestsPerDay)) {
+			return ErrRateLimitExceeded
+		}
+	}
 	return nil
 }
 
-// EvictStale removes counter entries whose window has expired. It should be
-// called periodically (e.g. every 5 minutes) to reclaim memory for keys that
-// are no longer active.
+func (r *RateLimiter) loadOrCreate(m *sync.Map, scope string) *counterEntry {
+	if v, ok := m.Load(scope); ok {
+		return v.(*counterEntry)
+	}
+	entry := &counterEntry{}
+	actual, _ := m.LoadOrStore(scope, entry)
+	return actual.(*counterEntry)
+}
+
+// EvictStale removes counter entries whose window has expired.
 func (r *RateLimiter) EvictStale() {
 	now := time.Now().UTC()
 	minuteWindow := now.Truncate(time.Minute).Unix()
@@ -112,33 +81,10 @@ func (r *RateLimiter) EvictStale() {
 	})
 }
 
-// loadOrCreate retrieves an existing counterEntry for the given scope key, or
-// stores and returns a newly allocated one. The sync.Map value is always a
-// *counterEntry.
-func (r *RateLimiter) loadOrCreate(m *sync.Map, scope string) *counterEntry {
-	if v, ok := m.Load(scope); ok {
-		return v.(*counterEntry)
-	}
-	entry := &counterEntry{}
-	actual, _ := m.LoadOrStore(scope, entry)
-	return actual.(*counterEntry)
-}
-
-// tryIncrement atomically checks the limit and increments the counter using a
-// CAS loop. Returns true if the request is allowed, false if the limit is
-// exceeded.
-//
-// The common path (same window) is entirely lock-free: it reads the current
-// count and CAS-increments it. The rollover path takes entry.mu to ensure that
-// windowStart and count are updated atomically with respect to other rollovers
-// — without the lock a goroutine that wins the windowStart CAS can have its
-// count.Store(1) overwritten by a second goroutine that wins the count CAS
-// before the Store completes.
 func (r *RateLimiter) tryIncrement(entry *counterEntry, currentWindow int64, limit int64) bool {
 	for {
 		stored := entry.windowStart.Load()
 		if stored == currentWindow {
-			// Same window — lock-free CAS increment.
 			cur := entry.count.Load()
 			if cur >= limit {
 				return false
@@ -146,22 +92,16 @@ func (r *RateLimiter) tryIncrement(entry *counterEntry, currentWindow int64, lim
 			if entry.count.CompareAndSwap(cur, cur+1) {
 				return true
 			}
-			// A concurrent increment raced with us; retry.
 			continue
 		}
 
-		// Window has rolled over — take the lock so that windowStart and the
-		// reset count are updated as a single visible transition.
 		entry.mu.Lock()
 		if entry.windowStart.Load() != currentWindow {
-			// We are still the first to roll over inside the lock.
 			entry.windowStart.Store(currentWindow)
 			entry.count.Store(1)
 			entry.mu.Unlock()
 			return true
 		}
-		// Another goroutine already rolled the window while we were acquiring
-		// the lock. Fall through to the same-window path.
 		entry.mu.Unlock()
 	}
 }

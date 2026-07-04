@@ -111,7 +111,7 @@ func (d *DB) CreateUser(ctx context.Context, params CreateUserParams) (*User, er
 // CreateUserWithMembership creates a user and an organization membership
 // atomically within a single transaction. orgID must be non-empty; every user
 // belongs to exactly one organization. role is the org membership role
-// (e.g. "member", "team_admin", "org_admin").
+// (e.g. "member", "system_admin").
 //
 // Returns ErrConflict if the email is already taken.
 // Returns ErrForeignKey if orgID does not reference an existing organization,

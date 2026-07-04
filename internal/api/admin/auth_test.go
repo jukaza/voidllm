@@ -9,45 +9,8 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
-	"golang.org/x/crypto/bcrypt"
-
-	"github.com/voidmind-io/voidllm/internal/auth"
 	"github.com/voidmind-io/voidllm/internal/db"
 )
-
-// mustCreateUserWithPassword creates a user with a known bcrypt password hash
-// and fatals the test on error. Returns the created user.
-func mustCreateUserWithPassword(t *testing.T, database *db.DB, email, displayName, password string) *db.User {
-	t.Helper()
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.MinCost)
-	if err != nil {
-		t.Fatalf("bcrypt.GenerateFromPassword: %v", err)
-	}
-	h := string(hash)
-	user, err := database.CreateUser(context.Background(), db.CreateUserParams{
-		Email:        email,
-		DisplayName:  displayName,
-		PasswordHash: &h,
-	})
-	if err != nil {
-		t.Fatalf("mustCreateUserWithPassword(%q): %v", email, err)
-	}
-	return user
-}
-
-// mustCreateOrgMembership creates an org membership for the given user/org/role,
-// fataling the test on error.
-func mustCreateOrgMembership(t *testing.T, database *db.DB, orgID, userID, role string) {
-	t.Helper()
-	_, err := database.CreateOrgMembership(context.Background(), db.CreateOrgMembershipParams{
-		OrgID:  orgID,
-		UserID: userID,
-		Role:   role,
-	})
-	if err != nil {
-		t.Fatalf("mustCreateOrgMembership(org=%q, user=%q, role=%q): %v", orgID, userID, role, err)
-	}
-}
 
 // ---- POST /api/v1/auth/login -------------------------------------------------
 
@@ -143,29 +106,18 @@ func TestLogin(t *testing.T) {
 			dsn := fmt.Sprintf("file:TestLogin_%s?mode=memory&cache=private", strings.ReplaceAll(tc.name, " ", "_"))
 			app, database, _ := setupTestApp(t, dsn)
 
-			// For every case that sends a valid/existing email we need to set up
-			// a real user + org + membership so resolveSessionRole succeeds.
 			if bodyMap, ok := tc.body.(map[string]any); ok {
 				email, _ := bodyMap["email"].(string)
 				pwd, _ := bodyMap["password"].(string)
 
 				switch email {
 				case "login-ok@example.com", "login-exp@example.com":
-					org := mustCreateOrg(t, database, "Login Test Org", slugFor(tc.name))
-					user := mustCreateUserWithPassword(t, database, email, "Login User", testPassword)
-					mustCreateOrgMembership(t, database, org.ID, user.ID, auth.RoleOrgAdmin)
+					mustCreateUserWithPassword(t, database, email, "Login User", testPassword, true)
 				case "login-wp@example.com":
-					// User exists but test sends wrong password.
-					org := mustCreateOrg(t, database, "Login Test Org", slugFor(tc.name))
-					user := mustCreateUserWithPassword(t, database, email, "Login User WP", testPassword)
-					mustCreateOrgMembership(t, database, org.ID, user.ID, auth.RoleMember)
-					_ = pwd // unused — test sends a different password in the body
+					mustCreateUserWithPassword(t, database, email, "Login User WP", testPassword, false)
+					_ = pwd
 				case "login-ep@example.com", "login-mp@example.com":
-					// User exists but request is invalid before DB is reached; still
-					// create the row so we don't accidentally get 401 instead of 400.
-					org := mustCreateOrg(t, database, "Login Test Org", slugFor(tc.name))
-					user := mustCreateUserWithPassword(t, database, email, "Login User EP", testPassword)
-					mustCreateOrgMembership(t, database, org.ID, user.ID, auth.RoleMember)
+					mustCreateUserWithPassword(t, database, email, "Login User EP", testPassword, false)
 				}
 			}
 
@@ -204,9 +156,7 @@ func TestLogin_PublicEndpoint(t *testing.T) {
 
 	app, database, _ := setupTestApp(t, "file:TestLogin_Public?mode=memory&cache=private")
 
-	org := mustCreateOrg(t, database, "Public Login Org", "public-login-org")
-	user := mustCreateUserWithPassword(t, database, "public@example.com", "Public User", "secret123")
-	mustCreateOrgMembership(t, database, org.ID, user.ID, auth.RoleOrgAdmin)
+	mustCreateUserWithPassword(t, database, "public@example.com", "Public User", "secret123", true)
 
 	req := httptest.NewRequest("POST", "/api/v1/auth/login",
 		bodyJSON(t, map[string]any{"email": "public@example.com", "password": "secret123"}))
@@ -232,9 +182,7 @@ func TestLogin_TokenWorks(t *testing.T) {
 
 	app, database, _ := setupTestApp(t, "file:TestLogin_TokenWorks?mode=memory&cache=private")
 
-	org := mustCreateOrg(t, database, "Token Works Org", "token-works-org")
-	user := mustCreateUserWithPassword(t, database, "tokenworks@example.com", "Token Works User", "mypassword99")
-	mustCreateOrgMembership(t, database, org.ID, user.ID, auth.RoleOrgAdmin)
+	mustCreateUserWithPassword(t, database, "tokenworks@example.com", "Token Works User", "mypassword99", true)
 
 	// Step 1: log in to obtain a session token.
 	loginReq := httptest.NewRequest("POST", "/api/v1/auth/login",

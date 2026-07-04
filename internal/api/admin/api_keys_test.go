@@ -15,7 +15,7 @@ func TestCreateAPIKey(t *testing.T) {
 
 	app, database, keyCache := setupTestApp(t, "file:TestCreateAPIKey?mode=memory&cache=private")
 	user := mustCreateUser(t, database, "creator@example.com", "Creator")
-	testKey := addTestKeyWithUser(t, keyCache, auth.RoleMember, "", user.ID)
+	testKey := addTestKeyWithUser(t, keyCache, auth.RoleMember, user.ID)
 
 	body := map[string]any{
 		"name":     "My User Key",
@@ -50,7 +50,7 @@ func TestGetAPIKey(t *testing.T) {
 
 	app, database, keyCache := setupTestApp(t, "file:TestGetAPIKey?mode=memory&cache=private")
 	user := mustCreateUser(t, database, "getter@example.com", "Getter")
-	testKey := addTestKeyWithUser(t, keyCache, auth.RoleMember, "", user.ID)
+	testKey := addTestKeyWithUser(t, keyCache, auth.RoleMember, user.ID)
 
 	body := map[string]any{
 		"name":     "Fetch Me",
@@ -88,7 +88,7 @@ func TestDeleteAPIKey(t *testing.T) {
 
 	app, database, keyCache := setupTestApp(t, "file:TestDeleteAPIKey?mode=memory&cache=private")
 	user := mustCreateUser(t, database, "deleter@example.com", "Deleter")
-	testKey := addTestKeyWithUser(t, keyCache, auth.RoleMember, "", user.ID)
+	testKey := addTestKeyWithUser(t, keyCache, auth.RoleMember, user.ID)
 
 	body := map[string]any{
 		"name":     "Delete Me",

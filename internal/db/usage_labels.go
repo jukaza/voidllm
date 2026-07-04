@@ -13,14 +13,14 @@ const labelResolveChunkSize = 500
 
 // ResolveGroupLabels returns a map from entity ID to a human-readable display
 // label for the given usage groupBy dimension. The resolvable dimensions are
-// "key", "user", "team", "org", and "service_account"; for any other dimension
+// "key" and "user"; for any other dimension
 // (model/day/hour/server/tool/status/"") it returns an empty, non-nil map.
 // Soft-deleted rows are intentionally included so historical usage still resolves
 // to a name. IDs not found are simply absent from the returned map.
 //
 // This is an UNSCOPED global lookup by id. Callers MUST pass only IDs already
 // constrained to the caller's authorized scope — this function does not enforce
-// tenant or org boundaries itself.
+// tenant boundaries itself.
 func (d *DB) ResolveGroupLabels(ctx context.Context, groupBy string, ids []string) (map[string]string, error) {
 	if len(ids) == 0 {
 		return map[string]string{}, nil
@@ -35,7 +35,7 @@ func (d *DB) ResolveGroupLabels(ctx context.Context, groupBy string, ids []strin
 		table = "users"
 		labelExpr = "display_name"
 	default:
-		// Non-resolvable or deprecated B2B dimension (team, org, service_account, model, day, hour, server, tool, status, "").
+		// Non-resolvable dimension (model, day, hour, "").
 		return map[string]string{}, nil
 	}
 
@@ -66,36 +66,6 @@ func (d *DB) ResolveGroupLabels(ctx context.Context, groupBy string, ids []strin
 			" WHERE id IN (" + strings.Join(placeholders, ", ") + ")"
 
 		if err := d.queryLabelsInto(ctx, result, "ResolveGroupLabels "+groupBy, query, args...); err != nil {
-			return nil, err
-		}
-	}
-
-	return result, nil
-}
-
-func (d *DB) ResolveOrgActorLabels(ctx context.Context, orgID string, userIDs, saIDs []string) (map[string]string, error) {
-	result := make(map[string]string)
-
-	filteredUsers := deduplicateIDs(userIDs)
-	for start := 0; start < len(filteredUsers); start += labelResolveChunkSize {
-		end := start + labelResolveChunkSize
-		if end > len(filteredUsers) {
-			end = len(filteredUsers)
-		}
-		chunk := filteredUsers[start:end]
-
-		placeholders := make([]string, len(chunk))
-		args := make([]any, len(chunk))
-		for i, id := range chunk {
-			placeholders[i] = d.dialect.Placeholder(i + 1)
-			args[i] = id
-		}
-
-		query := "SELECT u.id, u.display_name" +
-			" FROM users u" +
-			" WHERE u.id IN (" + strings.Join(placeholders, ", ") + ")"
-
-		if err := d.queryLabelsInto(ctx, result, "ResolveOrgActorLabels", query, args...); err != nil {
 			return nil, err
 		}
 	}

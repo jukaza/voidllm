@@ -141,25 +141,25 @@ func TestDeleteAPIKey(t *testing.T) {
 	}
 }
 
-func TestGetUserOrgRole(t *testing.T) {
+func TestGetUserRole(t *testing.T) {
 	t.Parallel()
 	d := openMigratedDB(t)
 	user := mustCreateUser(t, d, CreateUserParams{Email: "role@example.com", DisplayName: "R"})
 
-	role, err := d.GetUserOrgRole(context.Background(), user.ID, "")
+	role, err := d.GetUserRole(context.Background(), user.ID)
 	if err != nil {
-		t.Fatalf("GetUserOrgRole failed: %v", err)
+		t.Fatalf("GetUserRole failed: %v", err)
 	}
 	if role != "member" {
-		t.Errorf("GetUserOrgRole = %q, want %q", role, "member")
+		t.Errorf("GetUserRole = %q, want %q", role, "member")
 	}
 
 	adminUser := mustCreateUser(t, d, CreateUserParams{Email: "roleadmin@example.com", DisplayName: "RA", IsSystemAdmin: true})
-	adminRole, err := d.GetUserOrgRole(context.Background(), adminUser.ID, "")
+	adminRole, err := d.GetUserRole(context.Background(), adminUser.ID)
 	if err != nil {
-		t.Fatalf("GetUserOrgRole failed for admin: %v", err)
+		t.Fatalf("GetUserRole failed for admin: %v", err)
 	}
 	if adminRole != "system_admin" {
-		t.Errorf("GetUserOrgRole admin = %q, want %q", adminRole, "system_admin")
+		t.Errorf("GetUserRole admin = %q, want %q", adminRole, "system_admin")
 	}
 }

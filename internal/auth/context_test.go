@@ -41,7 +41,7 @@ func TestKeyInfoFromCtx_AfterMiddleware(t *testing.T) {
 	want := KeyInfo{
 		ID:                "ctx-key-001",
 		KeyType:           keygen.KeyTypeUser,
-		Role:              RoleOrgAdmin,
+		Role:              RoleSystemAdmin,
 		UserID:            "user-ctx",
 		Name:              "context test key",
 		DailyTokenLimit:   1000,

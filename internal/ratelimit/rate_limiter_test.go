@@ -24,7 +24,7 @@ func TestCheckRate_ZeroLimitsAlwaysAllowed(t *testing.T) {
 	unlimited := Limits{}
 
 	for i := range 100 {
-		if err := rl.CheckRate("key1", "team1", "org1", unlimited, unlimited, unlimited); err != nil {
+		if err := rl.CheckRate("key1", unlimited); err != nil {
 			t.Fatalf("iteration %d: CheckRate() with zero limits error = %v, want nil", i, err)
 		}
 	}
@@ -35,10 +35,9 @@ func TestCheckRate_WithinRPMLimit(t *testing.T) {
 
 	rl := NewRateLimiter()
 	keyLimits := Limits{RequestsPerMinute: 10}
-	noLimits := Limits{}
 
 	for i := range 10 {
-		if err := rl.CheckRate("key-rpm-ok", "", "org-rpm-ok", keyLimits, noLimits, noLimits); err != nil {
+		if err := rl.CheckRate("key-rpm-ok", keyLimits); err != nil {
 			t.Fatalf("request %d: CheckRate() error = %v, want nil", i+1, err)
 		}
 	}
@@ -49,17 +48,14 @@ func TestCheckRate_ExceedingRPMLimit(t *testing.T) {
 
 	rl := NewRateLimiter()
 	keyLimits := Limits{RequestsPerMinute: 3}
-	noLimits := Limits{}
 
-	// First 3 requests must succeed.
 	for i := range 3 {
-		if err := rl.CheckRate("key-rpm-exceed", "", "org-rpm-exceed", keyLimits, noLimits, noLimits); err != nil {
+		if err := rl.CheckRate("key-rpm-exceed", keyLimits); err != nil {
 			t.Fatalf("request %d: CheckRate() error = %v, want nil", i+1, err)
 		}
 	}
 
-	// 4th request must fail.
-	err := rl.CheckRate("key-rpm-exceed", "", "org-rpm-exceed", keyLimits, noLimits, noLimits)
+	err := rl.CheckRate("key-rpm-exceed", keyLimits)
 	if !errors.Is(err, ErrRateLimitExceeded) {
 		t.Errorf("4th CheckRate() error = %v, want ErrRateLimitExceeded", err)
 	}
@@ -70,10 +66,9 @@ func TestCheckRate_WithinRPDLimit(t *testing.T) {
 
 	rl := NewRateLimiter()
 	keyLimits := Limits{RequestsPerDay: 5}
-	noLimits := Limits{}
 
 	for i := range 5 {
-		if err := rl.CheckRate("key-rpd-ok", "", "org-rpd-ok", keyLimits, noLimits, noLimits); err != nil {
+		if err := rl.CheckRate("key-rpd-ok", keyLimits); err != nil {
 			t.Fatalf("request %d: CheckRate() error = %v, want nil", i+1, err)
 		}
 	}
@@ -84,138 +79,30 @@ func TestCheckRate_ExceedingRPDLimit(t *testing.T) {
 
 	rl := NewRateLimiter()
 	keyLimits := Limits{RequestsPerDay: 2}
-	noLimits := Limits{}
 
 	for i := range 2 {
-		if err := rl.CheckRate("key-rpd-exceed", "", "org-rpd-exceed", keyLimits, noLimits, noLimits); err != nil {
+		if err := rl.CheckRate("key-rpd-exceed", keyLimits); err != nil {
 			t.Fatalf("request %d: CheckRate() error = %v, want nil", i+1, err)
 		}
 	}
 
-	err := rl.CheckRate("key-rpd-exceed", "", "org-rpd-exceed", keyLimits, noLimits, noLimits)
+	err := rl.CheckRate("key-rpd-exceed", keyLimits)
 	if !errors.Is(err, ErrRateLimitExceeded) {
 		t.Errorf("3rd CheckRate() error = %v, want ErrRateLimitExceeded", err)
-	}
-}
-
-func TestCheckRate_OrgLimitSharedAcrossKeys(t *testing.T) {
-	t.Parallel()
-
-	rl := NewRateLimiter()
-	noLimits := Limits{}
-	orgLimits := Limits{RequestsPerMinute: 8}
-
-	// Key A and Key B share the same org. Key limits are unlimited but org RPM=8.
-	// After 8 total requests the org counter is exhausted.
-	sharedOrg := "shared-org-rpm"
-	keyA := "key-a-shared-org"
-	keyB := "key-b-shared-org"
-
-	var failCount int
-	for i := range 10 {
-		key := keyA
-		if i%2 == 1 {
-			key = keyB
-		}
-		err := rl.CheckRate(key, "", sharedOrg, noLimits, noLimits, orgLimits)
-		if err != nil {
-			if !errors.Is(err, ErrRateLimitExceeded) {
-				t.Fatalf("request %d: unexpected error %v", i+1, err)
-			}
-			failCount++
-		}
-	}
-
-	if failCount == 0 {
-		t.Error("expected at least one failure due to shared org RPM=8 across 10 requests, got none")
-	}
-	if failCount != 2 {
-		t.Errorf("expected 2 failures (requests 9 and 10), got %d", failCount)
-	}
-}
-
-func TestCheckRate_TeamLimitCheckedAlongside(t *testing.T) {
-	t.Parallel()
-
-	rl := NewRateLimiter()
-	noLimits := Limits{}
-	teamLimits := Limits{RequestsPerMinute: 4}
-
-	// Key limit is generous, team limit is 4.
-	keyLimits := Limits{RequestsPerMinute: 100}
-
-	for i := range 4 {
-		if err := rl.CheckRate("key-team-lim", "team-lim", "org-team-lim", keyLimits, teamLimits, noLimits); err != nil {
-			t.Fatalf("request %d: CheckRate() error = %v, want nil", i+1, err)
-		}
-	}
-
-	err := rl.CheckRate("key-team-lim", "team-lim", "org-team-lim", keyLimits, teamLimits, noLimits)
-	if !errors.Is(err, ErrRateLimitExceeded) {
-		t.Errorf("5th CheckRate() error = %v, want ErrRateLimitExceeded", err)
-	}
-}
-
-func TestCheckRate_MostRestrictiveWins_KeyRPM10_OrgRPM3(t *testing.T) {
-	t.Parallel()
-
-	rl := NewRateLimiter()
-	keyLimits := Limits{RequestsPerMinute: 10}
-	noLimits := Limits{}
-	orgLimits := Limits{RequestsPerMinute: 3}
-
-	// Key RPM=10 (not the bottleneck); org RPM=3 (org counter hits its limit of 3). 4th request must fail.
-	for i := range 3 {
-		if err := rl.CheckRate("key-mrw", "", "org-mrw", keyLimits, noLimits, orgLimits); err != nil {
-			t.Fatalf("request %d: CheckRate() error = %v, want nil", i+1, err)
-		}
-	}
-
-	err := rl.CheckRate("key-mrw", "", "org-mrw", keyLimits, noLimits, orgLimits)
-	if !errors.Is(err, ErrRateLimitExceeded) {
-		t.Errorf("4th CheckRate() error = %v, want ErrRateLimitExceeded", err)
-	}
-}
-
-func TestCheckRate_EmptyTeamIDNoTeamCounter(t *testing.T) {
-	t.Parallel()
-
-	// When teamID is empty no team-scoped counter should be created. This test
-	// verifies that a non-empty teamID and an empty teamID do not share counters.
-	rl := NewRateLimiter()
-	noLimits := Limits{}
-	keyLimits := Limits{RequestsPerMinute: 5}
-
-	// Use 5 requests with empty team (burns 5 slots for the key scope).
-	for range 5 {
-		if err := rl.CheckRate("key-no-team", "", "org-no-team", keyLimits, noLimits, noLimits); err != nil {
-			t.Fatal("unexpected error during setup requests")
-		}
-	}
-
-	// 6th request on the same key (no team) must fail because key RPM=5.
-	err := rl.CheckRate("key-no-team", "", "org-no-team", keyLimits, noLimits, noLimits)
-	if !errors.Is(err, ErrRateLimitExceeded) {
-		t.Errorf("6th CheckRate() (empty teamID) error = %v, want ErrRateLimitExceeded", err)
 	}
 }
 
 func TestCheckRate_CountersNotIncrementedOnFailure(t *testing.T) {
 	t.Parallel()
 
-	// When CheckRate returns ErrRateLimitExceeded the counters must not be
-	// incremented, so the next successful window still has the full budget.
 	rl := NewRateLimiter()
 	keyLimits := Limits{RequestsPerMinute: 2}
-	noLimits := Limits{}
 
-	// Exhaust the budget.
-	_ = rl.CheckRate("key-no-incr", "", "org-no-incr", keyLimits, noLimits, noLimits)
-	_ = rl.CheckRate("key-no-incr", "", "org-no-incr", keyLimits, noLimits, noLimits)
+	_ = rl.CheckRate("key-no-incr", keyLimits)
+	_ = rl.CheckRate("key-no-incr", keyLimits)
 
-	// These calls should all fail without incrementing.
 	for i := range 5 {
-		err := rl.CheckRate("key-no-incr", "", "org-no-incr", keyLimits, noLimits, noLimits)
+		err := rl.CheckRate("key-no-incr", keyLimits)
 		if !errors.Is(err, ErrRateLimitExceeded) {
 			t.Errorf("rejected call %d: error = %v, want ErrRateLimitExceeded", i+1, err)
 		}
@@ -226,17 +113,15 @@ func TestCheckRate_RPMAndRPDIndependent(t *testing.T) {
 	t.Parallel()
 
 	rl := NewRateLimiter()
-	// RPM=3 and RPD=10 — RPM should trigger before RPD.
 	keyLimits := Limits{RequestsPerMinute: 3, RequestsPerDay: 10}
-	noLimits := Limits{}
 
 	for i := range 3 {
-		if err := rl.CheckRate("key-both-limits", "", "org-both-limits", keyLimits, noLimits, noLimits); err != nil {
+		if err := rl.CheckRate("key-both-limits", keyLimits); err != nil {
 			t.Fatalf("request %d: CheckRate() error = %v, want nil", i+1, err)
 		}
 	}
 
-	err := rl.CheckRate("key-both-limits", "", "org-both-limits", keyLimits, noLimits, noLimits)
+	err := rl.CheckRate("key-both-limits", keyLimits)
 	if !errors.Is(err, ErrRateLimitExceeded) {
 		t.Errorf("4th CheckRate() error = %v, want ErrRateLimitExceeded (expected RPM block)", err)
 	}
@@ -247,34 +132,27 @@ func TestCheckRate_UniqueKeysSeparateCounters(t *testing.T) {
 
 	rl := NewRateLimiter()
 	keyLimits := Limits{RequestsPerMinute: 2}
-	noLimits := Limits{}
 
-	// Each unique key gets its own counter — exhausting key1 does not affect key2.
 	for i := range 2 {
-		if err := rl.CheckRate(fmt.Sprintf("key-unique-%d", i), "", fmt.Sprintf("org-unique-%d", i), keyLimits, noLimits, noLimits); err != nil {
+		key := fmt.Sprintf("key-unique-%d", i)
+		if err := rl.CheckRate(key, keyLimits); err != nil {
 			t.Fatalf("key %d request 1: %v", i, err)
 		}
-		if err := rl.CheckRate(fmt.Sprintf("key-unique-%d", i), "", fmt.Sprintf("org-unique-%d", i), keyLimits, noLimits, noLimits); err != nil {
+		if err := rl.CheckRate(key, keyLimits); err != nil {
 			t.Fatalf("key %d request 2: %v", i, err)
 		}
 	}
 
-	// Both keys are now at limit. Key0 next request must fail.
-	err := rl.CheckRate("key-unique-0", "", "org-unique-0", keyLimits, noLimits, noLimits)
+	err := rl.CheckRate("key-unique-0", keyLimits)
 	if !errors.Is(err, ErrRateLimitExceeded) {
 		t.Errorf("key-unique-0 3rd request: error = %v, want ErrRateLimitExceeded", err)
 	}
-	// Key1 must also fail independently.
-	err = rl.CheckRate("key-unique-1", "", "org-unique-1", keyLimits, noLimits, noLimits)
+	err = rl.CheckRate("key-unique-1", keyLimits)
 	if !errors.Is(err, ErrRateLimitExceeded) {
 		t.Errorf("key-unique-1 3rd request: error = %v, want ErrRateLimitExceeded", err)
 	}
 }
 
-// TestCheckRate_ConcurrentCASCorrectness spawns 100 goroutines against an RPM
-// limit of 50 and verifies that exactly 50 succeed and 50 fail. This exercises
-// the CAS loop under real contention — the old TOCTOU code would allow more
-// than 50 goroutines through.
 func TestCheckRate_ConcurrentCASCorrectness(t *testing.T) {
 	t.Parallel()
 
@@ -285,7 +163,6 @@ func TestCheckRate_ConcurrentCASCorrectness(t *testing.T) {
 
 	rl := NewRateLimiter()
 	keyLimits := Limits{RequestsPerMinute: limit}
-	noLimits := Limits{}
 
 	var (
 		wg        sync.WaitGroup
@@ -297,7 +174,7 @@ func TestCheckRate_ConcurrentCASCorrectness(t *testing.T) {
 	for range goroutines {
 		go func() {
 			defer wg.Done()
-			err := rl.CheckRate("cas-key", "", "cas-org", keyLimits, noLimits, noLimits)
+			err := rl.CheckRate("cas-key", keyLimits)
 			if err == nil {
 				successes.Add(1)
 			} else {
@@ -315,37 +192,25 @@ func TestCheckRate_ConcurrentCASCorrectness(t *testing.T) {
 	}
 }
 
-// TestEvictStale_RemovesExpiredEntries verifies that EvictStale deletes entries
-// whose windowStart is behind the current window. We inject stale entries
-// directly via CheckRate using a dedicated limiter, then call EvictStale after
-// advancing the clock conceptually by verifying stale entries disappear.
-// Because we cannot mock time in the limiter, we verify EvictStale does not
-// error and that entries created in the current window survive.
 func TestEvictStale_RemovesExpiredEntries(t *testing.T) {
 	t.Parallel()
 
 	rl := NewRateLimiter()
 	keyLimits := Limits{RequestsPerMinute: 10, RequestsPerDay: 10}
-	noLimits := Limits{}
 
-	// Create entries for several unique keys in the current window.
 	for i := range 5 {
 		key := fmt.Sprintf("evict-key-%d", i)
-		org := fmt.Sprintf("evict-org-%d", i)
-		if err := rl.CheckRate(key, "", org, keyLimits, noLimits, noLimits); err != nil {
+		if err := rl.CheckRate(key, keyLimits); err != nil {
 			t.Fatalf("setup CheckRate for %s: %v", key, err)
 		}
 	}
 
-	// Manually inject a stale entry (windowStart = 0, which is before any
-	// real minute or day window) into both maps.
 	staleEntry := &counterEntry{}
-	staleEntry.windowStart.Store(0) // Unix epoch — always stale
+	staleEntry.windowStart.Store(0)
 	staleEntry.count.Store(3)
 	rl.minuteCounters.Store("stale-minute-scope", staleEntry)
 	rl.dayCounters.Store("stale-day-scope", staleEntry)
 
-	// Verify the stale entries exist before eviction.
 	if _, ok := rl.minuteCounters.Load("stale-minute-scope"); !ok {
 		t.Fatal("stale minute entry not present before EvictStale")
 	}
@@ -355,7 +220,6 @@ func TestEvictStale_RemovesExpiredEntries(t *testing.T) {
 
 	rl.EvictStale()
 
-	// Stale entries must be gone.
 	if _, ok := rl.minuteCounters.Load("stale-minute-scope"); ok {
 		t.Error("stale minute entry still present after EvictStale")
 	}
@@ -363,7 +227,6 @@ func TestEvictStale_RemovesExpiredEntries(t *testing.T) {
 		t.Error("stale day entry still present after EvictStale")
 	}
 
-	// Entries created in the current window must survive.
 	for i := range 5 {
 		key := fmt.Sprintf("evict-key-%d", i)
 		if _, ok := rl.minuteCounters.Load("key:" + key); !ok {
@@ -372,183 +235,37 @@ func TestEvictStale_RemovesExpiredEntries(t *testing.T) {
 	}
 }
 
-// TestCheckRate_OrgNotCappedByKeyLimit is the regression test for the bug
-// where CheckRate applied the effective (most-restrictive) limit to ALL scope
-// counters. Ten distinct keys each with RPM=5 and a shared org with RPM=50:
-// all 50 requests must succeed because each scope is now checked against its
-// own limit. A 51st request (11th key) must fail at the org limit.
-func TestCheckRate_OrgNotCappedByKeyLimit(t *testing.T) {
-	t.Parallel()
-
-	rl := NewRateLimiter()
-	keyLimits := Limits{RequestsPerMinute: 5}
-	noLimits := Limits{}
-	orgLimits := Limits{RequestsPerMinute: 50}
-	orgID := "org-regression-rpm"
-
-	// 10 keys × 5 requests each = 50 total — all must be allowed.
-	for k := range 10 {
-		keyID := fmt.Sprintf("reg-key-%d", k)
-		for req := range 5 {
-			if err := rl.CheckRate(keyID, "", orgID, keyLimits, noLimits, orgLimits); err != nil {
-				t.Fatalf("key %s request %d: CheckRate() error = %v, want nil", keyID, req+1, err)
-			}
-		}
-	}
-
-	// 51st request — org counter is now at 50; next must fail.
-	err := rl.CheckRate("reg-key-10", "", orgID, keyLimits, noLimits, orgLimits)
-	if !errors.Is(err, ErrRateLimitExceeded) {
-		t.Errorf("51st CheckRate() error = %v, want ErrRateLimitExceeded (org limit)", err)
-	}
-}
-
-// TestCheckRate_KeyLimitDoesNotConsumeOtherKeys verifies that exhausting one
-// key's budget has no effect on a different key sharing the same org, when the
-// org has no limit of its own.
 func TestCheckRate_KeyLimitDoesNotConsumeOtherKeys(t *testing.T) {
 	t.Parallel()
 
 	rl := NewRateLimiter()
 	keyLimits := Limits{RequestsPerMinute: 3}
-	noLimits := Limits{}
-	orgID := "org-key-isolation"
 
-	// Exhaust key A.
 	for i := range 3 {
-		if err := rl.CheckRate("key-isolation-a", "", orgID, keyLimits, noLimits, noLimits); err != nil {
+		if err := rl.CheckRate("key-isolation-a", keyLimits); err != nil {
 			t.Fatalf("key A request %d: CheckRate() error = %v, want nil", i+1, err)
 		}
 	}
-	err := rl.CheckRate("key-isolation-a", "", orgID, keyLimits, noLimits, noLimits)
+	err := rl.CheckRate("key-isolation-a", keyLimits)
 	if !errors.Is(err, ErrRateLimitExceeded) {
 		t.Errorf("key A 4th CheckRate() error = %v, want ErrRateLimitExceeded", err)
 	}
 
-	// Key B in the same org must still have its full budget.
 	for i := range 3 {
-		if err := rl.CheckRate("key-isolation-b", "", orgID, keyLimits, noLimits, noLimits); err != nil {
-			t.Fatalf("key B request %d: CheckRate() error = %v, want nil (key A's usage must not affect key B)", i+1, err)
-		}
-	}
-}
-
-// TestCheckRate_TeamLimitSharedAcrossKeys verifies that a team's RPM budget is
-// shared by all keys in that team, while a key in a different team is
-// completely unaffected.
-func TestCheckRate_TeamLimitSharedAcrossKeys(t *testing.T) {
-	t.Parallel()
-
-	rl := NewRateLimiter()
-	noLimits := Limits{}
-	teamLimits := Limits{RequestsPerMinute: 5}
-	orgID := "org-team-shared"
-
-	// Key A sends 3, Key B sends 2 — total 5, all inside the team budget.
-	for i := range 3 {
-		if err := rl.CheckRate("team-shared-key-a", "team-shared-alpha", orgID, noLimits, teamLimits, noLimits); err != nil {
-			t.Fatalf("key A request %d: CheckRate() error = %v, want nil", i+1, err)
-		}
-	}
-	for i := range 2 {
-		if err := rl.CheckRate("team-shared-key-b", "team-shared-alpha", orgID, noLimits, teamLimits, noLimits); err != nil {
+		if err := rl.CheckRate("key-isolation-b", keyLimits); err != nil {
 			t.Fatalf("key B request %d: CheckRate() error = %v, want nil", i+1, err)
 		}
-	}
-
-	// 6th request from either key must hit the team limit.
-	err := rl.CheckRate("team-shared-key-a", "team-shared-alpha", orgID, noLimits, teamLimits, noLimits)
-	if !errors.Is(err, ErrRateLimitExceeded) {
-		t.Errorf("6th CheckRate() (team-alpha) error = %v, want ErrRateLimitExceeded", err)
-	}
-
-	// Key C in a different team with the same RPM=5 must be entirely unaffected.
-	for i := range 5 {
-		if err := rl.CheckRate("team-shared-key-c", "team-shared-beta", orgID, noLimits, teamLimits, noLimits); err != nil {
-			t.Fatalf("key C request %d: CheckRate() error = %v, want nil (different team must be unaffected)", i+1, err)
-		}
-	}
-}
-
-// TestCheckRate_OrgNotCappedByKeyLimit_RPD is the RPD analogue of
-// TestCheckRate_OrgNotCappedByKeyLimit: 10 keys × 5 RPD each against an org
-// limit of 50 RPD. All 50 must succeed; the 51st must fail.
-func TestCheckRate_OrgNotCappedByKeyLimit_RPD(t *testing.T) {
-	t.Parallel()
-
-	rl := NewRateLimiter()
-	keyLimits := Limits{RequestsPerDay: 5}
-	noLimits := Limits{}
-	orgLimits := Limits{RequestsPerDay: 50}
-	orgID := "org-regression-rpd"
-
-	for k := range 10 {
-		keyID := fmt.Sprintf("reg-rpd-key-%d", k)
-		for req := range 5 {
-			if err := rl.CheckRate(keyID, "", orgID, keyLimits, noLimits, orgLimits); err != nil {
-				t.Fatalf("key %s request %d: CheckRate() error = %v, want nil", keyID, req+1, err)
-			}
-		}
-	}
-
-	err := rl.CheckRate("reg-rpd-key-10", "", orgID, keyLimits, noLimits, orgLimits)
-	if !errors.Is(err, ErrRateLimitExceeded) {
-		t.Errorf("51st CheckRate() RPD error = %v, want ErrRateLimitExceeded (org RPD limit)", err)
-	}
-}
-
-// TestCheckRate_ScopesWithoutLimitCreateNoCounters verifies that scopes with
-// zero limits (Limits{}) do not allocate counter entries. Only the key scope,
-// which has an actual limit, must create an entry.
-func TestCheckRate_ScopesWithoutLimitCreateNoCounters(t *testing.T) {
-	t.Parallel()
-
-	rl := NewRateLimiter()
-	keyLimits := Limits{RequestsPerMinute: 3}
-	noLimits := Limits{}
-	teamID := "team-no-counter"
-	orgID := "org-no-counter"
-	keyID := "key-no-counter"
-
-	if err := rl.CheckRate(keyID, teamID, orgID, keyLimits, noLimits, noLimits); err != nil {
-		t.Fatalf("CheckRate() error = %v, want nil", err)
-	}
-
-	// The key scope must have a minute counter entry.
-	if _, ok := rl.minuteCounters.Load("key:" + keyID); !ok {
-		t.Error("minute counter for key scope not found, want entry")
-	}
-
-	// Team and org have zero limits — no counter should have been created.
-	if _, ok := rl.minuteCounters.Load("team:" + teamID); ok {
-		t.Error("minute counter for team scope found, want no entry (team limit is zero)")
-	}
-	if _, ok := rl.minuteCounters.Load("org:" + orgID); ok {
-		t.Error("minute counter for org scope found, want no entry (org limit is zero)")
-	}
-
-	// Day counters: only key has an RPM limit (no RPD set) — no day counter at all.
-	if _, ok := rl.dayCounters.Load("key:" + keyID); ok {
-		t.Error("day counter for key scope found, want no entry (key has RPM only, no RPD)")
-	}
-	if _, ok := rl.dayCounters.Load("team:" + teamID); ok {
-		t.Error("day counter for team scope found, want no entry")
-	}
-	if _, ok := rl.dayCounters.Load("org:" + orgID); ok {
-		t.Error("day counter for org scope found, want no entry")
 	}
 }
 
 func BenchmarkCheckRate(b *testing.B) {
 	rl := NewRateLimiter()
-	// Use a high limit so the benchmark does not hit the ceiling.
 	keyLimits := Limits{RequestsPerMinute: 1_000_000}
-	noLimits := Limits{}
 
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			if err := rl.CheckRate("bench-key", "bench-team", "bench-org", keyLimits, noLimits, noLimits); err != nil {
+			if err := rl.CheckRate("bench-key", keyLimits); err != nil {
 				b.Fatal(err)
 			}
 		}

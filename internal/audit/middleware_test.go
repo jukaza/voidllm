@@ -62,10 +62,10 @@ func TestMiddleware_SkipsGET(t *testing.T) {
 
 	logger, database := setupMiddlewareLogger(t, "TestMiddleware_SkipsGET")
 	app := buildApp(t, logger, []middlewareRoute{
-		{method: "GET", path: "/orgs/:org_id", handler: handlerWithStatus(200)},
+		{method: "GET", path: "/users/:user_id", handler: handlerWithStatus(200)},
 	})
 
-	req := httptest.NewRequest("GET", "/api/v1/orgs/org-123", nil)
+	req := httptest.NewRequest("GET", "/api/v1/users/user-123", nil)
 	resp, err := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
 	if err != nil {
 		t.Fatalf("app.Test: %v", err)
@@ -102,10 +102,10 @@ func TestMiddleware_SkipsNon2xx(t *testing.T) {
 
 			logger, database := setupMiddlewareLogger(t, "TestMiddleware_SkipsNon2xx_"+tc.name)
 			app := buildApp(t, logger, []middlewareRoute{
-				{method: "POST", path: "/orgs", handler: handlerWithStatus(tc.status)},
+				{method: "POST", path: "/users", handler: handlerWithStatus(tc.status)},
 			})
 
-			req := httptest.NewRequest("POST", "/api/v1/orgs", nil)
+			req := httptest.NewRequest("POST", "/api/v1/users", nil)
 			resp, err := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
 			if err != nil {
 				t.Fatalf("app.Test: %v", err)
@@ -130,10 +130,10 @@ func TestMiddleware_LogsMutation(t *testing.T) {
 
 	logger, database := setupMiddlewareLogger(t, "TestMiddleware_LogsMutation")
 	app := buildApp(t, logger, []middlewareRoute{
-		{method: "POST", path: "/orgs", handler: handlerWithStatus(201)},
+		{method: "POST", path: "/users", handler: handlerWithStatus(201)},
 	})
 
-	req := httptest.NewRequest("POST", "/api/v1/orgs", nil)
+	req := httptest.NewRequest("POST", "/api/v1/users", nil)
 	resp, err := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
 	if err != nil {
 		t.Fatalf("app.Test: %v", err)
@@ -162,8 +162,8 @@ func TestMiddleware_LogsMutation(t *testing.T) {
 	if action != "create" {
 		t.Errorf("action = %q, want %q", action, "create")
 	}
-	if resourceType != "org" {
-		t.Errorf("resource_type = %q, want %q", resourceType, "org")
+	if resourceType != "user" {
+		t.Errorf("resource_type = %q, want %q", resourceType, "user")
 	}
 }
 
@@ -186,31 +186,31 @@ func TestMiddleware_LogsMutation_Methods(t *testing.T) {
 		{
 			name:           "PUT produces update",
 			method:         "PUT",
-			path:           "/orgs/:org_id",
-			url:            "/api/v1/orgs/org-123",
+			path:           "/users/:user_id",
+			url:            "/api/v1/users/user-123",
 			wantAction:     "update",
-			wantResource:   "org",
-			wantResourceID: "org-123",
+			wantResource:   "user",
+			wantResourceID: "user-123",
 			responseStatus: 200,
 		},
 		{
 			name:           "PATCH produces update",
 			method:         "PATCH",
-			path:           "/orgs/:org_id",
-			url:            "/api/v1/orgs/org-456",
+			path:           "/keys/:key_id",
+			url:            "/api/v1/keys/key-456",
 			wantAction:     "update",
-			wantResource:   "org",
-			wantResourceID: "org-456",
+			wantResource:   "key",
+			wantResourceID: "key-456",
 			responseStatus: 200,
 		},
 		{
-			name:           "DELETE produces delete with team resource ID",
+			name:           "DELETE produces delete with key resource ID",
 			method:         "DELETE",
-			path:           "/orgs/:org_id/teams/:team_id",
-			url:            "/api/v1/orgs/org-123/teams/team-456",
+			path:           "/keys/:key_id",
+			url:            "/api/v1/keys/key-789",
 			wantAction:     "delete",
-			wantResource:   "team",
-			wantResourceID: "team-456",
+			wantResource:   "key",
+			wantResourceID: "key-789",
 			responseStatus: 204,
 		},
 	}
@@ -271,11 +271,11 @@ func TestMiddleware_VerbOverride(t *testing.T) {
 		wantResource string
 	}{
 		{
-			name:         "POST revoke key",
+			name:         "POST rotate key",
 			method:       "POST",
-			path:         "/orgs/:org_id/keys/:key_id/revoke",
-			url:          "/api/v1/orgs/org-123/keys/key-789/revoke",
-			wantAction:   "revoke",
+			path:         "/keys/:key_id/rotate",
+			url:          "/api/v1/keys/key-789/rotate",
+			wantAction:   "rotate",
 			wantResource: "key",
 		},
 		{

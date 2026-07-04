@@ -10,8 +10,6 @@ import (
 
 // QueryParams holds filter and pagination parameters for audit log queries.
 type QueryParams struct {
-	// OrgID filters events to a specific organization. Empty matches all orgs.
-	OrgID string
 	// ActorID filters events by the actor who performed the action.
 	ActorID string
 	// ResourceType filters events by the kind of resource affected.
@@ -51,7 +49,6 @@ func Query(ctx context.Context, database *db.DB, params QueryParams) (*QueryResu
 	}
 
 	filter := db.AuditLogFilter{
-		OrgID:        params.OrgID,
 		ActorID:      params.ActorID,
 		ResourceType: params.ResourceType,
 		Action:       params.Action,
@@ -71,7 +68,6 @@ func Query(ctx context.Context, database *db.DB, params QueryParams) (*QueryResu
 		events[i] = Event{
 			ID:           entry.ID,
 			Timestamp:    entry.Timestamp,
-			OrgID:        entry.OrgID,
 			ActorID:      entry.ActorID,
 			ActorType:    entry.ActorType,
 			ActorKeyID:   entry.ActorKeyID,

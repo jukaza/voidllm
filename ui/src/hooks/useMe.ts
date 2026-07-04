@@ -6,7 +6,6 @@ export interface MeResponse {
   email: string
   display_name: string
   role: string
-  org_id?: string
   is_system_admin: boolean
 }
 

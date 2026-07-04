@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"golang.org/x/crypto/bcrypt"
+
 	"github.com/voidmind-io/voidllm/internal/api/admin"
 	"github.com/voidmind-io/voidllm/internal/auth"
 	"github.com/voidmind-io/voidllm/internal/cache"
@@ -56,7 +58,7 @@ func setupTestApp(t *testing.T, dsn string) (*fiber.App, *db.DB, *cache.Cache[st
 	return app, database, keyCache
 }
 
-func addTestKey(t *testing.T, keyCache *cache.Cache[string, auth.KeyInfo], role string, orgID string) string {
+func addTestKey(t *testing.T, keyCache *cache.Cache[string, auth.KeyInfo], role string) string {
 	t.Helper()
 
 	plaintext, err := keygen.Generate(keygen.KeyTypeUser)
@@ -75,7 +77,7 @@ func addTestKey(t *testing.T, keyCache *cache.Cache[string, auth.KeyInfo], role 
 	return plaintext
 }
 
-func addTestKeyWithUser(t *testing.T, keyCache *cache.Cache[string, auth.KeyInfo], role, orgID, userID string) string {
+func addTestKeyWithUser(t *testing.T, keyCache *cache.Cache[string, auth.KeyInfo], role, userID string) string {
 	t.Helper()
 
 	plaintext, err := keygen.Generate(keygen.KeyTypeUser)
@@ -95,17 +97,24 @@ func addTestKeyWithUser(t *testing.T, keyCache *cache.Cache[string, auth.KeyInfo
 	return plaintext
 }
 
-func mustCreateOrg(t *testing.T, database *db.DB, name, slug string) *db.Org {
-	return &db.Org{ID: "mock-org-id"}
+func mustCreateUserWithPassword(t *testing.T, database *db.DB, email, displayName, password string, isSystemAdmin bool) *db.User {
+	t.Helper()
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.MinCost)
+	if err != nil {
+		t.Fatalf("bcrypt.GenerateFromPassword: %v", err)
+	}
+	h := string(hash)
+	user, err := database.CreateUser(context.Background(), db.CreateUserParams{
+		Email:         email,
+		DisplayName:   displayName,
+		PasswordHash:  &h,
+		IsSystemAdmin: isSystemAdmin,
+	})
+	if err != nil {
+		t.Fatalf("mustCreateUserWithPassword(%q): %v", email, err)
+	}
+	return user
 }
-
-func mustCreateTeam(t *testing.T, database *db.DB, orgID, name, slug string) *db.Team {
-	return &db.Team{ID: "mock-team-id"}
-}
-
-func mustCreateUserMemberships(t *testing.T, database *db.DB, orgID, teamID, userID string) {}
-
-func mustCreateMembership(t *testing.T, database *db.DB, orgID, userID, role string) {}
 
 func bodyJSON(t *testing.T, v any) io.Reader {
 	t.Helper()
@@ -123,11 +132,10 @@ func decodeBody(t *testing.T, r io.Reader, v any) {
 	}
 }
 
-func keysURL(orgID string) string {
+func keysURL() string {
 	return "/api/v1/keys"
 }
 
-func keyItemURL(orgID, keyID string) string {
+func keyItemURL(keyID string) string {
 	return "/api/v1/keys/" + keyID
 }
-

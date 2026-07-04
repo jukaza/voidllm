@@ -11,8 +11,6 @@ import (
 // All string fields are optional equality filters; an empty string means no
 // filter is applied for that field. Zero-value time.Time fields mean no bound.
 type AuditLogFilter struct {
-	// OrgID restricts results to a specific organization. Empty matches all orgs.
-	OrgID string
 	// ActorID restricts results to a specific actor. Empty matches all actors.
 	ActorID string
 	// ResourceType restricts results to a specific resource kind. Empty matches all.
@@ -37,8 +35,6 @@ type AuditLogEntry struct {
 	ID string
 	// Timestamp is when the action occurred, in UTC.
 	Timestamp time.Time
-	// OrgID is the organization context in which the action was performed.
-	OrgID string
 	// ActorID is the user or service account ID that performed the action.
 	ActorID string
 	// ActorType describes the kind of actor: "user", "service_account", or "system".
@@ -86,11 +82,6 @@ func (d *DB) QueryAuditLogs(ctx context.Context, filter AuditLogFilter) (*AuditL
 	var args []any
 	n := 1
 
-	if filter.OrgID != "" {
-		conditions = append(conditions, "org_id = "+p(n))
-		args = append(args, filter.OrgID)
-		n++
-	}
 	if filter.ActorID != "" {
 		conditions = append(conditions, "actor_id = "+p(n))
 		args = append(args, filter.ActorID)
@@ -134,7 +125,7 @@ func (d *DB) QueryAuditLogs(ctx context.Context, filter AuditLogFilter) (*AuditL
 	copy(pageArgs, args)
 	pageArgs = append(pageArgs, fetchLimit)
 
-	dataQuery := "SELECT id, timestamp, org_id, actor_id, actor_type, actor_key_id, " +
+	dataQuery := "SELECT id, timestamp, actor_id, actor_type, actor_key_id, " +
 		"action, resource_type, resource_id, description, ip_address, request_id, status_code " +
 		"FROM audit_logs" + where +
 		" ORDER BY id DESC" +
@@ -153,7 +144,6 @@ func (d *DB) QueryAuditLogs(ctx context.Context, filter AuditLogFilter) (*AuditL
 		if err := rows.Scan(
 			&entry.ID,
 			&tsRaw,
-			&entry.OrgID,
 			&entry.ActorID,
 			&entry.ActorType,
 			&entry.ActorKeyID,

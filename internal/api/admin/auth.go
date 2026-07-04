@@ -417,7 +417,6 @@ func (h *Handler) ChangeOwnPassword(c fiber.Ctx) error {
 	if h.AuditLogger != nil {
 		h.AuditLogger.Log(audit.Event{
 			Timestamp:    time.Now().UTC(),
-			OrgID:        "",
 			ActorID:      keyInfo.UserID,
 			ActorType:    "user",
 			ActorKeyID:   keyInfo.ID,

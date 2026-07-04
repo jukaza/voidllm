@@ -437,10 +437,8 @@ func (d *DB) RotateKeyTx(ctx context.Context, oldID string, oldExpiresAt string,
 	return &result, nil
 }
 
-// GetUserOrgRole resolves the effective RBAC role for a user.
-// It checks users.is_system_admin first (returns "system_admin" if true),
-// otherwise defaults to "member".
-func (d *DB) GetUserOrgRole(ctx context.Context, userID string, orgID string) (string, error) {
+// GetUserRole resolves the effective RBAC role for a user.
+func (d *DB) GetUserRole(ctx context.Context, userID string) (string, error) {
 	p := d.dialect.Placeholder
 
 	var isAdmin int
@@ -454,12 +452,6 @@ func (d *DB) GetUserOrgRole(ctx context.Context, userID string, orgID string) (s
 		return "system_admin", nil
 	}
 	return "member", nil
-}
-
-// IsTeamMember reports whether a user is a member of the given team.
-// It is deprecated and always returns false.
-func (d *DB) IsTeamMember(ctx context.Context, userID string, teamID string) (bool, error) {
-	return false, nil
 }
 
 // scanAPIKey scans a single API key row returned by QueryRowContext.

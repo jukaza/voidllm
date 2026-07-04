@@ -178,7 +178,7 @@ func TestCreateDeployment(t *testing.T) {
 			app, database, keyCache := setupTestAppWithEncKey(t, dsn)
 
 			m := mustCreateModelForDeployment(t, database, "gpt-4-create-dep-"+strings.ReplaceAll(tc.name, " ", "-"))
-			testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+			testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 			req := httptest.NewRequest("POST", deploymentURL(m.ID), bodyJSON(t, tc.body))
 			req.Header.Set("Content-Type", "application/json")
@@ -211,7 +211,7 @@ func TestCreateDeployment_ValidatesProvider(t *testing.T) {
 	app, database, keyCache := setupTestAppWithEncKey(t, dsn)
 
 	m := mustCreateModelForDeployment(t, database, "gpt-4-val-provider")
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	req := httptest.NewRequest("POST", deploymentURL(m.ID), bodyJSON(t, map[string]any{
 		"name":     "bad-provider",
@@ -264,7 +264,7 @@ func TestCreateDeployment_ValidatesBaseURL(t *testing.T) {
 			app, database, keyCache := setupTestAppWithEncKey(t, dsn)
 
 			m := mustCreateModelForDeployment(t, database, "gpt-4-val-url-"+strings.ReplaceAll(tc.name, " ", "-"))
-			testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+			testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 			body := map[string]any{
 				"name":     "url-test-dep",
@@ -296,7 +296,7 @@ func TestCreateDeployment_UnknownModel(t *testing.T) {
 
 	dsn := "file:TestCreateDeployment_UnknownModel?mode=memory&cache=private"
 	app, _, keyCache := setupTestAppWithEncKey(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	req := httptest.NewRequest("POST", deploymentURL("00000000-0000-0000-0000-000000000000"),
 		bodyJSON(t, map[string]any{
@@ -327,7 +327,7 @@ func TestCreateDeployment_ForbiddenForNonSystemAdmin(t *testing.T) {
 	app, database, keyCache := setupTestAppWithEncKey(t, dsn)
 
 	m := mustCreateModelForDeployment(t, database, "gpt-4-forbidden-dep")
-	testKey := addTestKey(t, keyCache, auth.RoleOrgAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleMember)
 
 	req := httptest.NewRequest("POST", deploymentURL(m.ID), bodyJSON(t, map[string]any{
 		"name":     "dep",
@@ -357,7 +357,7 @@ func TestListDeployments(t *testing.T) {
 
 	dsn := "file:TestListDeployments?mode=memory&cache=private"
 	app, database, keyCache := setupTestAppWithEncKey(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	m := mustCreateModelForDeployment(t, database, "gpt-4-list-http")
 	mustCreateDeploymentDB(t, database, m.ID, "dep-alpha")
@@ -406,7 +406,7 @@ func TestListDeployments_UnknownModel(t *testing.T) {
 
 	dsn := "file:TestListDeployments_UnknownModel?mode=memory&cache=private"
 	app, _, keyCache := setupTestAppWithEncKey(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	req := httptest.NewRequest("GET", deploymentURL("00000000-0000-0000-0000-000000000000"), nil)
 	req.Header.Set("Authorization", "Bearer "+testKey)
@@ -430,7 +430,7 @@ func TestUpdateDeployment(t *testing.T) {
 
 	dsn := "file:TestUpdateDeployment?mode=memory&cache=private"
 	app, database, keyCache := setupTestAppWithEncKey(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	m := mustCreateModelForDeployment(t, database, "gpt-4-update-http")
 	dep := mustCreateDeploymentDB(t, database, m.ID, "original-name-dep")
@@ -469,7 +469,7 @@ func TestUpdateDeployment_ValidatesProvider(t *testing.T) {
 
 	dsn := "file:TestUpdateDeployment_ValidatesProvider?mode=memory&cache=private"
 	app, database, keyCache := setupTestAppWithEncKey(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	m := mustCreateModelForDeployment(t, database, "gpt-4-upd-val-provider")
 	dep := mustCreateDeploymentDB(t, database, m.ID, "upd-val-dep")
@@ -496,7 +496,7 @@ func TestUpdateDeployment_WrongModel(t *testing.T) {
 
 	dsn := "file:TestUpdateDeployment_WrongModel?mode=memory&cache=private"
 	app, database, keyCache := setupTestAppWithEncKey(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	// Create two models; the deployment belongs to modelA but we PATCH under modelB.
 	modelA := mustCreateModelForDeployment(t, database, "gpt-4-wrong-model-a")
@@ -527,7 +527,7 @@ func TestDeleteDeployment(t *testing.T) {
 
 	dsn := "file:TestDeleteDeployment?mode=memory&cache=private"
 	app, database, keyCache := setupTestAppWithEncKey(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	m := mustCreateModelForDeployment(t, database, "gpt-4-delete-http")
 	dep := mustCreateDeploymentDB(t, database, m.ID, "dep-to-delete")
@@ -567,7 +567,7 @@ func TestDeleteDeployment_WrongModel(t *testing.T) {
 
 	dsn := "file:TestDeleteDeployment_WrongModel?mode=memory&cache=private"
 	app, database, keyCache := setupTestAppWithEncKey(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	// Deployment belongs to modelA; try to delete it via modelB's URL.
 	modelA := mustCreateModelForDeployment(t, database, "gpt-4-del-wrong-a")
@@ -594,7 +594,7 @@ func TestDeleteDeployment_NotFound(t *testing.T) {
 
 	dsn := "file:TestDeleteDeployment_NotFound?mode=memory&cache=private"
 	app, database, keyCache := setupTestAppWithEncKey(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	m := mustCreateModelForDeployment(t, database, "gpt-4-del-notfound")
 
@@ -620,7 +620,7 @@ func TestDeploymentAPIKeyNotInResponse(t *testing.T) {
 
 	dsn := "file:TestDeploymentAPIKeyNotInResponse?mode=memory&cache=private"
 	app, database, keyCache := setupTestAppWithEncKey(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	m := mustCreateModelForDeployment(t, database, "gpt-4-apikey-check")
 
@@ -715,7 +715,7 @@ func TestUpdateDeployment_PIIFilterTriState(t *testing.T) {
 
 	dsn := "file:TestUpdateDeployment_PIIFilterTriState?mode=memory&cache=private"
 	app, database, keyCache := setupTestAppWithEncKey(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	m := mustCreateModelForDeployment(t, database, "dep-pii-tristate-model")
 	dep := mustCreateDeploymentDB(t, database, m.ID, "dep-pii-tristate-dep")

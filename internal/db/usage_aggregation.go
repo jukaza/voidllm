@@ -11,8 +11,6 @@ import (
 // (key, model, hour) bucket. Sums and counts are stored — averages
 // are computed at query time.
 type HourlyRollup struct {
-	OrgID            string
-	TeamID           string // empty string = no team
 	UserID           string // empty string = no user
 	KeyID            string
 	ModelName        string
@@ -33,8 +31,7 @@ type HourlyRollup struct {
 // as the 24-hour dashboard period, because usage_hourly contains pre-aggregated
 // per-hour buckets rather than one row per request.
 //
-// OrgID on filter is required. TeamID, UserID, and KeyID are optional additional
-// filters. The returned UsageAggregate has an empty GroupKey (totals only).
+// UserID and KeyID are optional filters. The returned UsageAggregate has an empty GroupKey (totals only).
 func (d *DB) GetHourlyUsageTotals(ctx context.Context, filter UsageFilter, since time.Time) (UsageAggregate, error) {
 	p := d.dialect.Placeholder
 	argN := 1
@@ -44,15 +41,6 @@ func (d *DB) GetHourlyUsageTotals(ctx context.Context, filter UsageFilter, since
 	args := []any{truncated.Format(time.RFC3339)}
 	argN++
 
-	conditions = append(conditions, "org_id = "+p(argN))
-	args = append(args, filter.OrgID)
-	argN++
-
-	if filter.TeamID != "" {
-		conditions = append(conditions, "team_id = "+p(argN))
-		args = append(args, filter.TeamID)
-		argN++
-	}
 	if filter.UserID != "" {
 		conditions = append(conditions, "user_id = "+p(argN))
 		args = append(args, filter.UserID)
@@ -87,13 +75,13 @@ func (d *DB) GetHourlyUsageTotals(ctx context.Context, filter UsageFilter, since
 func (d *DB) UpsertUsageHourly(ctx context.Context, r HourlyRollup) error {
 	p := d.dialect.Placeholder
 	query := "INSERT INTO usage_hourly (" +
-		"org_id, team_id, user_id, key_id, model_name, bucket_hour, " +
+		"user_id, key_id, model_name, bucket_hour, " +
 		"request_count, prompt_tokens, completion_tokens, total_tokens, " +
 		"cost_sum, duration_sum_ms, ttft_sum_ms, ttft_count" +
 		") VALUES (" +
-		p(1) + ", " + p(2) + ", " + p(3) + ", " + p(4) + ", " + p(5) + ", " + p(6) + ", " +
-		p(7) + ", " + p(8) + ", " + p(9) + ", " + p(10) + ", " +
-		p(11) + ", " + p(12) + ", " + p(13) + ", " + p(14) +
+		p(1) + ", " + p(2) + ", " + p(3) + ", " + p(4) + ", " +
+		p(5) + ", " + p(6) + ", " + p(7) + ", " + p(8) + ", " +
+		p(9) + ", " + p(10) + ", " + p(11) + ", " + p(12) +
 		") ON CONFLICT (key_id, model_name, bucket_hour) DO UPDATE SET " +
 		"request_count = request_count + excluded.request_count, " +
 		"prompt_tokens = prompt_tokens + excluded.prompt_tokens, " +
@@ -105,7 +93,7 @@ func (d *DB) UpsertUsageHourly(ctx context.Context, r HourlyRollup) error {
 		"ttft_count = ttft_count + excluded.ttft_count"
 
 	_, err := d.sql.ExecContext(ctx, query,
-		r.OrgID, r.TeamID, r.UserID, r.KeyID, r.ModelName, r.BucketHour,
+		r.UserID, r.KeyID, r.ModelName, r.BucketHour,
 		r.RequestCount, r.PromptTokens, r.CompletionTokens, r.TotalTokens,
 		r.CostSum, r.DurationSumMS, r.TTFTSumMS, r.TTFTCount,
 	)

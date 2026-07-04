@@ -113,33 +113,26 @@ func (d *DB) DeleteModelAlias(ctx context.Context, id, scopeType, scopeID string
 	return nil
 }
 
-// LoadAllModelAliases returns all model aliases grouped under empty string key.
-func (d *DB) LoadAllModelAliases(ctx context.Context) (
-	orgAliases map[string]map[string]string,
-	teamAliases map[string]map[string]string,
-	err error,
-) {
+// LoadAllModelAliases returns all global model aliases.
+func (d *DB) LoadAllModelAliases(ctx context.Context) (map[string]string, error) {
 	rows, err := d.sql.QueryContext(ctx, "SELECT alias, model_name FROM model_aliases")
 	if err != nil {
-		return nil, nil, fmt.Errorf("load all model aliases: %w", err)
+		return nil, fmt.Errorf("load all model aliases: %w", err)
 	}
 	defer rows.Close()
 
-	global := make(map[string]string)
+	aliases := make(map[string]string)
 	for rows.Next() {
 		var alias, modelName string
 		if err := rows.Scan(&alias, &modelName); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
-		global[alias] = modelName
+		aliases[alias] = modelName
 	}
 	if err := rows.Err(); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-
-	orgAliases = map[string]map[string]string{"": global}
-	teamAliases = make(map[string]map[string]string)
-	return orgAliases, teamAliases, nil
+	return aliases, nil
 }
 
 // scanModelAlias scans a single model_aliases row.

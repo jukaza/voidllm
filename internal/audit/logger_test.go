@@ -56,7 +56,6 @@ func countAuditLogs(t *testing.T, database *db.DB) int {
 func sampleEvent(action string) audit.Event {
 	return audit.Event{
 		Timestamp:    time.Now().UTC(),
-		OrgID:        "org-test",
 		ActorID:      "actor-test",
 		ActorType:    "user",
 		ActorKeyID:   "key-test",

@@ -55,9 +55,9 @@ func validateAliasName(name string) string {
 	return ""
 }
 
-// CreateOrgAlias handles POST /api/v1/model-aliases.
-func (h *Handler) CreateOrgAlias(c fiber.Ctx) error {
-	keyInfo, ok := requireOrgAccess(c, "")
+// CreateModelAlias handles POST /api/v1/model-aliases.
+func (h *Handler) CreateModelAlias(c fiber.Ctx) error {
+	keyInfo, ok := requireAuth(c)
 	if !ok {
 		return nil
 	}
@@ -104,9 +104,9 @@ func (h *Handler) CreateOrgAlias(c fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(modelAliasToResponse(alias))
 }
 
-// ListOrgAliases handles GET /api/v1/model-aliases.
-func (h *Handler) ListOrgAliases(c fiber.Ctx) error {
-	if _, ok := requireOrgAccess(c, ""); !ok {
+// ListModelAliases handles GET /api/v1/model-aliases.
+func (h *Handler) ListModelAliases(c fiber.Ctx) error {
+	if _, ok := requireAuth(c); !ok {
 		return nil
 	}
 
@@ -125,11 +125,11 @@ func (h *Handler) ListOrgAliases(c fiber.Ctx) error {
 	return c.JSON(resp)
 }
 
-// DeleteOrgAlias handles DELETE /api/v1/model-aliases/:alias_id.
-func (h *Handler) DeleteOrgAlias(c fiber.Ctx) error {
+// DeleteModelAlias handles DELETE /api/v1/model-aliases/:alias_id.
+func (h *Handler) DeleteModelAlias(c fiber.Ctx) error {
 	aliasID := c.Params("alias_id")
 
-	if _, ok := requireOrgAccess(c, ""); !ok {
+	if _, ok := requireAuth(c); !ok {
 		return nil
 	}
 
@@ -155,12 +155,12 @@ func (h *Handler) refreshAliasCache(ctx context.Context) {
 	if h.AliasCache == nil {
 		return
 	}
-	orgA, teamA, err := h.DB.LoadAllModelAliases(ctx)
+	aliases, err := h.DB.LoadAllModelAliases(ctx)
 	if err != nil {
 		h.Log.ErrorContext(ctx, "refresh alias cache", slog.String("error", err.Error()))
 		return
 	}
-	h.AliasCache.Load(orgA, teamA)
+	h.AliasCache.Load(aliases)
 }
 
 // publishAliasInvalidation sends a cache invalidation message on the aliases channel.

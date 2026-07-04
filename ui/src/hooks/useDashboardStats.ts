@@ -10,9 +10,9 @@ export interface BudgetWarning {
 }
 
 export interface DashboardStats {
-  scope: 'org' | 'team' | 'user'
+  scope: 'system' | 'user'
   active_keys: number
-  total_teams?: number
+
   total_members?: number
   requests_24h: number
   tokens_24h: number

@@ -6,7 +6,7 @@ import { Button } from '../../components/ui/Button'
 import { Select } from '../../components/ui/Select'
 import { AreaChart, DonutChart, HorizontalBar } from '../../components/ui/charts'
 import { useMe } from '../../hooks/useMe'
-import { useMyUsage, useCrossOrgUsage } from '../../hooks/useUsage'
+import { useMyUsage, useSystemUsage } from '../../hooks/useUsage'
 import type { UsageDataPoint } from '../../hooks/useUsage'
 import { formatNumber, formatTokens, formatCost, shortenId } from '../../lib/utils'
 import { exportData } from '../../lib/export'
@@ -27,28 +27,20 @@ function getTimeRange(range: TimeRange): { from: string; to: string } {
   return { from: from.toISOString(), to: now.toISOString() }
 }
 
-const BASE_GROUP_BY_OPTIONS = [
+const GROUP_BY_OPTIONS = [
   { value: 'model', label: 'Model' },
-  { value: 'team', label: 'Team' },
   { value: 'user', label: 'User' },
   { value: 'key', label: 'Key' },
   { value: 'day', label: 'Day' },
   { value: 'hour', label: 'Hour' },
 ]
 
-const CROSS_ORG_GROUP_BY_OPTIONS = [
-  ...BASE_GROUP_BY_OPTIONS,
-  { value: 'org', label: 'Org' },
-]
-
 const GROUP_BY_HEADERS: Record<string, string> = {
   model: 'Model',
-  team: 'Team',
   user: 'User',
   key: 'Key',
   day: 'Date',
   hour: 'Hour',
-  org: 'Org',
 }
 
 function buildColumns(groupBy: string): Column<UsageDataPoint>[] {
@@ -176,39 +168,31 @@ function DownloadIcon() {
 export default function LLMUsagePage() {
   const [range, setRange] = useState<TimeRange>('24h')
   const [groupBy, setGroupBy] = useState('model')
-  const [crossOrg, setCrossOrg] = useState(false)
+  const [systemWide, setSystemWide] = useState(false)
 
   const { data: me } = useMe()
   const isSystemAdmin = me?.is_system_admin === true
 
   const { from, to } = useMemo(() => getTimeRange(range), [range])
 
-  const orgUsage = useMyUsage(from, to, groupBy)
-  const crossOrgUsage = useCrossOrgData({ from, to, groupBy, enabled: isSystemAdmin })
+  const myUsage = useMyUsage(from, to, groupBy)
+  const systemUsage = useSystemUsageData({ from, to, groupBy, enabled: isSystemAdmin })
 
-  const activeResult = crossOrg && isSystemAdmin ? crossOrgUsage : orgUsage
+  const activeResult = systemWide && isSystemAdmin ? systemUsage : myUsage
 
   const { data: usage, isLoading } = activeResult
 
-  // Daily trend data - only when groupBy is not already 'day'/'hour', and not cross-org
-  const needsDailyTrend = !crossOrg && groupBy !== 'day' && groupBy !== 'hour'
+  // Daily trend data - only when groupBy is not already 'day'/'hour', and not system-wide
+  const needsDailyTrend = groupBy !== 'day' && groupBy !== 'hour'
   const dailyUsage = useMyUsage(from, to, 'day')
   // Use main data directly when groupBy is already day or hour
   const trendData = needsDailyTrend ? dailyUsage.data?.data : usage?.data
 
-  // When switching away from cross-org, reset group_by if it was set to 'org'
-  const handleCrossOrgToggle = (next: boolean) => {
-    if (next) {
-      setGroupBy('org')
-    } else if (groupBy === 'org') {
-      setGroupBy('model')
-    }
-    setCrossOrg(next)
+  const handleScopeToggle = (next: boolean) => {
+    setSystemWide(next)
   }
 
-  const groupByOptions = crossOrg && isSystemAdmin
-    ? CROSS_ORG_GROUP_BY_OPTIONS
-    : BASE_GROUP_BY_OPTIONS
+  const groupByOptions = GROUP_BY_OPTIONS
 
   const totals = useMemo(() => {
     if (!usage?.data) return { requests: 0, tokens: 0, cost: 0 }
@@ -229,7 +213,7 @@ export default function LLMUsagePage() {
 
   const columns = useMemo(() => buildColumns(groupBy), [groupBy])
 
-  const isDataLoading = isLoading && (crossOrg ? isSystemAdmin : true)
+  const isDataLoading = isLoading && (systemWide ? isSystemAdmin : true)
 
   const totalPrompt = usage?.data?.reduce((s, d) => s + d.prompt_tokens, 0) ?? 0
   const totalCompletion = usage?.data?.reduce((s, d) => s + d.completion_tokens, 0) ?? 0
@@ -244,25 +228,25 @@ export default function LLMUsagePage() {
           <div className="inline-flex gap-1 p-1 rounded-lg bg-bg-tertiary">
             <button
               type="button"
-              onClick={() => handleCrossOrgToggle(false)}
+              onClick={() => handleScopeToggle(false)}
               className={
-                !crossOrg
+                !systemWide
                   ? 'px-4 py-1.5 rounded-md text-sm font-medium bg-bg-secondary text-text-primary shadow-sm transition-colors'
                   : 'px-4 py-1.5 rounded-md text-sm font-medium text-text-tertiary hover:text-text-secondary transition-colors'
               }
             >
-              My Organization
+              My Usage
             </button>
             <button
               type="button"
-              onClick={() => handleCrossOrgToggle(true)}
+              onClick={() => handleScopeToggle(true)}
               className={
-                crossOrg
+                systemWide
                   ? 'px-4 py-1.5 rounded-md text-sm font-medium bg-bg-secondary text-text-primary shadow-sm transition-colors'
                   : 'px-4 py-1.5 rounded-md text-sm font-medium text-text-tertiary hover:text-text-secondary transition-colors'
               }
             >
-              All Organizations
+              System-wide
             </button>
           </div>
         )}
@@ -307,20 +291,17 @@ export default function LLMUsagePage() {
         />
       </div>
 
-      {/* Usage over Time chart - not shown in cross-org mode */}
-      {!crossOrg && (
-        <div className="bg-bg-secondary rounded-xl border border-border p-6 mb-6">
-          <h3 className="text-sm font-semibold text-text-primary mb-4">Usage over Time</h3>
-          <AreaChart
-            data={(trendData ?? []).map((d) => ({
-              label: d.group_key.length > 10 ? d.group_key.slice(5) : d.group_key,
-              value: d.total_requests,
-            }))}
-            height={220}
-            formatValue={formatNumber}
-          />
-        </div>
-      )}
+      <div className="bg-bg-secondary rounded-xl border border-border p-6 mb-6">
+        <h3 className="text-sm font-semibold text-text-primary mb-4">Usage over Time</h3>
+        <AreaChart
+          data={(trendData ?? []).map((d) => ({
+            label: d.group_key.length > 10 ? d.group_key.slice(5) : d.group_key,
+            value: d.total_requests,
+          }))}
+          height={220}
+          formatValue={formatNumber}
+        />
+      </div>
 
       {/* Controls bar */}
       <div className="flex items-center gap-3 mb-6">
@@ -417,16 +398,13 @@ export default function LLMUsagePage() {
 }
 
 // ---------------------------------------------------------------------------
-// CrossOrgData helper - kept local to avoid leaking the type
-// ---------------------------------------------------------------------------
-
-interface CrossOrgDataProps {
+interface SystemUsageDataProps {
   from: string
   to: string
   groupBy: string
   enabled: boolean
 }
 
-function useCrossOrgData({ from, to, groupBy, enabled }: CrossOrgDataProps) {
-  return useCrossOrgUsage({ from, to, groupBy }, enabled)
+function useSystemUsageData({ from, to, groupBy, enabled }: SystemUsageDataProps) {
+  return useSystemUsage({ from, to, groupBy }, enabled)
 }

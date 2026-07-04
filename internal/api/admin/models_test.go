@@ -300,7 +300,7 @@ func TestCreateModel(t *testing.T) {
 			dsn := fmt.Sprintf("file:TestCreateModel_%s?mode=memory&cache=private",
 				strings.ReplaceAll(tc.name, " ", "_"))
 			app, _, keyCache := setupModelTestApp(t, dsn)
-			testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+			testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 			req := httptest.NewRequest("POST", modelURL(), bodyJSON(t, tc.body))
 			req.Header.Set("Content-Type", "application/json")
@@ -331,7 +331,7 @@ func TestCreateModel_DuplicateName(t *testing.T) {
 
 	dsn := "file:TestCreateModel_DuplicateName?mode=memory&cache=private"
 	app, _, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	body := map[string]any{
 		"name":     "unique-model",
@@ -375,34 +375,27 @@ func TestCreateModel_DuplicateName(t *testing.T) {
 func TestCreateModel_ForbiddenForNonSystemAdmin(t *testing.T) {
 	t.Parallel()
 
-	roles := []string{auth.RoleOrgAdmin, auth.RoleMember}
-	for _, role := range roles {
-		t.Run(role, func(t *testing.T) {
-			t.Parallel()
+	dsn := "file:TestCreateModel_Forbidden_member?mode=memory&cache=private"
+	app, _, keyCache := setupModelTestApp(t, dsn)
+	testKey := addTestKey(t, keyCache, auth.RoleMember)
 
-			dsn := fmt.Sprintf("file:TestCreateModel_Forbidden_%s?mode=memory&cache=private", role)
-			app, _, keyCache := setupModelTestApp(t, dsn)
-			testKey := addTestKey(t, keyCache, role, "")
+	req := httptest.NewRequest("POST", modelURL(), bodyJSON(t, map[string]any{
+		"name":     "model-forbidden",
+		"provider": "openai",
+		"base_url": "https://api.openai.com/v1",
+	}))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+testKey)
 
-			req := httptest.NewRequest("POST", modelURL(), bodyJSON(t, map[string]any{
-				"name":     "model-forbidden",
-				"provider": "openai",
-				"base_url": "https://api.openai.com/v1",
-			}))
-			req.Header.Set("Content-Type", "application/json")
-			req.Header.Set("Authorization", "Bearer "+testKey)
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: testTimeout})
+	if err != nil {
+		t.Fatalf("app.Test: %v", err)
+	}
+	defer resp.Body.Close()
 
-			resp, err := app.Test(req, fiber.TestConfig{Timeout: testTimeout})
-			if err != nil {
-				t.Fatalf("app.Test: %v", err)
-			}
-			defer resp.Body.Close()
-
-			if resp.StatusCode != fiber.StatusForbidden {
-				b, _ := io.ReadAll(resp.Body)
-				t.Errorf("status = %d, want 403; body: %s", resp.StatusCode, b)
-			}
-		})
+	if resp.StatusCode != fiber.StatusForbidden {
+		b, _ := io.ReadAll(resp.Body)
+		t.Errorf("status = %d, want 403; body: %s", resp.StatusCode, b)
 	}
 }
 
@@ -438,7 +431,7 @@ func TestListModels(t *testing.T) {
 
 	dsn := "file:TestListModels?mode=memory&cache=private"
 	app, database, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	// Seed three models so we can assert on count.
 	for i := range 3 {
@@ -479,7 +472,7 @@ func TestListModels_Empty(t *testing.T) {
 
 	dsn := "file:TestListModels_Empty?mode=memory&cache=private"
 	app, _, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	req := httptest.NewRequest("GET", modelURL(), nil)
 	req.Header.Set("Authorization", "Bearer "+testKey)
@@ -515,7 +508,7 @@ func TestListModels_Pagination(t *testing.T) {
 
 	dsn := "file:TestListModels_Pagination?mode=memory&cache=private"
 	app, database, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	// Seed 5 models.
 	for i := range 5 {
@@ -560,7 +553,7 @@ func TestListModels_IncludesDeployments(t *testing.T) {
 
 	dsn := "file:TestListModels_IncludesDeployments?mode=memory&cache=private"
 	app, database, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	m := mustCreateModelForDeployment(t, database, "model-with-deps-list")
 	mustCreateDeploymentDB(t, database, m.ID, "dep-list-a")
@@ -599,7 +592,7 @@ func TestListModels_ForbiddenForNonSystemAdmin(t *testing.T) {
 
 	dsn := "file:TestListModels_Forbidden?mode=memory&cache=private"
 	app, _, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleOrgAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleMember)
 
 	req := httptest.NewRequest("GET", modelURL(), nil)
 	req.Header.Set("Authorization", "Bearer "+testKey)
@@ -623,7 +616,7 @@ func TestGetModel(t *testing.T) {
 
 	dsn := "file:TestGetModel?mode=memory&cache=private"
 	app, database, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	m := mustCreateModelForDeployment(t, database, "get-model-target")
 	mustCreateDeploymentDB(t, database, m.ID, "get-dep-a")
@@ -671,7 +664,7 @@ func TestGetModel_NotFound(t *testing.T) {
 
 	dsn := "file:TestGetModel_NotFound?mode=memory&cache=private"
 	app, _, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	req := httptest.NewRequest("GET", modelItemURL("00000000-0000-0000-0000-000000000000"), nil)
 	req.Header.Set("Authorization", "Bearer "+testKey)
@@ -693,7 +686,7 @@ func TestGetModel_ForbiddenForNonSystemAdmin(t *testing.T) {
 
 	dsn := "file:TestGetModel_Forbidden?mode=memory&cache=private"
 	app, database, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleOrgAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleMember)
 
 	m := mustCreateModelForDeployment(t, database, "get-model-forbidden")
 
@@ -831,7 +824,7 @@ func TestUpdateModel(t *testing.T) {
 			dsn := fmt.Sprintf("file:TestUpdateModel_%s?mode=memory&cache=private",
 				strings.ReplaceAll(tc.name, " ", "_"))
 			app, database, keyCache := setupModelTestApp(t, dsn)
-			testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+			testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 			m := mustCreateModelForDeployment(t, database, "update-target-"+strings.ReplaceAll(tc.name, " ", "-"))
 
@@ -864,7 +857,7 @@ func TestUpdateModel_NotFound(t *testing.T) {
 
 	dsn := "file:TestUpdateModel_NotFound?mode=memory&cache=private"
 	app, _, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	req := httptest.NewRequest("PATCH", modelItemURL("00000000-0000-0000-0000-000000000000"),
 		bodyJSON(t, map[string]any{"name": "new-name"}))
@@ -888,7 +881,7 @@ func TestUpdateModel_DuplicateName(t *testing.T) {
 
 	dsn := "file:TestUpdateModel_DuplicateName?mode=memory&cache=private"
 	app, database, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	_ = mustCreateModelForDeployment(t, database, "existing-model-name")
 	m2 := mustCreateModelForDeployment(t, database, "model-to-rename")
@@ -915,7 +908,7 @@ func TestUpdateModel_ForbiddenForNonSystemAdmin(t *testing.T) {
 
 	dsn := "file:TestUpdateModel_Forbidden?mode=memory&cache=private"
 	app, database, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleOrgAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleMember)
 
 	m := mustCreateModelForDeployment(t, database, "update-forbidden-model")
 
@@ -943,7 +936,7 @@ func TestDeleteModel(t *testing.T) {
 
 	dsn := "file:TestDeleteModel?mode=memory&cache=private"
 	app, database, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	m := mustCreateModelForDeployment(t, database, "model-to-delete")
 
@@ -981,7 +974,7 @@ func TestDeleteModel_NotFound(t *testing.T) {
 
 	dsn := "file:TestDeleteModel_NotFound?mode=memory&cache=private"
 	app, _, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	req := httptest.NewRequest("DELETE", modelItemURL("00000000-0000-0000-0000-000000000000"), nil)
 	req.Header.Set("Authorization", "Bearer "+testKey)
@@ -1003,7 +996,7 @@ func TestDeleteModel_ForbiddenForNonSystemAdmin(t *testing.T) {
 
 	dsn := "file:TestDeleteModel_Forbidden?mode=memory&cache=private"
 	app, database, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleOrgAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleMember)
 
 	m := mustCreateModelForDeployment(t, database, "delete-forbidden-model")
 
@@ -1029,7 +1022,7 @@ func TestActivateModel(t *testing.T) {
 
 	dsn := "file:TestActivateModel?mode=memory&cache=private"
 	app, database, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	m := mustCreateModelForDeployment(t, database, "model-to-activate")
 
@@ -1063,7 +1056,7 @@ func TestActivateModel_NotFound(t *testing.T) {
 
 	dsn := "file:TestActivateModel_NotFound?mode=memory&cache=private"
 	app, _, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	req := httptest.NewRequest("PATCH", modelActivateURL("00000000-0000-0000-0000-000000000000"), nil)
 	req.Header.Set("Authorization", "Bearer "+testKey)
@@ -1085,7 +1078,7 @@ func TestActivateModel_ForbiddenForNonSystemAdmin(t *testing.T) {
 
 	dsn := "file:TestActivateModel_Forbidden?mode=memory&cache=private"
 	app, database, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleOrgAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleMember)
 
 	m := mustCreateModelForDeployment(t, database, "activate-forbidden-model")
 
@@ -1111,7 +1104,7 @@ func TestDeactivateModel(t *testing.T) {
 
 	dsn := "file:TestDeactivateModel?mode=memory&cache=private"
 	app, database, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	m := mustCreateModelForDeployment(t, database, "model-to-deactivate")
 
@@ -1145,7 +1138,7 @@ func TestDeactivateModel_NotFound(t *testing.T) {
 
 	dsn := "file:TestDeactivateModel_NotFound?mode=memory&cache=private"
 	app, _, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	req := httptest.NewRequest("PATCH", modelDeactivateURL("00000000-0000-0000-0000-000000000000"), nil)
 	req.Header.Set("Authorization", "Bearer "+testKey)
@@ -1167,7 +1160,7 @@ func TestDeactivateModel_ForbiddenForNonSystemAdmin(t *testing.T) {
 
 	dsn := "file:TestDeactivateModel_Forbidden?mode=memory&cache=private"
 	app, database, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleOrgAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleMember)
 
 	m := mustCreateModelForDeployment(t, database, "deactivate-forbidden-model")
 
@@ -1193,7 +1186,7 @@ func TestActivateDeactivateToggle(t *testing.T) {
 
 	dsn := "file:TestActivateDeactivateToggle?mode=memory&cache=private"
 	app, database, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	m := mustCreateModelForDeployment(t, database, "toggle-model")
 
@@ -1241,7 +1234,7 @@ func TestTestConnection_MissingBaseURL(t *testing.T) {
 
 	dsn := "file:TestTestConnection_MissingBaseURL?mode=memory&cache=private"
 	app, _, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	req := httptest.NewRequest("POST", modelTestConnectionURL(), bodyJSON(t, map[string]any{
 		"provider": "openai",
@@ -1280,7 +1273,7 @@ func TestTestConnection_InvalidScheme(t *testing.T) {
 			dsn := fmt.Sprintf("file:TestTestConnection_InvalidScheme_%s?mode=memory&cache=private",
 				strings.ReplaceAll(tc.name, " ", "_"))
 			app, _, keyCache := setupModelTestApp(t, dsn)
-			testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+			testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 			req := httptest.NewRequest("POST", modelTestConnectionURL(), bodyJSON(t, map[string]any{
 				"provider": "openai",
@@ -1326,7 +1319,7 @@ func TestTestConnection_ReachableServer(t *testing.T) {
 
 	dsn := "file:TestTestConnection_ReachableServer?mode=memory&cache=private"
 	app, _, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	req := httptest.NewRequest("POST", modelTestConnectionURL(), bodyJSON(t, map[string]any{
 		"provider": "openai",
@@ -1363,7 +1356,7 @@ func TestTestConnection_UnreachableServer(t *testing.T) {
 
 	dsn := "file:TestTestConnection_UnreachableServer?mode=memory&cache=private"
 	app, _, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	// Port 1 is almost universally refused / unreachable.
 	req := httptest.NewRequest("POST", modelTestConnectionURL(), bodyJSON(t, map[string]any{
@@ -1403,7 +1396,7 @@ func TestTestConnection_AuthFailure(t *testing.T) {
 
 	dsn := "file:TestTestConnection_AuthFailure?mode=memory&cache=private"
 	app, _, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	req := httptest.NewRequest("POST", modelTestConnectionURL(), bodyJSON(t, map[string]any{
 		"provider": "openai",
@@ -1447,7 +1440,7 @@ func TestTestConnection_ServerError(t *testing.T) {
 
 	dsn := "file:TestTestConnection_ServerError?mode=memory&cache=private"
 	app, _, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	req := httptest.NewRequest("POST", modelTestConnectionURL(), bodyJSON(t, map[string]any{
 		"provider": "openai",
@@ -1480,7 +1473,7 @@ func TestTestConnection_ForbiddenForNonSystemAdmin(t *testing.T) {
 
 	dsn := "file:TestTestConnection_Forbidden?mode=memory&cache=private"
 	app, _, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleOrgAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleMember)
 
 	req := httptest.NewRequest("POST", modelTestConnectionURL(), bodyJSON(t, map[string]any{
 		"provider": "openai",
@@ -1514,7 +1507,7 @@ func TestTestConnection_AnthropicUsesXAPIKeyHeader(t *testing.T) {
 
 	dsn := "file:TestTestConnection_AnthropicHeader?mode=memory&cache=private"
 	app, _, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	req := httptest.NewRequest("POST", modelTestConnectionURL(), bodyJSON(t, map[string]any{
 		"provider": "anthropic",
@@ -1554,7 +1547,7 @@ func TestTestConnection_NonAnthropicUsesBearerAuth(t *testing.T) {
 
 	dsn := "file:TestTestConnection_BearerAuth?mode=memory&cache=private"
 	app, _, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	req := httptest.NewRequest("POST", modelTestConnectionURL(), bodyJSON(t, map[string]any{
 		"provider": "openai",
@@ -1587,7 +1580,7 @@ func TestCreateModel_WithFallbackLicensed(t *testing.T) {
 	dsn := "file:TestCreateModel_WithFallbackLicensed?mode=memory&cache=private"
 	// Dev license has all features including fallback_chains.
 	app, database, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	// Create model-a first (it will be the fallback target).
 	mustCreateModelForDeployment(t, database, "model-a-target")
@@ -1629,7 +1622,7 @@ func TestCreateModel_FallbackToNonExistentModel(t *testing.T) {
 
 	dsn := "file:TestCreateModel_FallbackNonExistent?mode=memory&cache=private"
 	app, _, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	reqBody := map[string]any{
 		"name":                "model-with-bad-fallback",
@@ -1661,7 +1654,7 @@ func TestUpdateModel_WithFallbackLicensed(t *testing.T) {
 
 	dsn := "file:TestUpdateModel_WithFallbackLicensed?mode=memory&cache=private"
 	app, database, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	target := mustCreateModelForDeployment(t, database, "fallback-target-upd")
 	source := mustCreateModelForDeployment(t, database, "source-model-upd")
@@ -1701,7 +1694,7 @@ func TestUpdateModel_FallbackCycle(t *testing.T) {
 
 	dsn := "file:TestUpdateModel_FallbackCycle?mode=memory&cache=private"
 	app, database, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	// Set up A→B via the DB directly (using API would work but DB is simpler).
 	modelA := mustCreateModelForDeployment(t, database, "cycle-model-a")
@@ -1747,7 +1740,7 @@ func TestUpdateModel_FallbackClearsWhenEmpty(t *testing.T) {
 
 	dsn := "file:TestUpdateModel_FallbackClearsWhenEmpty?mode=memory&cache=private"
 	app, database, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	target := mustCreateModelForDeployment(t, database, "fb-clear-target")
 	source := mustCreateModelForDeployment(t, database, "fb-clear-source")
@@ -1813,7 +1806,7 @@ func TestListModels_IncludesFallbackName(t *testing.T) {
 
 	dsn := "file:TestListModels_IncludesFallbackName?mode=memory&cache=private"
 	app, database, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	target := mustCreateModelForDeployment(t, database, "list-fallback-target")
 	source := mustCreateModelForDeployment(t, database, "list-fallback-source")
@@ -1888,7 +1881,7 @@ func TestListModels_FallbackAcrossPages(t *testing.T) {
 
 	dsn := "file:TestListModels_FallbackAcrossPages?mode=memory&cache=private"
 	app, database, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	// Create 5 models. The DB assigns UUIDs so listing order is by creation time
 	// (ascending). Models are named with sortable prefixes so alphabetical order
@@ -1992,7 +1985,7 @@ func TestUpdateModel_PIIFilterTriState(t *testing.T) {
 
 	dsn := "file:TestUpdateModel_PIIFilterTriState?mode=memory&cache=private"
 	app, database, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	m := mustCreateModelForDeployment(t, database, "pii-tristate-model")
 
@@ -2080,7 +2073,7 @@ func TestUpdateModel_ConcurrentFallbackMutations(t *testing.T) {
 	// Use a single connection so SQLite serialises writes; we test that the
 	// handler layer does not introduce data races, not SQLite concurrency.
 	app, database, keyCache := setupModelTestApp(t, dsn)
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	modelA := mustCreateModelForDeployment(t, database, "conc-fallback-a")
 	modelB := mustCreateModelForDeployment(t, database, "conc-fallback-b")

@@ -13,7 +13,6 @@ import (
 func openMigratedDB(t *testing.T) *DB {
 	t.Helper()
 
-	// Replace characters that SQLite rejects in URI filenames.
 	safeName := strings.NewReplacer("/", "_", " ", "_", "#", "_").Replace(t.Name())
 
 	cfg := config.DatabaseConfig{
@@ -40,41 +39,3 @@ func openMigratedDB(t *testing.T) *DB {
 func ptr[T any](v T) *T {
 	return &v
 }
-
-func mustCreateOrg(t *testing.T, d *DB, params CreateOrgParams) *Org {
-	t.Helper()
-	org, err := d.CreateOrg(context.Background(), params)
-	if err != nil {
-		t.Fatalf("mustCreateOrg(%q): %v", params.Slug, err)
-	}
-	return org
-}
-
-func mustCreateTeam(t *testing.T, d *DB, params CreateTeamParams) *Team {
-	t.Helper()
-	team, err := d.CreateTeam(context.Background(), params)
-	if err != nil {
-		t.Fatalf("mustCreateTeam(%q): %v", params.Slug, err)
-	}
-	return team
-}
-
-func mustCreateMembership(t *testing.T, d *DB, params CreateOrgMembershipParams) *OrgMembership {
-	t.Helper()
-	m, err := d.CreateOrgMembership(context.Background(), params)
-	if err != nil {
-		t.Fatalf("mustCreateMembership: %v", err)
-	}
-	return m
-}
-
-func mustCreateServiceAccount(t *testing.T, d *DB, params CreateServiceAccountParams) *ServiceAccount {
-	t.Helper()
-	sa, err := d.CreateServiceAccount(context.Background(), params)
-	if err != nil {
-		t.Fatalf("mustCreateServiceAccount: %v", err)
-	}
-	return sa
-}
-
-

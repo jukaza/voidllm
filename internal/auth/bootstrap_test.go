@@ -22,8 +22,6 @@ func defaultBootstrapCfg(adminKey string) config.SettingsConfig {
 	return config.SettingsConfig{
 		AdminKey: adminKey,
 		Bootstrap: config.BootstrapConfig{
-			OrgName:    "Default",
-			OrgSlug:    "default",
 			AdminEmail: "admin@voidllm.local",
 		},
 	}
@@ -184,6 +182,9 @@ func TestBootstrap_CreatesEntities(t *testing.T) {
 	}
 	if got := countRows(t, sqlDB, "api_keys"); got != 1 {
 		t.Errorf("api_keys count = %d, want 1", got)
+	}
+	if got := countRows(t, sqlDB, "wallets"); got != 1 {
+		t.Errorf("wallets count = %d, want 1", got)
 	}
 }
 

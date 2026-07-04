@@ -27,9 +27,7 @@ interface NavGroup {
 
 const roleLevel: Record<string, number> = {
   member: 0,
-  team_admin: 1,
-  org_admin: 2,
-  system_admin: 3,
+  system_admin: 1,
 }
 
 function hasMinRole(userRole: string, minRole?: string): boolean {

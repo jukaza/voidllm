@@ -84,9 +84,7 @@ func TestLoginThrottle_LockoutAfterFiveFailures(t *testing.T) {
 	dsn := "file:TestLoginThrottle_Lockout?mode=memory&cache=private"
 	app, database, _ := setupTestAppWithThrottle(t, dsn)
 
-	org := mustCreateOrg(t, database, "Throttle Org", "throttle-lock-org")
-	user := mustCreateUserWithPassword(t, database, email, "Throttle User", password)
-	mustCreateOrgMembership(t, database, org.ID, user.ID, auth.RoleOrgAdmin)
+	mustCreateUserWithPassword(t, database, email, "Throttle User", password, true)
 
 	// Five wrong-password attempts — each must return 401 (not yet throttled).
 	for i := 1; i <= 5; i++ {
@@ -141,9 +139,7 @@ func TestLoginThrottle_CorrectPasswordAlsoThrottled(t *testing.T) {
 	dsn := "file:TestLoginThrottle_CorrectPwd?mode=memory&cache=private"
 	app, database, _ := setupTestAppWithThrottle(t, dsn)
 
-	org := mustCreateOrg(t, database, "Throttle Org 2", "throttle-correct-org")
-	user := mustCreateUserWithPassword(t, database, email, "Throttle User 2", password)
-	mustCreateOrgMembership(t, database, org.ID, user.ID, auth.RoleOrgAdmin)
+	mustCreateUserWithPassword(t, database, email, "Throttle User 2", password, true)
 
 	// Trigger lockout with five wrong-password attempts.
 	for i := 0; i < 5; i++ {
@@ -170,9 +166,7 @@ func TestLoginThrottle_SuccessResetsCounter(t *testing.T) {
 	dsn := "file:TestLoginThrottle_Reset?mode=memory&cache=private"
 	app, database, _ := setupTestAppWithThrottle(t, dsn)
 
-	org := mustCreateOrg(t, database, "Throttle Org 3", "throttle-reset-org")
-	user := mustCreateUserWithPassword(t, database, email, "Throttle User 3", password)
-	mustCreateOrgMembership(t, database, org.ID, user.ID, auth.RoleOrgAdmin)
+	mustCreateUserWithPassword(t, database, email, "Throttle User 3", password, true)
 
 	// Four wrong attempts — one below the lockout threshold.
 	for i := 0; i < 4; i++ {
@@ -207,17 +201,16 @@ func TestLoginThrottle_NilThrottleExistingTestsUnchanged(t *testing.T) {
 		name       string
 		email      string
 		password   string
-		setup      func(t *testing.T, database *db.DB, org *db.Org)
+		setup      func(t *testing.T, database *db.DB)
 		wantStatus int
 	}{
 		{
 			name:     "correct credentials returns 200 without throttle",
 			email:    "nil-throttle-ok@example.com",
 			password: "pass1",
-			setup: func(t *testing.T, database *db.DB, org *db.Org) {
+			setup: func(t *testing.T, database *db.DB) {
 				t.Helper()
-				user := mustCreateUserWithPassword(t, database, "nil-throttle-ok@example.com", "User", "pass1")
-				mustCreateOrgMembership(t, database, org.ID, user.ID, auth.RoleOrgAdmin)
+				mustCreateUserWithPassword(t, database, "nil-throttle-ok@example.com", "User", "pass1", true)
 			},
 			wantStatus: fiber.StatusOK,
 		},
@@ -225,10 +218,9 @@ func TestLoginThrottle_NilThrottleExistingTestsUnchanged(t *testing.T) {
 			name:     "wrong password returns 401 without throttle",
 			email:    "nil-throttle-wp@example.com",
 			password: "wrongpass",
-			setup: func(t *testing.T, database *db.DB, org *db.Org) {
+			setup: func(t *testing.T, database *db.DB) {
 				t.Helper()
-				user := mustCreateUserWithPassword(t, database, "nil-throttle-wp@example.com", "User WP", "correctpass")
-				mustCreateOrgMembership(t, database, org.ID, user.ID, auth.RoleOrgAdmin)
+				mustCreateUserWithPassword(t, database, "nil-throttle-wp@example.com", "User WP", "correctpass", true)
 			},
 			wantStatus: fiber.StatusUnauthorized,
 		},
@@ -236,7 +228,7 @@ func TestLoginThrottle_NilThrottleExistingTestsUnchanged(t *testing.T) {
 			name:       "unknown email returns 401 without throttle",
 			email:      "nobody-nil@example.com",
 			password:   "anything",
-			setup:      func(t *testing.T, database *db.DB, org *db.Org) {},
+			setup:      func(t *testing.T, database *db.DB) {},
 			wantStatus: fiber.StatusUnauthorized,
 		},
 	}
@@ -249,8 +241,7 @@ func TestLoginThrottle_NilThrottleExistingTestsUnchanged(t *testing.T) {
 				slugFor(tc.name))
 			// Use the standard setup WITHOUT a throttle — tests nil-throttle no-op.
 			app, database, _ := setupTestApp(t, dsn)
-			org := mustCreateOrg(t, database, "Nil Throttle Org", "nil-throttle-org-"+slugFor(tc.name))
-			tc.setup(t, database, org)
+			tc.setup(t, database)
 
 			status := doLoginRequest(t, app, tc.email, tc.password)
 			if status != tc.wantStatus {

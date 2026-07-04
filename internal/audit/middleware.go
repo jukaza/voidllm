@@ -25,12 +25,7 @@ import (
 //   - "api_key":             createModelRequest, updateModelRequest (models.go);
 //     createDeploymentRequest, updateDeploymentRequest (deployments.go);
 //     testConnectionRequest (models.go)
-//   - "auth_token":          createMCPServerRequest, updateMCPServerRequest (mcp_servers.go)
-//   - "oauth_client_secret": createMCPServerRequest, updateMCPServerRequest (mcp_servers.go)
-//   - "client_secret":       ssoConfigRequest (org_sso.go)
-//   - "key":                 setLicenseRequest (license.go)
-//   - "token":               defense-in-depth for invite tokens and similar
-//     single-field token payloads
+//   - "token":               defense-in-depth for single-field token payloads
 var sensitiveFields = map[string]struct{}{
 	"password":            {},
 	"api_key":             {},
@@ -44,26 +39,21 @@ var sensitiveFields = map[string]struct{}{
 // normalizeResourceType maps plural URL path segments to their canonical
 // resource type names used in audit events.
 var normalizeResourceType = map[string]string{
-	"orgs":             "org",
-	"teams":            "team",
-	"users":            "user",
-	"keys":             "key",
-	"models":           "model",
-	"members":          "membership",
-	"service-accounts": "service_account",
-	"invites":          "invite",
-	"model-access":     "model_access",
-	"model-aliases":    "model_alias",
-	"mcp-servers":      "mcp_server",
-	"mcp-access":       "mcp_access",
-	"sso":              "sso_config",
-	"settings":         "setting",
+	"users":         "user",
+	"keys":          "key",
+	"models":        "model",
+	"model-aliases": "model_alias",
+	"providers":     "provider",
+	"topups":        "topup",
+	"wallet":        "wallet",
+	"settings":      "setting",
 }
 
 // verbOverrides lists path segments that represent an explicit action verb
 // rather than a resource type, and maps them to the canonical action name.
 var verbOverrides = map[string]string{
 	"revoke":     "revoke",
+	"rotate":     "rotate",
 	"activate":   "activate",
 	"deactivate": "deactivate",
 	"login":      "login",
@@ -102,10 +92,9 @@ func Middleware(logger *Logger) fiber.Handler {
 
 		keyInfo := auth.KeyInfoFromCtx(c)
 
-		var actorID, actorType, actorKeyID, orgID string
+		var actorID, actorType, actorKeyID string
 		if keyInfo != nil {
 			actorKeyID = keyInfo.ID
-			orgID = ""
 			if keyInfo.UserID != "" {
 				actorID = keyInfo.UserID
 				actorType = "user"
@@ -119,7 +108,6 @@ func Middleware(logger *Logger) fiber.Handler {
 
 		logger.Log(Event{
 			Timestamp:    time.Now().UTC(),
-			OrgID:        orgID,
 			ActorID:      actorID,
 			ActorType:    actorType,
 			ActorKeyID:   actorKeyID,
@@ -151,12 +139,6 @@ func Middleware(logger *Logger) fiber.Handler {
 func parseRoute(c fiber.Ctx) (action, resourceType, resourceID string) {
 	routePath := c.Route().Path
 
-	// MCP endpoints carry opaque JSON-RPC payloads that do not map to the
-	// admin resource/action taxonomy. Skip them entirely.
-	if strings.HasPrefix(routePath, "/api/v1/mcp/") {
-		return "", "", ""
-	}
-
 	// Strip the /api/v1 prefix.
 	trimmed := strings.TrimPrefix(routePath, "/api/v1")
 	if trimmed == routePath {
@@ -172,8 +154,7 @@ func parseRoute(c fiber.Ctx) (action, resourceType, resourceID string) {
 
 	// Walk segments to find verb override, last resource segment, and last param.
 	// lastSegmentWasParam tracks whether the most recently processed segment was
-	// a route parameter. This is used to avoid treating an org_id as the
-	// resourceID for collection-level routes such as PUT /orgs/:org_id/model-access.
+	// a route parameter (used to decide whether lastParam is the resource ID).
 	var lastResource string
 	var lastParam string
 	var lastSegmentWasParam bool
@@ -226,10 +207,8 @@ func parseRoute(c fiber.Ctx) (action, resourceType, resourceID string) {
 
 	// Resource ID: for create actions (POST to a collection), the response body
 	// carries the new ID but it is not available here — leave it empty. For all
-	// other mutations the last route parameter is the resource ID, but only when
-	// the final meaningful segment was a parameter (not a resource-type segment).
-	// This prevents collection-level routes like PUT /orgs/:org_id/model-access
-	// from incorrectly using org_id as the resourceID.
+	// other mutations the last route parameter is the resource ID when the final
+	// meaningful segment was a parameter (not a collection resource segment).
 	if action != "create" && lastParam != "" && lastSegmentWasParam {
 		resourceID = lastParam
 	}

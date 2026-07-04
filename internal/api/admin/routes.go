@@ -62,9 +62,7 @@ func RegisterRoutes(app *fiber.App, handler *Handler, keyCache *cache.Cache[stri
 	api.Delete("/keys/:key_id", auth.RequireRole(auth.RoleMember), handler.DeleteAPIKey)
 	api.Post("/keys/:key_id/rotate", auth.RequireRole(auth.RoleMember), handler.RotateAPIKey)
 
-	// Models — global resources managed by system admins only.
-	// An org_admin in a multi-org deployment must not be able to add or modify
-	// models that are visible to all organisations.
+	// Models — global catalog resources managed by system admins only.
 	// Static sub-paths (health, test-connection) are registered before
 	// /:model_id so Fiber does not treat them as model_id parameter values.
 	api.Get("/models/health", auth.RequireRole(auth.RoleMember), handler.GetModelHealth)
@@ -88,9 +86,9 @@ func RegisterRoutes(app *fiber.App, handler *Handler, keyCache *cache.Cache[stri
 	api.Put("/models/:model_id/routes", auth.RequireRole(auth.RoleSystemAdmin), handler.ReplaceModelRoutes)
 
 	// Model Aliases
-	api.Post("/model-aliases", auth.RequireRole(auth.RoleMember), handler.CreateOrgAlias)
-	api.Get("/model-aliases", auth.RequireRole(auth.RoleMember), handler.ListOrgAliases)
-	api.Delete("/model-aliases/:alias_id", auth.RequireRole(auth.RoleMember), handler.DeleteOrgAlias)
+	api.Post("/model-aliases", auth.RequireRole(auth.RoleMember), handler.CreateModelAlias)
+	api.Get("/model-aliases", auth.RequireRole(auth.RoleMember), handler.ListModelAliases)
+	api.Delete("/model-aliases/:alias_id", auth.RequireRole(auth.RoleMember), handler.DeleteModelAlias)
 
 	// Usage
 	api.Get("/usage", auth.RequireRole(auth.RoleSystemAdmin), handler.SystemAdminUsage)

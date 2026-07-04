@@ -66,10 +66,6 @@ data:
       license: ${VOIDLLM_LICENSE}
       {{- end }}
       bootstrap:
-        org_name: {{ .Values.config.settings.bootstrap.orgName | quote }}
-        {{- if .Values.config.settings.bootstrap.orgSlug }}
-        org_slug: {{ .Values.config.settings.bootstrap.orgSlug | quote }}
-        {{- end }}
         admin_email: {{ .Values.config.settings.bootstrap.adminEmail | quote }}
       usage:
         buffer_size: {{ .Values.config.settings.usage.bufferSize }}

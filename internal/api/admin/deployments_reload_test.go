@@ -94,7 +94,7 @@ func TestCreateDeployment_InvokesReloadModels(t *testing.T) {
 		reloadModels,
 	)
 	m := mustCreateModelForDeployment(t, database, "reload-create-model")
-	token := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	token := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	req := httptest.NewRequest("POST", deploymentURL(m.ID),
 		strings.NewReader(`{"name":"reload-dep","provider":"openai","base_url":"https://api.openai.com/v1","weight":1}`))
@@ -136,7 +136,7 @@ func TestUpdateDeployment_InvokesReloadModels(t *testing.T) {
 	)
 	m := mustCreateModelForDeployment(t, database, "reload-update-model")
 	dep := mustCreateDeploymentDB(t, database, m.ID, "reload-update-dep")
-	token := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	token := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	req := httptest.NewRequest("PATCH", deploymentItemURL(m.ID, dep.ID),
 		strings.NewReader(`{"name":"reload-updated-dep"}`))
@@ -178,7 +178,7 @@ func TestDeleteDeployment_InvokesReloadModels(t *testing.T) {
 	)
 	m := mustCreateModelForDeployment(t, database, "reload-delete-model")
 	dep := mustCreateDeploymentDB(t, database, m.ID, "reload-delete-dep")
-	token := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	token := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	req := httptest.NewRequest("DELETE", deploymentItemURL(m.ID, dep.ID), nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -211,7 +211,7 @@ func TestDeploymentReload_NilCallbackIsNoOp(t *testing.T) {
 		nil, // no callback
 	)
 	m := mustCreateModelForDeployment(t, database, "nil-reload-model")
-	token := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	token := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	// Create
 	createReq := httptest.NewRequest("POST", deploymentURL(m.ID),
@@ -280,7 +280,7 @@ func TestDeploymentReload_CallbackErrorDoesNotFailRequest(t *testing.T) {
 		reloadModels,
 	)
 	m := mustCreateModelForDeployment(t, database, "err-reload-model")
-	token := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	token := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	// Create must succeed despite reload error.
 	createReq := httptest.NewRequest("POST", deploymentURL(m.ID),
@@ -354,7 +354,7 @@ func TestCreateDeployment_PIIFilter_TriggerReload(t *testing.T) {
 		reloadModels,
 	)
 	m := mustCreateModelForDeployment(t, database, "pii-reload-model")
-	token := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	token := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	req := httptest.NewRequest("POST", deploymentURL(m.ID),
 		strings.NewReader(`{"name":"pii-on-dep","provider":"openai","base_url":"https://api.openai.com/v1","weight":1,"pii_filter":true}`))
@@ -403,7 +403,7 @@ func TestUpdateDeployment_PIIFilter_TriggerReload(t *testing.T) {
 	)
 	m := mustCreateModelForDeployment(t, database, "pii-update-reload-model")
 	dep := mustCreateDeploymentDB(t, database, m.ID, "pii-update-reload-dep")
-	token := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	token := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	// Reset the counter: createDeploymentDB goes through the DB directly, not
 	// the HTTP handler, so reloadCalled should still be 0 here.

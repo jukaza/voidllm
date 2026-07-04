@@ -15,18 +15,23 @@ import (
 // Key type constants identify the category of an API key.
 const (
 	KeyTypeUser    = "user_key"
-	KeyTypeTeam    = "team_key"
-	KeyTypeSA      = "sa_key"
 	KeyTypeSession = "session_key"
-	KeyTypeInvite  = "invite_token"
+)
+
+// Legacy key types still accepted by ValidatePrefix for keys created before the
+// marketplace pivot. New keys are not generated for these types.
+const (
+	KeyTypeTeam   = "team_key"
+	KeyTypeSA     = "sa_key"
+	KeyTypeInvite = "invite_token"
 )
 
 // Key prefix constants are the human-readable prefixes embedded in every key.
 const (
 	PrefixUser    = "vl_uk_"
+	PrefixSession = "vl_sk_"
 	PrefixTeam    = "vl_tk_"
 	PrefixSA      = "vl_sa_"
-	PrefixSession = "vl_sk_"
 	PrefixInvite  = "vl_iv_"
 )
 
@@ -111,14 +116,8 @@ func prefixFor(keyType string) (string, error) {
 	switch keyType {
 	case KeyTypeUser:
 		return PrefixUser, nil
-	case KeyTypeTeam:
-		return PrefixTeam, nil
-	case KeyTypeSA:
-		return PrefixSA, nil
 	case KeyTypeSession:
 		return PrefixSession, nil
-	case KeyTypeInvite:
-		return PrefixInvite, nil
 	default:
 		return "", fmt.Errorf("prefix for: unknown key type %q", keyType)
 	}

@@ -210,14 +210,9 @@ type LoggingConfig struct {
 	Format string `yaml:"format"`
 }
 
-// BootstrapConfig controls the default org, user, and admin email created on
-// first startup when settings.admin_key is set and the database is empty.
+// BootstrapConfig controls the initial system-admin user created on first
+// startup when settings.admin_key is set and the database is empty.
 type BootstrapConfig struct {
-	// OrgName is the display name of the default organization. Defaults to "Default".
-	OrgName string `yaml:"org_name"`
-	// OrgSlug is the URL-safe slug for the default organization. Defaults to a
-	// slug derived from OrgName.
-	OrgSlug string `yaml:"org_slug"`
 	// AdminEmail is the email address of the initial system-admin user.
 	// Defaults to "admin@voidllm.local".
 	AdminEmail string `yaml:"admin_email"`
@@ -647,12 +642,6 @@ func (c *Config) setDefaults() {
 	}
 
 	// Bootstrap
-	if c.Settings.Bootstrap.OrgName == "" {
-		c.Settings.Bootstrap.OrgName = "Default"
-	}
-	if c.Settings.Bootstrap.OrgSlug == "" {
-		c.Settings.Bootstrap.OrgSlug = deriveSlug(c.Settings.Bootstrap.OrgName)
-	}
 	if c.Settings.Bootstrap.AdminEmail == "" {
 		c.Settings.Bootstrap.AdminEmail = "admin@voidllm.local"
 	}

@@ -818,9 +818,6 @@ func (p *ProxyHandler) checkLimits(c fiber.Ctx, keyInfo *auth.KeyInfo) error {
 		DailyTokenLimit:   keyInfo.DailyTokenLimit,
 		MonthlyTokenLimit: keyInfo.MonthlyTokenLimit,
 	}
-	teamLimits := ratelimit.Limits{}
-	orgLimits := ratelimit.Limits{}
-
 	if p.Wallet != nil && keyInfo.UserID != "" {
 		if err := p.Wallet.Check(keyInfo.UserID); err != nil {
 			p.Log.LogAttrs(c.Context(), slog.LevelWarn, "insufficient wallet balance",
@@ -836,7 +833,7 @@ func (p *ProxyHandler) checkLimits(c fiber.Ctx, keyInfo *auth.KeyInfo) error {
 	}
 
 	if p.RateLimiter != nil {
-		if err := p.RateLimiter.CheckRate(keyInfo.ID, "", "", keyLimits, teamLimits, orgLimits); err != nil {
+		if err := p.RateLimiter.CheckRate(keyInfo.ID, keyLimits); err != nil {
 			metrics.RateLimitRejectionsTotal.WithLabelValues("request").Inc()
 			p.Log.LogAttrs(c.Context(), slog.LevelWarn, "rate limit exceeded",
 				slog.String("key_id", keyInfo.ID),
@@ -849,7 +846,7 @@ func (p *ProxyHandler) checkLimits(c fiber.Ctx, keyInfo *auth.KeyInfo) error {
 	}
 
 	if p.TokenCounter != nil {
-		if err := p.TokenCounter.CheckTokens(keyInfo.ID, "", "", keyLimits, teamLimits, orgLimits); err != nil {
+		if err := p.TokenCounter.CheckTokens(keyInfo.ID, keyLimits); err != nil {
 			metrics.RateLimitRejectionsTotal.WithLabelValues("token").Inc()
 			p.Log.LogAttrs(c.Context(), slog.LevelWarn, "token budget exceeded",
 				slog.String("key_id", keyInfo.ID),
@@ -903,9 +900,8 @@ func (p *ProxyHandler) recordUpstreamRequest(model Model, dep Deployment) {
 // access control. It returns the resolved Model or sends an API error response
 // and returns the error for Handle to propagate.
 func (p *ProxyHandler) resolveModel(c fiber.Ctx, keyInfo *auth.KeyInfo, modelName string) (Model, error) {
-	// Scoped alias resolution: team → org (before global YAML aliases).
 	if p.AliasCache != nil && keyInfo != nil {
-		if canonical, ok := p.AliasCache.Resolve("", "", modelName); ok {
+		if canonical, ok := p.AliasCache.Resolve(modelName); ok {
 			modelName = canonical
 		}
 	}
@@ -1742,10 +1738,7 @@ func (p *ProxyHandler) logUsageEvent(keyInfo *auth.KeyInfo, model Model, ui Usag
 	p.UsageLogger.Log(usage.Event{
 		KeyID:              keyInfo.ID,
 		KeyType:            keyInfo.KeyType,
-		OrgID:              "",
-		TeamID:             "",
 		UserID:             keyInfo.UserID,
-		ServiceAccountID:   "",
 		ModelName:          model.Name,
 		RequestedModelName: requestedModelName,
 		PromptTokens:       ui.PromptTokens,

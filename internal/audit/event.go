@@ -12,8 +12,6 @@ type Event struct {
 	ID string
 	// Timestamp is when the action occurred. Callers must set this to time.Now().UTC().
 	Timestamp time.Time
-	// OrgID is the organization context in which the action was performed.
-	OrgID string
 	// ActorID is the user or service account ID that performed the action.
 	ActorID string
 	// ActorType describes the kind of actor: "user", "service_account", or "system".
@@ -24,9 +22,8 @@ type Event struct {
 	// Action is the verb describing what occurred: "create", "update", "delete",
 	// "revoke", "activate", "deactivate", "login", or "logout".
 	Action string
-	// ResourceType identifies the kind of resource affected: "org", "team",
-	// "user", "key", "model", "service_account", "invite", "membership",
-	// "model_access", "model_alias", or "session".
+	// ResourceType identifies the kind of resource affected: "user", "key",
+	// "model", "model_alias", "provider", "wallet", "topup", or "session".
 	ResourceType string
 	// ResourceID is the identifier of the affected resource. Empty for
 	// collection-level actions such as create (the new ID is not yet known

@@ -523,11 +523,11 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 
 	// Step 9: load alias cache from DB.
 	aliasCache := proxy.NewAliasCache()
-	orgAliases, teamAliases, err := database.LoadAllModelAliases(ctx)
+	aliases, err := database.LoadAllModelAliases(ctx)
 	if err != nil {
 		log.Error("load model aliases", slog.String("error", err.Error()))
 	} else {
-		aliasCache.Load(orgAliases, teamAliases)
+		aliasCache.Load(aliases)
 	}
 
 	// Step 10: connect Redis (optional). On failure, continue without Redis.
@@ -565,7 +565,7 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 					log.LogAttrs(context.Background(), slog.LevelDebug, "redis: model registry reloaded")
 				case voidredis.ChannelAliases:
 					// Reload full alias cache from the database.
-					orgAl, teamAl, loadErr := database.LoadAllModelAliases(context.Background())
+					reloaded, loadErr := database.LoadAllModelAliases(context.Background())
 					if loadErr != nil {
 						log.LogAttrs(context.Background(), slog.LevelError,
 							"redis: reload alias cache failed",
@@ -573,7 +573,7 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 						)
 						return
 					}
-					aliasCache.Load(orgAl, teamAl)
+					aliasCache.Load(reloaded)
 					log.LogAttrs(context.Background(), slog.LevelDebug, "redis: alias cache reloaded")
 				}
 			})
@@ -752,14 +752,14 @@ func (a *Application) Start() error {
 		startTicker(a.cfg.Cache.AliasTTL, func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
-			orgAliases, teamAliases, err := a.database.LoadAllModelAliases(ctx)
+			aliases, err := a.database.LoadAllModelAliases(ctx)
 			if err != nil {
 				a.log.LogAttrs(context.Background(), slog.LevelError, "alias cache refresh failed",
 					slog.String("error", err.Error()),
 				)
 				return
 			}
-			a.aliasCache.Load(orgAliases, teamAliases)
+			a.aliasCache.Load(aliases)
 		}),
 		startTicker(5*time.Minute, func() {
 			a.tokenCounter.EvictStale()
@@ -958,20 +958,6 @@ func (a *Application) PrintBootstrapCredentials() {
 // against a different row.
 func deploymentAAD(id string) []byte {
 	return []byte("deployment:" + id)
-}
-
-// isCodeModeTimeout reports whether a Code Mode execution error message
-// indicates the script exceeded its wall-clock time limit.
-func isCodeModeTimeout(msg string) bool {
-	lower := strings.ToLower(msg)
-	return strings.Contains(lower, "interrupted") || strings.Contains(lower, "timeout")
-}
-
-// isCodeModeOOM reports whether a Code Mode execution error message indicates
-// the script exceeded its memory limit inside the WASM sandbox.
-func isCodeModeOOM(msg string) bool {
-	lower := strings.ToLower(msg)
-	return strings.Contains(lower, "out of memory") || strings.Contains(lower, "stack overflow")
 }
 
 // cleanup tears down resources in reverse startup order: Redis pub/sub,

@@ -133,10 +133,7 @@ func makeEvent() Event {
 	return Event{
 		KeyID:            "key-abc",
 		KeyType:          "user_key",
-		OrgID:            "org-123",
-		TeamID:           "team-456",
 		UserID:           "user-789",
-		ServiceAccountID: "",
 		ModelName:        "gpt-oss-120b",
 		PromptTokens:     10,
 		CompletionTokens: 20,
@@ -176,7 +173,7 @@ func TestLog_AllFieldsStored(t *testing.T) {
 
 	ctx := context.Background()
 	row := d.SQL().QueryRowContext(ctx, `
-		SELECT key_id, key_type, org_id, team_id, user_id, service_account_id,
+		SELECT key_id, key_type, user_id,
 		       model_name, prompt_tokens, completion_tokens, total_tokens,
 		       cost_estimate, request_duration_ms, ttft_ms, tokens_per_second,
 		       status_code
@@ -184,8 +181,8 @@ func TestLog_AllFieldsStored(t *testing.T) {
 	)
 
 	var (
-		keyID, keyType, orgID     string
-		teamID, userID, saID      sql.NullString
+		keyID, keyType            string
+		userID                    sql.NullString
 		modelName                 string
 		prompt, completion, total int
 		costEstimate              sql.NullFloat64
@@ -196,8 +193,7 @@ func TestLog_AllFieldsStored(t *testing.T) {
 	)
 
 	if err := row.Scan(
-		&keyID, &keyType, &orgID,
-		&teamID, &userID, &saID,
+		&keyID, &keyType, &userID,
 		&modelName,
 		&prompt, &completion, &total,
 		&costEstimate,
@@ -215,17 +211,8 @@ func TestLog_AllFieldsStored(t *testing.T) {
 	if keyType != ev.KeyType {
 		t.Errorf("key_type = %q, want %q", keyType, ev.KeyType)
 	}
-	if orgID != ev.OrgID {
-		t.Errorf("org_id = %q, want %q", orgID, ev.OrgID)
-	}
-	if !teamID.Valid || teamID.String != ev.TeamID {
-		t.Errorf("team_id = valid=%v %q, want %q", teamID.Valid, teamID.String, ev.TeamID)
-	}
 	if !userID.Valid || userID.String != ev.UserID {
 		t.Errorf("user_id = valid=%v %q, want %q", userID.Valid, userID.String, ev.UserID)
-	}
-	if saID.Valid {
-		t.Errorf("service_account_id = %q, want NULL (empty string becomes NULL)", saID.String)
 	}
 	if modelName != ev.ModelName {
 		t.Errorf("model_name = %q, want %q", modelName, ev.ModelName)
@@ -262,18 +249,15 @@ func TestLog_AllFieldsStored(t *testing.T) {
 	}
 }
 
-// TestLog_NullableFields verifies NULL vs. non-NULL storage for the six
-// optional columns: team_id, user_id, service_account_id, cost_estimate,
-// ttft_ms, and tokens_per_second.
+// TestLog_NullableFields verifies NULL vs. non-NULL storage for optional
+// columns: user_id, cost_estimate, ttft_ms, and tokens_per_second.
 func TestLog_NullableFields(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name         string
 		event        Event
-		wantTeamNull bool
 		wantUserNull bool
-		wantSANull   bool
 		wantCostNull bool
 		wantTTFTNull bool
 		wantTPSNull  bool
@@ -282,16 +266,11 @@ func TestLog_NullableFields(t *testing.T) {
 			name: "empty optional fields stored as NULL",
 			event: Event{
 				KeyID:      "k1",
-				KeyType:    "team_key",
-				OrgID:      "o1",
+				KeyType:    "user_key",
 				ModelName:  "m1",
 				StatusCode: 200,
-				// TeamID, UserID, ServiceAccountID: zero value → NULL
-				// CostEstimate, TTFT_MS, TokensPerSecond: nil → NULL
 			},
-			wantTeamNull: true,
 			wantUserNull: true,
-			wantSANull:   true,
 			wantCostNull: true,
 			wantTTFTNull: true,
 			wantTPSNull:  true,
@@ -299,21 +278,16 @@ func TestLog_NullableFields(t *testing.T) {
 		{
 			name: "populated optional fields stored as non-NULL",
 			event: Event{
-				KeyID:            "k2",
-				KeyType:          "user_key",
-				OrgID:            "o2",
-				TeamID:           "t2",
-				UserID:           "u2",
-				ServiceAccountID: "sa2",
-				ModelName:        "m2",
-				CostEstimate:     ptr(0.001),
-				TTFT_MS:          ptr(30),
-				TokensPerSecond:  ptr(200.0),
-				StatusCode:       200,
+				KeyID:           "k2",
+				KeyType:         "user_key",
+				UserID:          "u2",
+				ModelName:       "m2",
+				CostEstimate:    ptr(0.001),
+				TTFT_MS:         ptr(30),
+				TokensPerSecond: ptr(200.0),
+				StatusCode:      200,
 			},
-			wantTeamNull: false,
 			wantUserNull: false,
-			wantSANull:   false,
 			wantCostNull: false,
 			wantTTFTNull: false,
 			wantTPSNull:  false,
@@ -334,28 +308,21 @@ func TestLog_NullableFields(t *testing.T) {
 
 			ctx := context.Background()
 			row := d.SQL().QueryRowContext(ctx, `
-				SELECT team_id, user_id, service_account_id,
-				       cost_estimate, ttft_ms, tokens_per_second
+				SELECT user_id, cost_estimate, ttft_ms, tokens_per_second
 				FROM usage_events LIMIT 1`,
 			)
 
-			var teamID, userID, saID sql.NullString
+			var userID sql.NullString
 			var cost sql.NullFloat64
 			var ttft sql.NullInt64
 			var tps sql.NullFloat64
 
-			if err := row.Scan(&teamID, &userID, &saID, &cost, &ttft, &tps); err != nil {
+			if err := row.Scan(&userID, &cost, &ttft, &tps); err != nil {
 				t.Fatalf("Scan: %v", err)
 			}
 
-			if teamID.Valid == tc.wantTeamNull {
-				t.Errorf("team_id.Valid = %v, want valid=%v", teamID.Valid, !tc.wantTeamNull)
-			}
 			if userID.Valid == tc.wantUserNull {
 				t.Errorf("user_id.Valid = %v, want valid=%v", userID.Valid, !tc.wantUserNull)
-			}
-			if saID.Valid == tc.wantSANull {
-				t.Errorf("service_account_id.Valid = %v, want valid=%v", saID.Valid, !tc.wantSANull)
 			}
 			if cost.Valid == tc.wantCostNull {
 				t.Errorf("cost_estimate.Valid = %v, want valid=%v", cost.Valid, !tc.wantCostNull)
@@ -663,8 +630,6 @@ func TestLog_TokenCounterUpdatedBeforeFlush(t *testing.T) {
 	ev := Event{
 		KeyID:            "tc-key",
 		KeyType:          "user_key",
-		OrgID:            "tc-org",
-		TeamID:           "tc-team",
 		ModelName:        "test-model",
 		PromptTokens:     60,
 		CompletionTokens: 40,
@@ -677,15 +642,14 @@ func TestLog_TokenCounterUpdatedBeforeFlush(t *testing.T) {
 
 	// The counter must already reflect the 100 tokens.
 	keyLimits := ratelimit.Limits{DailyTokenLimit: 200}
-	noLimits := ratelimit.Limits{}
 
-	if err := counter.CheckTokens("tc-key", "tc-team", "tc-org", keyLimits, noLimits, noLimits); err != nil {
+	if err := counter.CheckTokens("tc-key", keyLimits); err != nil {
 		t.Errorf("CheckTokens() immediately after Log() = %v, want nil (100 tokens < limit 200)", err)
 	}
 
 	// Now verify the counter blocks a request that would exceed the budget.
 	keyLimitsExceeded := ratelimit.Limits{DailyTokenLimit: 100}
-	if err := counter.CheckTokens("tc-key", "tc-team", "tc-org", keyLimitsExceeded, noLimits, noLimits); err == nil {
+	if err := counter.CheckTokens("tc-key", keyLimitsExceeded); err == nil {
 		t.Error("CheckTokens() = nil, want ErrTokenBudgetExceeded (100 tokens >= limit 100)")
 	}
 

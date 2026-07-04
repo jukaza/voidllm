@@ -31,12 +31,7 @@ export function useMyUsage(from: string, to: string, groupBy: string) {
   })
 }
 
-/** @deprecated Use useMyUsage — kept as alias during migration */
-export function useUsage(_orgId: string, from: string, to: string, groupBy: string) {
-  return useMyUsage(from, to, groupBy)
-}
-
-export function useCrossOrgUsage(
+export function useSystemUsage(
   params: { from: string; to: string; groupBy: string },
   enabled: boolean,
 ) {
@@ -44,9 +39,10 @@ export function useCrossOrgUsage(
   const query = new URLSearchParams({ from, to, group_by: groupBy })
 
   return useQuery({
-    queryKey: ['cross-org-usage', from, to, groupBy],
+    queryKey: ['system-usage', from, to, groupBy],
     queryFn: () => apiClient<UsageResponse>(`/usage?${query.toString()}`),
     enabled: enabled && !!from && !!to,
     staleTime: 60_000,
   })
 }
+

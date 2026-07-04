@@ -20,20 +20,21 @@ import (
 // never derived from user input, so direct string interpolation into SQL is safe.
 var migrationOrder = []string{
 	"users",
-	"organizations",
-	"org_memberships",
-	"teams",
-	"team_memberships",
-	"service_accounts",
+	"providers",
+	"provider_connections",
+	"provider_upstream_models",
 	"models",
-	"api_keys",
+	"model_deployments",
+	"model_route_steps",
 	"model_aliases",
-	"org_model_access",
-	"team_model_access",
-	"key_model_access",
-	"invite_tokens",
+	"api_keys",
+	"wallets",
+	"topup_requests",
+	"transactions",
 	"usage_events",
 	"usage_hourly",
+	"audit_logs",
+	"settings",
 }
 
 // runMigrate is the entry point for the "migrate" subcommand. It opens source

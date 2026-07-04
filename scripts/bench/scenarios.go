@@ -11,7 +11,7 @@ import (
 // phase defines a single load-testing phase within a scenario.
 type phase struct {
 	Name     string
-	Target   string // "llm-direct", "llm-proxy", "mcp-direct", "mcp-proxy", "codemode-proxy"
+	Target   string // "llm-direct", "llm-proxy"
 	Pacer    vegeta.Pacer
 	Duration time.Duration
 	BodySize int  // 0 = default (~64 bytes), >0 = large payload
@@ -24,7 +24,7 @@ type scenario struct {
 	Name            string
 	Description     string
 	Phases          []phase
-	IncludeCodeMode bool // run go test -bench for WASM sandbox
+	IncludeCodeMode bool // deprecated; always false after marketplace pivot
 }
 
 // burstPacer implements vegeta.Pacer with a step function:
@@ -117,14 +117,11 @@ func scenarioQuick(rpsOvr int, durOvr time.Duration) *scenario {
 	r := rps(500, rpsOvr)
 	d := dur(15*time.Second, durOvr)
 	return &scenario{
-		Name:            "quick",
-		Description:     "Quick sanity check — all paths, moderate load",
-		IncludeCodeMode: true,
+		Name:        "quick",
+		Description: "Quick sanity check — LLM direct and proxy paths",
 		Phases: []phase{
 			{Name: "LLM Calibration", Target: "llm-direct", Pacer: constantPacer(r), Duration: d},
 			{Name: "LLM Proxy", Target: "llm-proxy", Pacer: constantPacer(r), Duration: d},
-			{Name: "MCP Calibration", Target: "mcp-direct", Pacer: constantPacer(r), Duration: d},
-			{Name: "MCP Proxy", Target: "mcp-proxy", Pacer: constantPacer(r), Duration: d},
 		},
 	}
 }
@@ -137,7 +134,6 @@ func scenarioSustained(rpsOvr int, durOvr time.Duration) *scenario {
 		Description: "Sustained high load — memory leaks, GC pressure, connection exhaustion",
 		Phases: []phase{
 			{Name: "LLM Proxy", Target: "llm-proxy", Pacer: constantPacer(r), Duration: d},
-			{Name: "MCP Proxy", Target: "mcp-proxy", Pacer: constantPacer(r), Duration: d},
 		},
 	}
 }
@@ -187,19 +183,12 @@ func scenarioLargePayload(rpsOvr int, durOvr time.Duration) *scenario {
 func scenarioMixed(rpsOvr int, durOvr time.Duration) *scenario {
 	base := rps(500, rpsOvr)
 	d := dur(60*time.Second, durOvr)
-	llmRate := int(float64(base) * 0.6) // 60%
-	mcpRate := int(float64(base) * 0.3) // 30%
-	cmRate := int(float64(base) * 0.1)  // 10%
-	if cmRate < 1 {
-		cmRate = 1
-	}
 	return &scenario{
 		Name:        "mixed",
-		Description: "Mixed workload — 60% LLM + 30% MCP + 10% Code Mode (parallel)",
+		Description: "Mixed workload — direct and proxy LLM paths (parallel)",
 		Phases: []phase{
-			{Name: "LLM (60%)", Target: "llm-proxy", Pacer: constantPacer(llmRate), Duration: d},
-			{Name: "MCP (30%)", Target: "mcp-proxy", Pacer: constantPacer(mcpRate), Duration: d},
-			{Name: "Code Mode (10%)", Target: "codemode-proxy", Pacer: constantPacer(cmRate), Duration: d},
+			{Name: "LLM Direct", Target: "llm-direct", Pacer: constantPacer(base / 2), Duration: d},
+			{Name: "LLM Proxy", Target: "llm-proxy", Pacer: constantPacer(base / 2), Duration: d},
 		},
 	}
 }

@@ -19,10 +19,10 @@ func insertUsageEventHTTP(t *testing.T, database *db.DB, id, keyID, modelName st
 	t.Helper()
 	query := fmt.Sprintf(
 		`INSERT INTO usage_events
-			(id, key_id, key_type, org_id, model_name,
+			(id, key_id, key_type, model_name,
 			 prompt_tokens, completion_tokens, total_tokens, status_code, created_at)
 		 VALUES
-			('%s', '%s', 'user_key', 'default_org', '%s',
+			('%s', '%s', 'user_key', '%s',
 			 %d, %d, %d, 200, '%s')`,
 		id, keyID, modelName,
 		promptTokens, compTokens, totalTokens,
@@ -59,7 +59,7 @@ func TestGetUsage_ValidRange_ReturnsCorrectTotals(t *testing.T) {
 	t.Parallel()
 
 	app, database, keyCache := setupTestApp(t, "file:TestGetUsage_ValidRange?mode=memory&cache=private")
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	now := time.Now().UTC()
 	from := now.Add(-2 * time.Hour).Format(time.RFC3339)
@@ -117,7 +117,7 @@ func TestGetUsage_FromAfterTo_Returns400(t *testing.T) {
 	t.Parallel()
 
 	app, _, keyCache := setupTestApp(t, "file:TestGetUsage_FromAfterTo?mode=memory&cache=private")
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	now := time.Now().UTC()
 	from := now.Add(time.Hour).Format(time.RFC3339)
@@ -142,7 +142,7 @@ func TestGetUsage_InvalidFromFormat_Returns400(t *testing.T) {
 	t.Parallel()
 
 	app, _, keyCache := setupTestApp(t, "file:TestGetUsage_InvalidFrom?mode=memory&cache=private")
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	now := time.Now().UTC()
 	to := now.Add(time.Minute).Format(time.RFC3339)
@@ -166,7 +166,7 @@ func TestGetUsage_InvalidGroupBy_Returns400(t *testing.T) {
 	t.Parallel()
 
 	app, _, keyCache := setupTestApp(t, "file:TestGetUsage_InvalidGroupBy?mode=memory&cache=private")
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	now := time.Now().UTC()
 	from := now.Add(-time.Hour).Format(time.RFC3339)
@@ -191,7 +191,7 @@ func TestGetUsage_RangeExceeds90Days_Returns400(t *testing.T) {
 	t.Parallel()
 
 	app, _, keyCache := setupTestApp(t, "file:TestGetUsage_91Days?mode=memory&cache=private")
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	now := time.Now().UTC()
 	from := now.Add(-91 * 24 * time.Hour).Format(time.RFC3339)
@@ -239,7 +239,7 @@ func TestGetUsage_MemberRole_Returns403(t *testing.T) {
 	t.Parallel()
 
 	app, _, keyCache := setupTestApp(t, "file:TestGetUsage_Member?mode=memory&cache=private")
-	testKey := addTestKey(t, keyCache, auth.RoleMember, "")
+	testKey := addTestKey(t, keyCache, auth.RoleMember)
 
 	now := time.Now().UTC()
 	from := now.Add(-time.Hour).Format(time.RFC3339)
@@ -264,7 +264,7 @@ func TestGetUsage_ResponseShape(t *testing.T) {
 	t.Parallel()
 
 	app, database, keyCache := setupTestApp(t, "file:TestGetUsage_Shape?mode=memory&cache=private")
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	now := time.Now().UTC()
 	from := now.Add(-time.Hour)
@@ -333,7 +333,7 @@ func TestGetUsage_EventsOutsideRange_NotCounted(t *testing.T) {
 	t.Parallel()
 
 	app, database, keyCache := setupTestApp(t, "file:TestGetUsage_Range?mode=memory&cache=private")
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	now := time.Now().UTC()
 	from := now.Add(-time.Hour)
@@ -383,10 +383,10 @@ func insertUsageEventWithUserAndOrgHTTP(t *testing.T, database *db.DB, id, keyID
 	t.Helper()
 	query := fmt.Sprintf(
 		`INSERT INTO usage_events
-			(id, key_id, key_type, org_id, user_id, model_name,
+			(id, key_id, key_type, user_id, model_name,
 			 prompt_tokens, completion_tokens, total_tokens, status_code, created_at)
 		 VALUES
-			('%s', '%s', 'user_key', 'default_org', '%s', '%s',
+			('%s', '%s', 'user_key', '%s', '%s',
 			 %d, %d, %d, 200, '%s')`,
 		id, keyID, userID, modelName,
 		promptTokens, compTokens, totalTokens,
@@ -404,7 +404,7 @@ func TestMyUsage_Me_ReturnsCorrectTotals(t *testing.T) {
 
 	app, database, keyCache := setupTestApp(t, "file:TestMyUsage_Me?mode=memory&cache=private")
 	userID := "my-user-id"
-	testKey := addTestKeyWithUser(t, keyCache, auth.RoleMember, "", userID)
+	testKey := addTestKeyWithUser(t, keyCache, auth.RoleMember, userID)
 
 	now := time.Now().UTC()
 	from := now.Add(-2 * time.Hour).Format(time.RFC3339)

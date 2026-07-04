@@ -104,14 +104,11 @@ func doGet(t *testing.T, app *fiber.App, path, token string) int {
 	return resp.StatusCode
 }
 
-// setupLocalUser creates an org + a local user with the given password inside an
+// setupLocalUser creates a local system-admin user with the given password inside an
 // already-opened test app, and returns the user.
-func setupLocalUser(t *testing.T, database *db.DB, orgSlug, email, displayName, password string) *db.User {
+func setupLocalUser(t *testing.T, database *db.DB, _ string, email, displayName, password string) *db.User {
 	t.Helper()
-	org := mustCreateOrg(t, database, displayName+" Org", orgSlug)
-	user := mustCreateUserWithPassword(t, database, email, displayName, password)
-	mustCreateOrgMembership(t, database, org.ID, user.ID, auth.RoleOrgAdmin)
-	return user
+	return mustCreateUserWithPassword(t, database, email, displayName, password, true)
 }
 
 // injectSession creates a second independent session in the DB and the cache for
@@ -448,9 +445,6 @@ func TestChangeOwnPassword_SSOAccount(t *testing.T) {
 		t.Fatalf("CreateUser SSO: %v", err)
 	}
 
-	org := mustCreateOrg(t, database, "SSO Org", "sso-org-pwdchg")
-	mustCreateOrgMembership(t, database, org.ID, ssoUser.ID, auth.RoleOrgAdmin)
-
 	// Inject a fake session key for the SSO user directly (SSO login bypasses the
 	// password handler so there is no real session token to obtain via doLogin).
 	ssoToken := injectSession(t, database, keyCache, ssoUser, "SSO test session")
@@ -496,14 +490,8 @@ func TestChangeOwnPassword_OnlyOwnPassword(t *testing.T) {
 	dsn := "file:TestChangePwd_OnlyOwn?mode=memory&cache=private"
 	app, database, _ := setupTestApp(t, dsn)
 
-	orgA := mustCreateOrg(t, database, "Org A", "only-own-org-a")
-	orgB := mustCreateOrg(t, database, "Org B", "only-own-org-b")
-
-	userA := mustCreateUserWithPassword(t, database, "changepwd-owna@example.com", "User A", pwdA)
-	userB := mustCreateUserWithPassword(t, database, "changepwd-ownb@example.com", "User B", pwdB)
-
-	mustCreateOrgMembership(t, database, orgA.ID, userA.ID, auth.RoleOrgAdmin)
-	mustCreateOrgMembership(t, database, orgB.ID, userB.ID, auth.RoleOrgAdmin)
+	mustCreateUserWithPassword(t, database, "changepwd-owna@example.com", "User A", pwdA, true)
+	mustCreateUserWithPassword(t, database, "changepwd-ownb@example.com", "User B", pwdB, true)
 
 	// User A changes their own password.
 	tokenA := doLogin(t, app, "changepwd-owna@example.com", pwdA)

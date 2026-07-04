@@ -16,20 +16,20 @@ import (
 )
 
 // rotateKeyURL returns the rotate endpoint URL for a given key.
-func rotateKeyURL(orgID, keyID string) string {
+func rotateKeyURL(keyID string) string {
 	return "/api/v1/keys/" + keyID + "/rotate"
 }
 
 // mustCreateUserKeyViaAPI creates a user_key by calling the CreateAPIKey handler
 // and returns the created key's ID and plaintext value.
-func mustCreateUserKeyViaAPI(t *testing.T, app *fiber.App, orgID, userID, teamID, callerKey string) (keyID, plaintext string) {
+func mustCreateUserKeyViaAPI(t *testing.T, app *fiber.App, userID, callerKey string) (keyID, plaintext string) {
 	t.Helper()
 	body := map[string]any{
 		"name":     "rotate-test-key",
 		"key_type": keygen.KeyTypeUser,
 		"user_id":  userID,
 	}
-	req := httptest.NewRequest("POST", keysURL(orgID), bodyJSON(t, body))
+	req := httptest.NewRequest("POST", keysURL(), bodyJSON(t, body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+callerKey)
 
@@ -52,7 +52,7 @@ func mustCreateUserKeyViaAPI(t *testing.T, app *fiber.App, orgID, userID, teamID
 
 // mustCreateSessionKeyInDB inserts a session_key row directly via the DB layer,
 // bypassing the CreateAPIKey handler (which rejects session keys).
-func mustCreateSessionKeyInDB(t *testing.T, database *db.DB, orgID, userID, createdBy string) *db.APIKey {
+func mustCreateSessionKeyInDB(t *testing.T, database *db.DB, userID, createdBy string) *db.APIKey {
 	t.Helper()
 	plaintext, err := keygen.Generate(keygen.KeyTypeSession)
 	if err != nil {
@@ -75,26 +75,23 @@ func mustCreateSessionKeyInDB(t *testing.T, database *db.DB, orgID, userID, crea
 	return apiKey
 }
 
-// ---- POST /api/v1/orgs/:org_id/keys/:key_id/rotate --------------------------
+// ---- POST /api/v1/keys/:key_id/rotate ---------------------------------------
 
 func TestRotateAPIKey_MemberRotatesOwnKey(t *testing.T) {
 	t.Parallel()
 
 	app, database, keyCache := setupTestApp(t, "file:TestRotateAPIKey_MemberOwn?mode=memory&cache=private")
 
-	org := mustCreateOrg(t, database, "Acme", "rotate-member-own-org")
 	user := mustCreateUser(t, database, "rotate-member@example.com", "Rotate Member")
-	team := mustCreateTeam(t, database, org.ID, "Dev", "rotate-member-team")
-	mustCreateUserMemberships(t, database, org.ID, team.ID, user.ID)
 
 	// The member's caller key — used both to create the target key and to rotate it.
-	callerKey := addTestKeyWithUser(t, keyCache, auth.RoleMember, org.ID, user.ID)
+	callerKey := addTestKeyWithUser(t, keyCache, auth.RoleMember, user.ID)
 
 	// Create a user_key owned by this member.
-	keyID, _ := mustCreateUserKeyViaAPI(t, app, org.ID, user.ID, team.ID, callerKey)
+	keyID, _ := mustCreateUserKeyViaAPI(t, app, user.ID, callerKey)
 
 	// Rotate it.
-	req := httptest.NewRequest("POST", rotateKeyURL(org.ID, keyID), nil)
+	req := httptest.NewRequest("POST", rotateKeyURL(keyID), nil)
 	req.Header.Set("Authorization", "Bearer "+callerKey)
 
 	resp, err := app.Test(req, fiber.TestConfig{Timeout: testTimeout})
@@ -146,15 +143,12 @@ func TestRotateAPIKey_ResponseFields(t *testing.T) {
 
 	app, database, keyCache := setupTestApp(t, "file:TestRotateAPIKey_Fields?mode=memory&cache=private")
 
-	org := mustCreateOrg(t, database, "Acme", "rotate-fields-org")
 	user := mustCreateUser(t, database, "rotate-fields@example.com", "Rotate Fields")
-	team := mustCreateTeam(t, database, org.ID, "Dev", "rotate-fields-team")
-	mustCreateUserMemberships(t, database, org.ID, team.ID, user.ID)
-	callerKey := addTestKeyWithUser(t, keyCache, auth.RoleOrgAdmin, org.ID, user.ID)
+	callerKey := addTestKeyWithUser(t, keyCache, auth.RoleSystemAdmin, user.ID)
 
-	keyID, _ := mustCreateUserKeyViaAPI(t, app, org.ID, user.ID, team.ID, callerKey)
+	keyID, _ := mustCreateUserKeyViaAPI(t, app, user.ID, callerKey)
 
-	req := httptest.NewRequest("POST", rotateKeyURL(org.ID, keyID), nil)
+	req := httptest.NewRequest("POST", rotateKeyURL(keyID), nil)
 	req.Header.Set("Authorization", "Bearer "+callerKey)
 
 	resp, err := app.Test(req, fiber.TestConfig{Timeout: testTimeout})
@@ -205,21 +199,17 @@ func TestRotateAPIKey_MemberCannotRotateOtherUsersKey(t *testing.T) {
 
 	app, database, keyCache := setupTestApp(t, "file:TestRotateAPIKey_CrossUser?mode=memory&cache=private")
 
-	org := mustCreateOrg(t, database, "Acme", "rotate-cross-user-org")
 	owner := mustCreateUser(t, database, "rotate-owner@example.com", "Owner")
 	attacker := mustCreateUser(t, database, "rotate-attacker@example.com", "Attacker")
-	team := mustCreateTeam(t, database, org.ID, "Dev", "rotate-cross-user-team")
-	mustCreateUserMemberships(t, database, org.ID, team.ID, owner.ID)
-	mustCreateUserMemberships(t, database, org.ID, team.ID, attacker.ID)
 
-	// Create a key owned by 'owner', using an org_admin caller key.
-	adminKey := addTestKeyWithUser(t, keyCache, auth.RoleOrgAdmin, org.ID, owner.ID)
-	keyID, _ := mustCreateUserKeyViaAPI(t, app, org.ID, owner.ID, team.ID, adminKey)
+	// Create a key owned by 'owner', using a member caller key.
+	adminKey := addTestKeyWithUser(t, keyCache, auth.RoleSystemAdmin, owner.ID)
+	keyID, _ := mustCreateUserKeyViaAPI(t, app, owner.ID, adminKey)
 
 	// 'attacker' is a member scoped to their own user ID — cannot rotate owner's key.
-	attackerKey := addTestKeyWithUser(t, keyCache, auth.RoleMember, org.ID, attacker.ID)
+	attackerKey := addTestKeyWithUser(t, keyCache, auth.RoleMember, attacker.ID)
 
-	req := httptest.NewRequest("POST", rotateKeyURL(org.ID, keyID), nil)
+	req := httptest.NewRequest("POST", rotateKeyURL(keyID), nil)
 	req.Header.Set("Authorization", "Bearer "+attackerKey)
 
 	resp, err := app.Test(req, fiber.TestConfig{Timeout: testTimeout})
@@ -239,20 +229,17 @@ func TestRotateAPIKey_DeletedKeyReturns404(t *testing.T) {
 
 	app, database, keyCache := setupTestApp(t, "file:TestRotateAPIKey_Deleted?mode=memory&cache=private")
 
-	org := mustCreateOrg(t, database, "Acme", "rotate-deleted-org")
 	user := mustCreateUser(t, database, "rotate-deleted@example.com", "Del User")
-	team := mustCreateTeam(t, database, org.ID, "Dev", "rotate-deleted-team")
-	mustCreateUserMemberships(t, database, org.ID, team.ID, user.ID)
-	callerKey := addTestKeyWithUser(t, keyCache, auth.RoleOrgAdmin, org.ID, user.ID)
+	callerKey := addTestKeyWithUser(t, keyCache, auth.RoleSystemAdmin, user.ID)
 
-	keyID, _ := mustCreateUserKeyViaAPI(t, app, org.ID, user.ID, team.ID, callerKey)
+	keyID, _ := mustCreateUserKeyViaAPI(t, app, user.ID, callerKey)
 
 	// Soft-delete the key directly.
 	if err := database.DeleteAPIKey(context.Background(), keyID); err != nil {
 		t.Fatalf("DeleteAPIKey: %v", err)
 	}
 
-	req := httptest.NewRequest("POST", rotateKeyURL(org.ID, keyID), nil)
+	req := httptest.NewRequest("POST", rotateKeyURL(keyID), nil)
 	req.Header.Set("Authorization", "Bearer "+callerKey)
 
 	resp, err := app.Test(req, fiber.TestConfig{Timeout: testTimeout})
@@ -272,14 +259,13 @@ func TestRotateAPIKey_SessionKeyReturns400(t *testing.T) {
 
 	app, database, keyCache := setupTestApp(t, "file:TestRotateAPIKey_Session?mode=memory&cache=private")
 
-	org := mustCreateOrg(t, database, "Acme", "rotate-session-org")
 	user := mustCreateUser(t, database, "rotate-session@example.com", "Session User")
-	callerKey := addTestKeyWithUser(t, keyCache, auth.RoleOrgAdmin, org.ID, user.ID)
+	callerKey := addTestKeyWithUser(t, keyCache, auth.RoleSystemAdmin, user.ID)
 
 	// Insert a session_key directly — the handler forbids rotating it.
-	sessionKey := mustCreateSessionKeyInDB(t, database, org.ID, user.ID, user.ID)
+	sessionKey := mustCreateSessionKeyInDB(t, database, user.ID, user.ID)
 
-	req := httptest.NewRequest("POST", rotateKeyURL(org.ID, sessionKey.ID), nil)
+	req := httptest.NewRequest("POST", rotateKeyURL(sessionKey.ID), nil)
 	req.Header.Set("Authorization", "Bearer "+callerKey)
 
 	resp, err := app.Test(req, fiber.TestConfig{Timeout: testTimeout})
@@ -308,17 +294,14 @@ func TestRotateAPIKey_GracePeriodIsSet(t *testing.T) {
 
 	app, database, keyCache := setupTestApp(t, "file:TestRotateAPIKey_GracePeriod?mode=memory&cache=private")
 
-	org := mustCreateOrg(t, database, "Acme", "rotate-grace-org")
 	user := mustCreateUser(t, database, "rotate-grace@example.com", "Grace User")
-	team := mustCreateTeam(t, database, org.ID, "Dev", "rotate-grace-team")
-	mustCreateUserMemberships(t, database, org.ID, team.ID, user.ID)
-	callerKey := addTestKeyWithUser(t, keyCache, auth.RoleOrgAdmin, org.ID, user.ID)
+	callerKey := addTestKeyWithUser(t, keyCache, auth.RoleSystemAdmin, user.ID)
 
-	keyID, _ := mustCreateUserKeyViaAPI(t, app, org.ID, user.ID, team.ID, callerKey)
+	keyID, _ := mustCreateUserKeyViaAPI(t, app, user.ID, callerKey)
 
 	before := time.Now().UTC()
 
-	req := httptest.NewRequest("POST", rotateKeyURL(org.ID, keyID), nil)
+	req := httptest.NewRequest("POST", rotateKeyURL(keyID), nil)
 	req.Header.Set("Authorization", "Bearer "+callerKey)
 
 	resp, err := app.Test(req, fiber.TestConfig{Timeout: testTimeout})
@@ -369,11 +352,8 @@ func TestRotateAPIKey_ExistingShorterExpiryIsPreserved(t *testing.T) {
 
 	app, database, keyCache := setupTestApp(t, "file:TestRotateAPIKey_ShorterExpiry?mode=memory&cache=private")
 
-	org := mustCreateOrg(t, database, "Acme", "rotate-short-expiry-org")
 	user := mustCreateUser(t, database, "rotate-short@example.com", "Short Expiry User")
-	team := mustCreateTeam(t, database, org.ID, "Dev", "rotate-short-team")
-	mustCreateUserMemberships(t, database, org.ID, team.ID, user.ID)
-	callerKey := addTestKeyWithUser(t, keyCache, auth.RoleOrgAdmin, org.ID, user.ID)
+	callerKey := addTestKeyWithUser(t, keyCache, auth.RoleSystemAdmin, user.ID)
 
 	// Create a key that expires in 1 hour — shorter than the 24h grace period.
 	shortExpiry := time.Now().UTC().Add(1 * time.Hour).Format(time.RFC3339)
@@ -381,10 +361,9 @@ func TestRotateAPIKey_ExistingShorterExpiryIsPreserved(t *testing.T) {
 		"name":       "short-expiry-key",
 		"key_type":   keygen.KeyTypeUser,
 		"user_id":    user.ID,
-		"team_id":    team.ID,
 		"expires_at": shortExpiry,
 	}
-	createReq := httptest.NewRequest("POST", keysURL(org.ID), bodyJSON(t, body))
+	createReq := httptest.NewRequest("POST", keysURL(), bodyJSON(t, body))
 	createReq.Header.Set("Content-Type", "application/json")
 	createReq.Header.Set("Authorization", "Bearer "+callerKey)
 
@@ -398,7 +377,7 @@ func TestRotateAPIKey_ExistingShorterExpiryIsPreserved(t *testing.T) {
 	keyID := created["id"].(string)
 
 	// Rotate the key.
-	req := httptest.NewRequest("POST", rotateKeyURL(org.ID, keyID), nil)
+	req := httptest.NewRequest("POST", rotateKeyURL(keyID), nil)
 	req.Header.Set("Authorization", "Bearer "+callerKey)
 
 	resp, err := app.Test(req, fiber.TestConfig{Timeout: testTimeout})
@@ -445,24 +424,20 @@ func TestRotateAPIKey_NewKeyHasSameMetadata(t *testing.T) {
 
 	app, database, keyCache := setupTestApp(t, "file:TestRotateAPIKey_Metadata?mode=memory&cache=private")
 
-	org := mustCreateOrg(t, database, "Acme", "rotate-metadata-org")
 	user := mustCreateUser(t, database, "rotate-meta@example.com", "Meta User")
-	team := mustCreateTeam(t, database, org.ID, "Dev", "rotate-meta-team")
-	mustCreateUserMemberships(t, database, org.ID, team.ID, user.ID)
-	callerKey := addTestKeyWithUser(t, keyCache, auth.RoleOrgAdmin, org.ID, user.ID)
+	callerKey := addTestKeyWithUser(t, keyCache, auth.RoleSystemAdmin, user.ID)
 
 	// Create a key with non-default limits so we can verify they are copied.
 	body := map[string]any{
 		"name":                "meta-test-key",
 		"key_type":            keygen.KeyTypeUser,
 		"user_id":             user.ID,
-		"team_id":             team.ID,
 		"daily_token_limit":   float64(5000),
 		"monthly_token_limit": float64(50000),
 		"requests_per_minute": float64(10),
 		"requests_per_day":    float64(100),
 	}
-	createReq := httptest.NewRequest("POST", keysURL(org.ID), bodyJSON(t, body))
+	createReq := httptest.NewRequest("POST", keysURL(), bodyJSON(t, body))
 	createReq.Header.Set("Content-Type", "application/json")
 	createReq.Header.Set("Authorization", "Bearer "+callerKey)
 
@@ -476,7 +451,7 @@ func TestRotateAPIKey_NewKeyHasSameMetadata(t *testing.T) {
 	oldKeyID := created["id"].(string)
 
 	// Rotate.
-	req := httptest.NewRequest("POST", rotateKeyURL(org.ID, oldKeyID), nil)
+	req := httptest.NewRequest("POST", rotateKeyURL(oldKeyID), nil)
 	req.Header.Set("Authorization", "Bearer "+callerKey)
 
 	resp, err := app.Test(req, fiber.TestConfig{Timeout: testTimeout})
@@ -503,7 +478,7 @@ func TestRotateAPIKey_NewKeyHasSameMetadata(t *testing.T) {
 		t.Fatalf("new_key.id is empty")
 	}
 
-	getReq := httptest.NewRequest("GET", keyItemURL(org.ID, newKeyID), nil)
+	getReq := httptest.NewRequest("GET", keyItemURL(newKeyID), nil)
 	getReq.Header.Set("Authorization", "Bearer "+callerKey)
 
 	getResp, err := app.Test(getReq, fiber.TestConfig{Timeout: testTimeout})
@@ -541,11 +516,10 @@ func TestRotateAPIKey_NotFound(t *testing.T) {
 	t.Parallel()
 
 	app, database, keyCache := setupTestApp(t, "file:TestRotateAPIKey_NotFound?mode=memory&cache=private")
-	org := mustCreateOrg(t, database, "Acme", "rotate-notfound-org")
 	user := mustCreateUser(t, database, "rotate-nf@example.com", "NF User")
-	callerKey := addTestKeyWithUser(t, keyCache, auth.RoleOrgAdmin, org.ID, user.ID)
+	callerKey := addTestKeyWithUser(t, keyCache, auth.RoleSystemAdmin, user.ID)
 
-	req := httptest.NewRequest("POST", rotateKeyURL(org.ID, "00000000-0000-0000-0000-000000000000"), nil)
+	req := httptest.NewRequest("POST", rotateKeyURL("00000000-0000-0000-0000-000000000000"), nil)
 	req.Header.Set("Authorization", "Bearer "+callerKey)
 
 	resp, err := app.Test(req, fiber.TestConfig{Timeout: testTimeout})
@@ -563,10 +537,9 @@ func TestRotateAPIKey_NotFound(t *testing.T) {
 func TestRotateAPIKey_NoAuth(t *testing.T) {
 	t.Parallel()
 
-	app, database, _ := setupTestApp(t, "file:TestRotateAPIKey_NoAuth?mode=memory&cache=private")
-	org := mustCreateOrg(t, database, "Acme", "rotate-noauth-org")
+	app, _, _ := setupTestApp(t, "file:TestRotateAPIKey_NoAuth?mode=memory&cache=private")
 
-	req := httptest.NewRequest("POST", rotateKeyURL(org.ID, "00000000-0000-0000-0000-000000000000"), nil)
+	req := httptest.NewRequest("POST", rotateKeyURL("00000000-0000-0000-0000-000000000000"), nil)
 	// No Authorization header.
 
 	resp, err := app.Test(req, fiber.TestConfig{Timeout: testTimeout})
@@ -585,15 +558,12 @@ func TestRotateAPIKey_NewKeyAddedToCache(t *testing.T) {
 
 	app, database, keyCache := setupTestApp(t, "file:TestRotateAPIKey_Cache?mode=memory&cache=private")
 
-	org := mustCreateOrg(t, database, "Acme", "rotate-cache-org")
 	user := mustCreateUser(t, database, "rotate-cache@example.com", "Cache User")
-	team := mustCreateTeam(t, database, org.ID, "Dev", "rotate-cache-team")
-	mustCreateUserMemberships(t, database, org.ID, team.ID, user.ID)
-	callerKey := addTestKeyWithUser(t, keyCache, auth.RoleOrgAdmin, org.ID, user.ID)
+	callerKey := addTestKeyWithUser(t, keyCache, auth.RoleSystemAdmin, user.ID)
 
-	keyID, _ := mustCreateUserKeyViaAPI(t, app, org.ID, user.ID, team.ID, callerKey)
+	keyID, _ := mustCreateUserKeyViaAPI(t, app, user.ID, callerKey)
 
-	req := httptest.NewRequest("POST", rotateKeyURL(org.ID, keyID), nil)
+	req := httptest.NewRequest("POST", rotateKeyURL(keyID), nil)
 	req.Header.Set("Authorization", "Bearer "+callerKey)
 
 	resp, err := app.Test(req, fiber.TestConfig{Timeout: testTimeout})
@@ -626,19 +596,18 @@ func TestRotateAPIKey_NewKeyAddedToCache(t *testing.T) {
 	}
 }
 
-// TestRotateAPIKey_KeyTypeVariants verifies that rotation works for all
-// routable key types: user_key, team_key, and sa_key.
+// TestRotateAPIKey_KeyTypeVariants verifies that rotation works for user_key.
 func TestRotateAPIKey_KeyTypeVariants(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name       string
-		setupKey   func(t *testing.T, database *db.DB, org *db.Org, user *db.User, team *db.Team, callerID string) (keyID string)
+		setupKey   func(t *testing.T, database *db.DB, user *db.User, callerID string) (keyID string)
 		wantPrefix string
 	}{
 		{
 			name: "rotate user_key",
-			setupKey: func(t *testing.T, database *db.DB, org *db.Org, user *db.User, team *db.Team, callerID string) string {
+			setupKey: func(t *testing.T, database *db.DB, user *db.User, callerID string) string {
 				t.Helper()
 				plaintext, err := keygen.Generate(keygen.KeyTypeUser)
 				if err != nil {
@@ -669,15 +638,12 @@ func TestRotateAPIKey_KeyTypeVariants(t *testing.T) {
 				strings.ReplaceAll(tc.name, " ", "_"))
 			app, database, keyCache := setupTestApp(t, dsn)
 
-			org := mustCreateOrg(t, database, "O", "rotate-var-org-"+strings.ReplaceAll(tc.name, " ", "-"))
 			user := mustCreateUser(t, database, "rotate-var-"+strings.ReplaceAll(tc.name, " ", "")+"@example.com", "V")
-			team := mustCreateTeam(t, database, org.ID, "T", "rotate-var-team-"+strings.ReplaceAll(tc.name, " ", "-"))
-			mustCreateUserMemberships(t, database, org.ID, team.ID, user.ID)
-			callerKey := addTestKeyWithUser(t, keyCache, auth.RoleOrgAdmin, org.ID, user.ID)
+			callerKey := addTestKeyWithUser(t, keyCache, auth.RoleSystemAdmin, user.ID)
 
-			keyID := tc.setupKey(t, database, org, user, team, user.ID)
+			keyID := tc.setupKey(t, database, user, user.ID)
 
-			req := httptest.NewRequest("POST", rotateKeyURL(org.ID, keyID), nil)
+			req := httptest.NewRequest("POST", rotateKeyURL(keyID), nil)
 			req.Header.Set("Authorization", "Bearer "+callerKey)
 
 			resp, err := app.Test(req, fiber.TestConfig{Timeout: testTimeout})

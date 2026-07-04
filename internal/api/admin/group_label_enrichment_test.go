@@ -86,7 +86,7 @@ func TestSystemAdminUsage_GroupByUser_HasGroupLabel(t *testing.T) {
 	t.Parallel()
 
 	app, database, keyCache := setupTestApp(t, "file:TestSysUsage_GBUser_Label?mode=memory&cache=private")
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
 	// Create a real user whose ID will appear in usage_events.user_id.
 	user, err := database.CreateUser(context.Background(), db.CreateUserParams{
@@ -102,7 +102,7 @@ func TestSystemAdminUsage_GroupByUser_HasGroupLabel(t *testing.T) {
 	to := now.Add(time.Minute).Format(time.RFC3339)
 
 	// Seed a usage event referencing the created user's ID.
-	insertUsageEventWithUserHTTP(t, database, "sys-gl-user-1", "key-sys-user", user.ID, "org-sys-user", "gpt-4",
+	insertUsageEventWithUserHTTP(t, database, "sys-gl-user-1", "key-sys-user", user.ID, "gpt-4",
 		300, now.Add(-30*time.Minute))
 
 	req := httptest.NewRequest("GET", systemUsageURL(from, to, "user"), nil)
@@ -182,7 +182,7 @@ func TestMyUsage_GroupByKey_HasGroupLabel(t *testing.T) {
 	to := now.Add(time.Minute).Format(time.RFC3339)
 
 	// Seed usage events with the user_id so that the scoped-by-user filter picks them up.
-	insertUsageEventWithUserHTTP(t, database, "my-gl-key-1", apiKey.ID, creator.ID, "org-id", "gpt-4",
+	insertUsageEventWithUserHTTP(t, database, "my-gl-key-1", apiKey.ID, creator.ID, "gpt-4",
 		150, now.Add(-30*time.Minute))
 
 	req := httptest.NewRequest("GET", myUsageURL(from, to, "key"), nil)
@@ -221,20 +221,16 @@ func TestMyUsage_GroupByKey_HasGroupLabel(t *testing.T) {
 	}
 }
 
-func insertUsageEventWithUserHTTP(t *testing.T, database *db.DB, id, keyID, userID, orgID, modelName string, totalTokens int64, createdAt time.Time) {
+func insertUsageEventWithUserHTTP(t *testing.T, database *db.DB, id, keyID, userID, modelName string, totalTokens int64, createdAt time.Time) {
 	t.Helper()
-	valOrgID := orgID
-	if valOrgID == "" {
-		valOrgID = "default_org"
-	}
 	query := fmt.Sprintf(
 		`INSERT INTO usage_events
-			(id, key_id, key_type, org_id, user_id, model_name,
+			(id, key_id, key_type, user_id, model_name,
 			 prompt_tokens, completion_tokens, total_tokens, status_code, created_at)
 		 VALUES
-			('%s', '%s', 'user_key', '%s', '%s', '%s',
+			('%s', '%s', 'user_key', '%s', '%s',
 			 0, %d, %d, 200, '%s')`,
-		id, keyID, valOrgID, userID, modelName,
+		id, keyID, userID, modelName,
 		totalTokens, totalTokens,
 		createdAt.UTC().Format(time.RFC3339),
 	)

@@ -83,7 +83,7 @@ func setupTestAppWithRegistry(t *testing.T, dsn string) (*fiber.App, *db.DB, *ca
 // addRegistryTestKey generates a key whose ID field is set to the given userID,
 // which satisfies the NOT NULL REFERENCES users(id) constraint on model_aliases.created_by.
 // It should be used whenever the handler writes keyInfo.ID to a DB column referencing users.
-func addRegistryTestKey(t *testing.T, keyCache *cache.Cache[string, auth.KeyInfo], role, orgID, userID string) string {
+func addRegistryTestKey(t *testing.T, keyCache *cache.Cache[string, auth.KeyInfo], role, userID string) string {
 	t.Helper()
 
 	plaintext, err := keygen.Generate(keygen.KeyTypeUser)
@@ -103,87 +103,69 @@ func addRegistryTestKey(t *testing.T, keyCache *cache.Cache[string, auth.KeyInfo
 	return plaintext
 }
 
-// orgAliasURL returns the org model-aliases base URL.
-func orgAliasURL(orgID string) string {
+// modelAliasURL returns the model-aliases base URL.
+func modelAliasURL() string {
 	return "/api/v1/model-aliases"
 }
 
-// orgAliasItemURL returns the URL for a specific org model alias.
-func orgAliasItemURL(orgID, aliasID string) string {
+// modelAliasItemURL returns the URL for a specific model alias.
+func modelAliasItemURL(aliasID string) string {
 	return "/api/v1/model-aliases/" + aliasID
 }
 
-// teamAliasURL returns the team model-aliases base URL.
-func teamAliasURL(orgID, teamID string) string {
-	return "/api/v1/orgs/" + orgID + "/teams/" + teamID + "/model-aliases"
-}
+// ---- POST /api/v1/model-aliases ---------------------------------------------
 
-// teamAliasItemURL returns the URL for a specific team model alias.
-func teamAliasItemURL(orgID, teamID, aliasID string) string {
-	return "/api/v1/orgs/" + orgID + "/teams/" + teamID + "/model-aliases/" + aliasID
-}
-
-// ---- POST /api/v1/orgs/:org_id/model-aliases --------------------------------
-
-func TestCreateOrgAlias(t *testing.T) {
+func TestCreateModelAlias(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name       string
 		role       string
-		sameOrg    bool
 		body       any
 		wantStatus int
 		checkField string
 	}{
 		{
-			name:       "org_admin creates org alias",
-			role:       auth.RoleOrgAdmin,
-			sameOrg:    true,
+			name:       "system_admin creates alias",
+			role:       auth.RoleSystemAdmin,
 			body:       map[string]any{"alias": "my-model", "model_name": testModelName},
 			wantStatus: fiber.StatusCreated,
 			checkField: "id",
 		},
 		{
-			name:       "system_admin creates org alias",
-			role:       auth.RoleSystemAdmin,
-			sameOrg:    false,
-			body:       map[string]any{"alias": "sys-alias", "model_name": testModelName},
+			name:       "member creates alias",
+			role:       auth.RoleMember,
+			body:       map[string]any{"alias": "member-alias", "model_name": testModelName},
 			wantStatus: fiber.StatusCreated,
 			checkField: "id",
 		},
 		{
 			name:       "unknown model returns 400",
-			role:       auth.RoleOrgAdmin,
-			sameOrg:    true,
+			role:       auth.RoleSystemAdmin,
 			body:       map[string]any{"alias": "bad-alias", "model_name": "does-not-exist"},
 			wantStatus: fiber.StatusBadRequest,
 		},
 		{
 			name:       "empty alias returns 400",
-			role:       auth.RoleOrgAdmin,
-			sameOrg:    true,
+			role:       auth.RoleSystemAdmin,
 			body:       map[string]any{"alias": "", "model_name": testModelName},
 			wantStatus: fiber.StatusBadRequest,
 		},
 		{
 			name:       "alias with spaces returns 400",
-			role:       auth.RoleOrgAdmin,
-			sameOrg:    true,
+			role:       auth.RoleSystemAdmin,
 			body:       map[string]any{"alias": "has spaces", "model_name": testModelName},
 			wantStatus: fiber.StatusBadRequest,
 		},
 		{
 			name:       "missing model_name returns 400",
-			role:       auth.RoleOrgAdmin,
-			sameOrg:    true,
+			role:       auth.RoleSystemAdmin,
 			body:       map[string]any{"alias": "valid-alias"},
 			wantStatus: fiber.StatusBadRequest,
 		},
 		{
 			name:       "alias conflicts with existing model name returns 400",
-			role:       auth.RoleOrgAdmin,
-			sameOrg:    true,
+			role:       auth.RoleSystemAdmin,
 			body:       map[string]any{"alias": testConflictModelName, "model_name": testModelName},
 			wantStatus: fiber.StatusBadRequest,
 		},
@@ -193,19 +175,13 @@ func TestCreateOrgAlias(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			dsn := fmt.Sprintf("file:TestCreateOrgAlias_%s?mode=memory&cache=private", strings.ReplaceAll(tc.name, " ", "_"))
+			dsn := fmt.Sprintf("file:TestCreateModelAlias_%s?mode=memory&cache=private", strings.ReplaceAll(tc.name, " ", "_"))
 			app, database, keyCache := setupTestAppWithRegistry(t, dsn)
 
-			org := mustCreateOrg(t, database, "Alias Org", "alias-org-coa-"+strings.ReplaceAll(tc.name, " ", "-"))
 			creator := mustCreateUser(t, database, "creator-coa-"+strings.ReplaceAll(tc.name, " ", "-")+"@example.com", "Creator")
+			testKey := addRegistryTestKey(t, keyCache, tc.role, creator.ID)
 
-			keyOrgID := "00000000-0000-0000-0000-000000000000"
-			if tc.sameOrg {
-				keyOrgID = org.ID
-			}
-			testKey := addRegistryTestKey(t, keyCache, tc.role, keyOrgID, creator.ID)
-
-			req := httptest.NewRequest("POST", orgAliasURL(org.ID), bodyJSON(t, tc.body))
+			req := httptest.NewRequest("POST", modelAliasURL(), bodyJSON(t, tc.body))
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("Authorization", "Bearer "+testKey)
 
@@ -232,15 +208,14 @@ func TestCreateOrgAlias(t *testing.T) {
 	}
 }
 
-func TestCreateOrgAlias_ResponseFields(t *testing.T) {
+func TestCreateModelAlias_ResponseFields(t *testing.T) {
 	t.Parallel()
 
-	app, database, keyCache := setupTestAppWithRegistry(t, "file:TestCreateOrgAlias_Fields?mode=memory&cache=private")
-	org := mustCreateOrg(t, database, "Fields Org", "fields-org-coa")
+	app, database, keyCache := setupTestAppWithRegistry(t, "file:TestCreateModelAlias_Fields?mode=memory&cache=private")
 	creator := mustCreateUser(t, database, "creator-fields-coa@example.com", "Creator")
-	testKey := addRegistryTestKey(t, keyCache, auth.RoleOrgAdmin, org.ID, creator.ID)
+	testKey := addRegistryTestKey(t, keyCache, auth.RoleSystemAdmin, creator.ID)
 
-	req := httptest.NewRequest("POST", orgAliasURL(org.ID),
+	req := httptest.NewRequest("POST", modelAliasURL(),
 		bodyJSON(t, map[string]any{"alias": "fields-alias", "model_name": testModelName}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+testKey)
@@ -272,19 +247,18 @@ func TestCreateOrgAlias_ResponseFields(t *testing.T) {
 	}
 }
 
-// ---- GET /api/v1/orgs/:org_id/model-aliases ---------------------------------
+// ---- GET /api/v1/model-aliases ----------------------------------------------
 
-func TestListOrgAliases(t *testing.T) {
+func TestListModelAliases(t *testing.T) {
 	t.Parallel()
 
-	app, database, keyCache := setupTestAppWithRegistry(t, "file:TestListOrgAliases?mode=memory&cache=private")
-	org := mustCreateOrg(t, database, "List Alias Org", "list-alias-org")
+	app, database, keyCache := setupTestAppWithRegistry(t, "file:TestListModelAliases?mode=memory&cache=private")
 	creator := mustCreateUser(t, database, "creator-loa@example.com", "Creator")
-	testKey := addRegistryTestKey(t, keyCache, auth.RoleOrgAdmin, org.ID, creator.ID)
+	testKey := addRegistryTestKey(t, keyCache, auth.RoleSystemAdmin, creator.ID)
 
 	// Create two aliases via API.
 	for _, alias := range []string{"alias-a", "alias-b"} {
-		req := httptest.NewRequest("POST", orgAliasURL(org.ID),
+		req := httptest.NewRequest("POST", modelAliasURL(),
 			bodyJSON(t, map[string]any{"alias": alias, "model_name": testModelName}))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+testKey)
@@ -298,7 +272,7 @@ func TestListOrgAliases(t *testing.T) {
 		}
 	}
 
-	req := httptest.NewRequest("GET", orgAliasURL(org.ID), nil)
+	req := httptest.NewRequest("GET", modelAliasURL(), nil)
 	req.Header.Set("Authorization", "Bearer "+testKey)
 
 	resp, err := app.Test(req, fiber.TestConfig{Timeout: testTimeout})
@@ -320,14 +294,13 @@ func TestListOrgAliases(t *testing.T) {
 	}
 }
 
-func TestListOrgAliases_Empty(t *testing.T) {
+func TestListModelAliases_Empty(t *testing.T) {
 	t.Parallel()
 
-	app, database, keyCache := setupTestAppWithRegistry(t, "file:TestListOrgAliases_Empty?mode=memory&cache=private")
-	org := mustCreateOrg(t, database, "Empty Alias Org", "empty-alias-org")
-	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin, "")
+	app, _, keyCache := setupTestAppWithRegistry(t, "file:TestListModelAliases_Empty?mode=memory&cache=private")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
-	req := httptest.NewRequest("GET", orgAliasURL(org.ID), nil)
+	req := httptest.NewRequest("GET", modelAliasURL(), nil)
 	req.Header.Set("Authorization", "Bearer "+testKey)
 
 	resp, err := app.Test(req, fiber.TestConfig{Timeout: testTimeout})
@@ -349,18 +322,17 @@ func TestListOrgAliases_Empty(t *testing.T) {
 	}
 }
 
-// ---- DELETE /api/v1/orgs/:org_id/model-aliases/:alias_id --------------------
+// ---- DELETE /api/v1/model-aliases/:alias_id ---------------------------------
 
-func TestDeleteOrgAlias(t *testing.T) {
+func TestDeleteModelAlias(t *testing.T) {
 	t.Parallel()
 
-	app, database, keyCache := setupTestAppWithRegistry(t, "file:TestDeleteOrgAlias?mode=memory&cache=private")
-	org := mustCreateOrg(t, database, "Delete Alias Org", "delete-alias-org")
+	app, database, keyCache := setupTestAppWithRegistry(t, "file:TestDeleteModelAlias?mode=memory&cache=private")
 	creator := mustCreateUser(t, database, "creator-doa@example.com", "Creator")
-	testKey := addRegistryTestKey(t, keyCache, auth.RoleOrgAdmin, org.ID, creator.ID)
+	testKey := addRegistryTestKey(t, keyCache, auth.RoleSystemAdmin, creator.ID)
 
 	// Create alias.
-	createReq := httptest.NewRequest("POST", orgAliasURL(org.ID),
+	createReq := httptest.NewRequest("POST", modelAliasURL(),
 		bodyJSON(t, map[string]any{"alias": "to-delete-alias", "model_name": testModelName}))
 	createReq.Header.Set("Content-Type", "application/json")
 	createReq.Header.Set("Authorization", "Bearer "+testKey)
@@ -378,7 +350,7 @@ func TestDeleteOrgAlias(t *testing.T) {
 	aliasID := created["id"].(string)
 
 	// Delete it.
-	delReq := httptest.NewRequest("DELETE", orgAliasItemURL(org.ID, aliasID), nil)
+	delReq := httptest.NewRequest("DELETE", modelAliasItemURL(aliasID), nil)
 	delReq.Header.Set("Authorization", "Bearer "+testKey)
 	delResp, err := app.Test(delReq, fiber.TestConfig{Timeout: testTimeout})
 	if err != nil {
@@ -392,14 +364,13 @@ func TestDeleteOrgAlias(t *testing.T) {
 	}
 }
 
-func TestDeleteOrgAlias_NotFound(t *testing.T) {
+func TestDeleteModelAlias_NotFound(t *testing.T) {
 	t.Parallel()
 
-	app, database, keyCache := setupTestAppWithRegistry(t, "file:TestDeleteOrgAlias_NotFound?mode=memory&cache=private")
-	org := mustCreateOrg(t, database, "NF Alias Org", "nf-alias-org")
-	testKey := addTestKey(t, keyCache, auth.RoleOrgAdmin, org.ID)
+	app, _, keyCache := setupTestAppWithRegistry(t, "file:TestDeleteModelAlias_NotFound?mode=memory&cache=private")
+	testKey := addTestKey(t, keyCache, auth.RoleSystemAdmin)
 
-	req := httptest.NewRequest("DELETE", orgAliasItemURL(org.ID, "00000000-0000-0000-0000-000000000099"), nil)
+	req := httptest.NewRequest("DELETE", modelAliasItemURL("00000000-0000-0000-0000-000000000099"), nil)
 	req.Header.Set("Authorization", "Bearer "+testKey)
 
 	resp, err := app.Test(req, fiber.TestConfig{Timeout: testTimeout})
@@ -414,16 +385,15 @@ func TestDeleteOrgAlias_NotFound(t *testing.T) {
 	}
 }
 
-func TestDeleteOrgAlias_ThenListShowsRemoved(t *testing.T) {
+func TestDeleteModelAlias_ThenListShowsRemoved(t *testing.T) {
 	t.Parallel()
 
-	app, database, keyCache := setupTestAppWithRegistry(t, "file:TestDeleteOrgAlias_ThenList?mode=memory&cache=private")
-	org := mustCreateOrg(t, database, "Gone Alias Org", "gone-alias-org")
+	app, database, keyCache := setupTestAppWithRegistry(t, "file:TestDeleteModelAlias_ThenList?mode=memory&cache=private")
 	creator := mustCreateUser(t, database, "creator-doatl@example.com", "Creator")
-	testKey := addRegistryTestKey(t, keyCache, auth.RoleOrgAdmin, org.ID, creator.ID)
+	testKey := addRegistryTestKey(t, keyCache, auth.RoleSystemAdmin, creator.ID)
 
 	// Create and immediately delete.
-	createReq := httptest.NewRequest("POST", orgAliasURL(org.ID),
+	createReq := httptest.NewRequest("POST", modelAliasURL(),
 		bodyJSON(t, map[string]any{"alias": "gone-alias", "model_name": testModelName}))
 	createReq.Header.Set("Content-Type", "application/json")
 	createReq.Header.Set("Authorization", "Bearer "+testKey)
@@ -435,7 +405,7 @@ func TestDeleteOrgAlias_ThenListShowsRemoved(t *testing.T) {
 	decodeBody(t, createResp.Body, &created)
 	aliasID := created["id"].(string)
 
-	delReq := httptest.NewRequest("DELETE", orgAliasItemURL(org.ID, aliasID), nil)
+	delReq := httptest.NewRequest("DELETE", modelAliasItemURL(aliasID), nil)
 	delReq.Header.Set("Authorization", "Bearer "+testKey)
 	delResp, err := app.Test(delReq, fiber.TestConfig{Timeout: testTimeout})
 	if err != nil {
@@ -444,7 +414,7 @@ func TestDeleteOrgAlias_ThenListShowsRemoved(t *testing.T) {
 	delResp.Body.Close()
 
 	// List should now be empty.
-	listReq := httptest.NewRequest("GET", orgAliasURL(org.ID), nil)
+	listReq := httptest.NewRequest("GET", modelAliasURL(), nil)
 	listReq.Header.Set("Authorization", "Bearer "+testKey)
 	listResp, err := app.Test(listReq, fiber.TestConfig{Timeout: testTimeout})
 	if err != nil {
@@ -459,16 +429,15 @@ func TestDeleteOrgAlias_ThenListShowsRemoved(t *testing.T) {
 	}
 }
 
-func TestCreateOrgAlias_DuplicateReturnsConflict(t *testing.T) {
+func TestCreateModelAlias_DuplicateReturnsConflict(t *testing.T) {
 	t.Parallel()
 
-	app, database, keyCache := setupTestAppWithRegistry(t, "file:TestCreateOrgAlias_Dup?mode=memory&cache=private")
-	org := mustCreateOrg(t, database, "Dup Alias Org", "dup-alias-org")
+	app, database, keyCache := setupTestAppWithRegistry(t, "file:TestCreateModelAlias_Dup?mode=memory&cache=private")
 	creator := mustCreateUser(t, database, "creator-dup-coa@example.com", "Creator")
-	testKey := addRegistryTestKey(t, keyCache, auth.RoleOrgAdmin, org.ID, creator.ID)
+	testKey := addRegistryTestKey(t, keyCache, auth.RoleSystemAdmin, creator.ID)
 
 	body := bodyJSON(t, map[string]any{"alias": "dup-alias", "model_name": testModelName})
-	req1 := httptest.NewRequest("POST", orgAliasURL(org.ID), body)
+	req1 := httptest.NewRequest("POST", modelAliasURL(), body)
 	req1.Header.Set("Content-Type", "application/json")
 	req1.Header.Set("Authorization", "Bearer "+testKey)
 	resp1, err := app.Test(req1, fiber.TestConfig{Timeout: testTimeout})
@@ -480,7 +449,7 @@ func TestCreateOrgAlias_DuplicateReturnsConflict(t *testing.T) {
 		t.Fatalf("first create: status = %d, want 201", resp1.StatusCode)
 	}
 
-	req2 := httptest.NewRequest("POST", orgAliasURL(org.ID),
+	req2 := httptest.NewRequest("POST", modelAliasURL(),
 		bodyJSON(t, map[string]any{"alias": "dup-alias", "model_name": testModelName}))
 	req2.Header.Set("Content-Type", "application/json")
 	req2.Header.Set("Authorization", "Bearer "+testKey)

@@ -81,9 +81,9 @@ func seedUsageEvents(t *testing.T, database *db.DB, ages []time.Duration) {
 
 		_, err = database.SQL().ExecContext(ctx,
 			`INSERT INTO usage_events
-				(id, key_id, key_type, org_id, model_name, status_code, created_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			id.String(), "key-test", "user_key", "org-test", "model-test", 200, ts,
+				(id, key_id, key_type, model_name, status_code, created_at)
+			VALUES (?, ?, ?, ?, ?, ?)`,
+			id.String(), "key-test", "user_key", "model-test", 200, ts,
 		)
 		if err != nil {
 			t.Fatalf("seedUsageEvents: insert: %v", err)
@@ -424,9 +424,9 @@ func TestRunOnce_CutoffBoundary(t *testing.T) {
 	} {
 		_, err := database.SQL().ExecContext(ctx,
 			`INSERT INTO usage_events
-				(id, key_id, key_type, org_id, model_name, status_code, created_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			row.id, "key-test", "user_key", "org-test", "model-test", 200, row.ts,
+				(id, key_id, key_type, model_name, status_code, created_at)
+			VALUES (?, ?, ?, ?, ?, ?)`,
+			row.id, "key-test", "user_key", "model-test", 200, row.ts,
 		)
 		if err != nil {
 			t.Fatalf("insert boundary row: %v", err)

@@ -113,7 +113,8 @@ func TestRunMigrations_TablesExist(t *testing.T) {
 		"models",
 		"model_aliases",
 		"api_keys",
-		"key_model_access",
+		"wallets",
+		"transactions",
 		"usage_events",
 	}
 	for _, table := range tables {
