@@ -12,6 +12,7 @@ export interface SelectOption {
   value: string
   label: string
   description?: string
+  icon?: React.ReactNode
 }
 
 export interface SelectProps {
@@ -253,11 +254,16 @@ export const Select = React.forwardRef<HTMLButtonElement, SelectProps>(
         >
           <span
             className={cn(
-              'truncate',
+              'flex items-center gap-2 min-w-0 truncate',
               selectedOption != null ? 'text-text-primary' : 'text-text-tertiary',
             )}
           >
-            {selectedOption != null ? selectedOption.label : placeholder}
+            {selectedOption?.icon != null ? (
+              <span className="shrink-0 leading-none">{selectedOption.icon}</span>
+            ) : null}
+            <span className="truncate">
+              {selectedOption != null ? selectedOption.label : placeholder}
+            </span>
           </span>
           <svg
             className={cn(
@@ -325,12 +331,19 @@ export const Select = React.forwardRef<HTMLButtonElement, SelectProps>(
                     opt.value !== value && 'text-text-primary',
                   )}
                 >
-                  {opt.label}
-                  {opt.description != null && (
-                    <span className="block text-xs text-text-tertiary mt-0.5">
-                      {opt.description}
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    {opt.icon != null ? (
+                      <span className="shrink-0 leading-none">{opt.icon}</span>
+                    ) : null}
+                    <span className="min-w-0">
+                      {opt.label}
+                      {opt.description != null && (
+                        <span className="block text-xs text-text-tertiary mt-0.5">
+                          {opt.description}
+                        </span>
+                      )}
                     </span>
-                  )}
+                  </div>
                 </div>
               ))
             ) : (

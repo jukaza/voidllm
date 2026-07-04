@@ -83,6 +83,10 @@ func RegisterRoutes(app *fiber.App, handler *Handler, keyCache *cache.Cache[stri
 	api.Patch("/models/:model_id/deployments/:deployment_id", auth.RequireRole(auth.RoleSystemAdmin), handler.updateDeployment)
 	api.Delete("/models/:model_id/deployments/:deployment_id", auth.RequireRole(auth.RoleSystemAdmin), handler.deleteDeployment)
 
+	// Model combo routes (product → upstream hops).
+	api.Get("/models/:model_id/routes", auth.RequireRole(auth.RoleSystemAdmin), handler.ListModelRoutes)
+	api.Put("/models/:model_id/routes", auth.RequireRole(auth.RoleSystemAdmin), handler.ReplaceModelRoutes)
+
 	// Model Aliases
 	api.Post("/model-aliases", auth.RequireRole(auth.RoleMember), handler.CreateOrgAlias)
 	api.Get("/model-aliases", auth.RequireRole(auth.RoleMember), handler.ListOrgAliases)
@@ -99,6 +103,18 @@ func RegisterRoutes(app *fiber.App, handler *Handler, keyCache *cache.Cache[stri
 	api.Post("/providers/import", auth.RequireRole(auth.RoleSystemAdmin), handler.ImportProvider)
 	api.Post("/providers", auth.RequireRole(auth.RoleSystemAdmin), handler.CreateProvider)
 	api.Get("/providers", auth.RequireRole(auth.RoleSystemAdmin), handler.ListProviders)
+	api.Get("/providers/:provider_id/connections", auth.RequireRole(auth.RoleSystemAdmin), handler.ListProviderConnections)
+	api.Post("/providers/:provider_id/connections", auth.RequireRole(auth.RoleSystemAdmin), handler.CreateProviderConnection)
+	api.Post("/providers/:provider_id/connections/reorder", auth.RequireRole(auth.RoleSystemAdmin), handler.ReorderProviderConnections)
+	api.Patch("/providers/:provider_id/connections/:connection_id", auth.RequireRole(auth.RoleSystemAdmin), handler.UpdateProviderConnection)
+	api.Post("/providers/:provider_id/connections/:connection_id/unlock", auth.RequireRole(auth.RoleSystemAdmin), handler.UnlockProviderConnection)
+	api.Delete("/providers/:provider_id/connections/:connection_id", auth.RequireRole(auth.RoleSystemAdmin), handler.DeleteProviderConnection)
+	api.Post("/providers/:provider_id/connections/:connection_id/test", auth.RequireRole(auth.RoleSystemAdmin), handler.TestProviderConnection)
+	api.Get("/providers/:provider_id/upstream-models", auth.RequireRole(auth.RoleSystemAdmin), handler.ListProviderUpstreamModels)
+	api.Post("/providers/:provider_id/upstream-models/import", auth.RequireRole(auth.RoleSystemAdmin), handler.ImportProviderUpstreamModels)
+	api.Patch("/providers/:provider_id/upstream-models/:model_id", auth.RequireRole(auth.RoleSystemAdmin), handler.UpdateProviderUpstreamModel)
+	api.Delete("/providers/:provider_id/upstream-models/:model_id", auth.RequireRole(auth.RoleSystemAdmin), handler.DeleteProviderUpstreamModel)
+	api.Get("/upstream-models", auth.RequireRole(auth.RoleSystemAdmin), handler.ListAllUpstreamModels)
 	api.Get("/providers/:provider_id", auth.RequireRole(auth.RoleSystemAdmin), handler.GetProvider)
 	api.Patch("/providers/:provider_id", auth.RequireRole(auth.RoleSystemAdmin), handler.UpdateProvider)
 	api.Delete("/providers/:provider_id", auth.RequireRole(auth.RoleSystemAdmin), handler.DeleteProvider)

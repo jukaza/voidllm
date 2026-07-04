@@ -1,0 +1,2 @@
+-- Migration: 0023_model_name_tombstone.down.sql
+-- Irreversible: original API names cannot be recovered from tombstone values.

@@ -256,11 +256,39 @@ func (h *Handler) AvailableModels(c fiber.Ctx) error {
 		return apierror.Send(c, fiber.StatusUnauthorized, "unauthorized", "missing authentication")
 	}
 
-	allModels := h.Registry.ListInfo()
+	ctx := c.Context()
+	dbModels, err := h.DB.ListActiveModels(ctx)
+	if err != nil {
+		h.Log.ErrorContext(ctx, "available models: list active", slog.String("error", err.Error()))
+		return apierror.InternalError(c, "failed to list models")
+	}
 
-	models := make([]availableModel, 0, len(allModels))
-	for _, m := range allModels {
-		modelType := m.Type
+	models := make([]availableModel, 0, len(dbModels))
+	for _, m := range dbModels {
+		hasRoute := false
+		steps, stepErr := h.DB.ListModelRouteSteps(ctx, m.ID, true)
+		if stepErr != nil {
+			h.Log.ErrorContext(ctx, "available models: list route steps",
+				slog.String("model_id", m.ID),
+				slog.String("error", stepErr.Error()),
+			)
+		} else if len(steps) > 0 {
+			hasRoute = true
+		}
+		if !hasRoute {
+			deps, depErr := h.DB.ListActiveDeployments(ctx, m.ID)
+			if depErr != nil {
+				h.Log.ErrorContext(ctx, "available models: list deployments",
+					slog.String("model_id", m.ID),
+					slog.String("error", depErr.Error()),
+				)
+				continue
+			}
+			if len(deps) == 0 {
+				continue
+			}
+		}
+		modelType := m.ModelType
 		if modelType == "" {
 			modelType = "chat"
 		}

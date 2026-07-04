@@ -12,6 +12,7 @@ import (
 	"github.com/voidmind-io/voidllm/internal/auth"
 	"github.com/voidmind-io/voidllm/internal/db"
 	"github.com/voidmind-io/voidllm/internal/provider"
+	voidredis "github.com/voidmind-io/voidllm/internal/redis"
 	"github.com/voidmind-io/voidllm/pkg/crypto"
 )
 
@@ -32,6 +33,9 @@ type providerRequest struct {
 	// APIKey is the default upstream API key in plaintext; it is encrypted
 	// before storage and never returned. Set to empty string to clear.
 	APIKey *string `json:"api_key"`
+	ConnectionStrategy     *string `json:"connection_strategy"`
+	StickyRoundRobinLimit  *int    `json:"sticky_round_robin_limit"`
+	RPMLimit               *int    `json:"rpm_limit"`
 }
 
 // slugRe constrains slugs to short lowercase identifiers safe for display
@@ -57,9 +61,12 @@ func providerToJSON(p *db.Provider) fiber.Map {
 		"protocol":     p.Protocol,
 		"logo":         p.Logo,
 		"base_url":     p.BaseURL,
-		"has_api_key":  p.APIKeyEncrypted != nil,
-		"created_at":   p.CreatedAt,
-		"updated_at":   p.UpdatedAt,
+		"has_api_key":              p.APIKeyEncrypted != nil,
+		"connection_strategy":      p.ConnectionStrategy,
+		"sticky_round_robin_limit": p.StickyRoundRobinLimit,
+		"rpm_limit":                p.RPMLimit,
+		"created_at":               p.CreatedAt,
+		"updated_at":               p.UpdatedAt,
 	}
 }
 
@@ -210,11 +217,17 @@ func (h *Handler) UpdateProvider(c fiber.Ctx) error {
 	if msg := validateProviderFields(&req); msg != "" {
 		return apierror.BadRequest(c, msg)
 	}
+	if req.RPMLimit != nil && *req.RPMLimit < 0 {
+		return apierror.BadRequest(c, "rpm_limit must be >= 0")
+	}
 
 	providerID := c.Params("provider_id")
+	ctx := c.Context()
 	params := db.UpdateProviderParams{
 		Name: req.Name, ContactInfo: req.ContactInfo, Status: req.Status, Notes: req.Notes,
 		Slug: req.Slug, Protocol: req.Protocol, Logo: req.Logo, BaseURL: req.BaseURL,
+		ConnectionStrategy: req.ConnectionStrategy, StickyRoundRobinLimit: req.StickyRoundRobinLimit,
+		RPMLimit: req.RPMLimit,
 	}
 	if req.APIKey != nil {
 		if *req.APIKey == "" {
@@ -230,7 +243,7 @@ func (h *Handler) UpdateProvider(c fiber.Ctx) error {
 		}
 	}
 
-	updated, err := h.DB.UpdateProvider(c.Context(), providerID, params)
+	updated, err := h.DB.UpdateProvider(ctx, providerID, params)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
 			return apierror.NotFound(c, "provider not found")
@@ -238,20 +251,36 @@ func (h *Handler) UpdateProvider(c fiber.Ctx) error {
 		if errors.Is(err, db.ErrConflict) {
 			return apierror.Send(c, fiber.StatusConflict, "conflict", "slug already in use")
 		}
-		h.Log.ErrorContext(c.Context(), "update provider", slog.String("error", err.Error()))
+		h.Log.ErrorContext(ctx, "update provider", slog.String("error", err.Error()))
 		return apierror.InternalError(c, "failed to update provider")
+	}
+	if h.ReloadModels != nil {
+		if reloadErr := h.ReloadModels(ctx); reloadErr != nil {
+			h.Log.ErrorContext(ctx, "update provider: reload models", slog.String("error", reloadErr.Error()))
+		}
+	}
+	if h.Redis != nil {
+		if pubErr := h.Redis.PublishInvalidation(ctx, voidredis.ChannelModels, "reload"); pubErr != nil {
+			h.Log.ErrorContext(ctx, "update provider: publish invalidation", slog.String("error", pubErr.Error()))
+		}
 	}
 	return c.JSON(providerToJSON(updated))
 }
 
 // DeleteProvider handles DELETE /api/v1/providers/:provider_id (system_admin).
 func (h *Handler) DeleteProvider(c fiber.Ctx) error {
-	if err := h.DB.DeleteProvider(c.Context(), c.Params("provider_id")); err != nil {
+	ctx := c.Context()
+	if err := h.DB.DeleteProvider(ctx, c.Params("provider_id")); err != nil {
 		if errors.Is(err, db.ErrNotFound) {
 			return apierror.NotFound(c, "provider not found")
 		}
-		h.Log.ErrorContext(c.Context(), "delete provider", slog.String("error", err.Error()))
+		h.Log.ErrorContext(ctx, "delete provider", slog.String("error", err.Error()))
 		return apierror.InternalError(c, "failed to delete provider")
+	}
+	if h.Redis != nil {
+		if pubErr := h.Redis.PublishInvalidation(ctx, voidredis.ChannelModels, "reload"); pubErr != nil {
+			h.Log.ErrorContext(ctx, "delete provider: publish model invalidation", slog.String("error", pubErr.Error()))
+		}
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }

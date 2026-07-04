@@ -48,6 +48,19 @@ export interface ModelResponse {
   sell_cached_input_per_1m?: number | null
   logo?: string
   deployments?: DeploymentResponse[]
+  routing_strategy?: string
+  sticky_round_robin_limit?: number
+  is_public?: boolean
+  route_count?: number
+  bill_min_per_request?: boolean
+  sell_min_per_request?: number | null
+  rpm_limit?: number
+}
+
+export type BillingMode = 'token' | 'request'
+
+export function billingModeFromModel(model: Pick<ModelResponse, 'bill_per_request'>): BillingMode {
+  return model.bill_per_request ? 'request' : 'token'
 }
 
 interface PaginatedModels {
@@ -76,10 +89,16 @@ export interface CreateModelParams {
   bill_per_token?: boolean
   bill_per_request?: boolean
   sell_per_request?: number
+  bill_min_per_request?: boolean
+  sell_min_per_request?: number
   sell_input_per_1m?: number
   sell_output_per_1m?: number
   sell_cached_input_per_1m?: number
   logo?: string
+  routing_strategy?: string
+  sticky_round_robin_limit?: number
+  is_public?: boolean
+  rpm_limit?: number
 }
 
 export interface CreateDeploymentParams {
@@ -126,10 +145,16 @@ export interface UpdateModelParams {
   bill_per_token?: boolean
   bill_per_request?: boolean
   sell_per_request?: number
+  bill_min_per_request?: boolean
+  sell_min_per_request?: number
   sell_input_per_1m?: number
   sell_output_per_1m?: number
   sell_cached_input_per_1m?: number
   logo?: string
+  routing_strategy?: string
+  sticky_round_robin_limit?: number
+  is_public?: boolean
+  rpm_limit?: number
 }
 
 export function useModels(cursor?: string) {

@@ -71,9 +71,12 @@ type createModelRequest struct {
 	SellCachedInputPer1M *float64 `json:"sell_cached_input_per_1m,omitempty"`
 	// Logo is the customer-facing logo URL or asset path.
 	Logo string `json:"logo,omitempty"`
-	BillPerToken   *bool    `json:"bill_per_token"`
-	BillPerRequest *bool    `json:"bill_per_request"`
-	SellPerRequest *float64 `json:"sell_per_request"`
+	BillPerToken        *bool    `json:"bill_per_token"`
+	BillPerRequest      *bool    `json:"bill_per_request"`
+	SellPerRequest      *float64 `json:"sell_per_request"`
+	BillMinPerRequest   *bool    `json:"bill_min_per_request"`
+	SellMinPerRequest   *float64 `json:"sell_min_per_request"`
+	RPMLimit            *int     `json:"rpm_limit,omitempty"`
 }
 
 // updateModelRequest is the JSON body accepted by UpdateModel.
@@ -122,14 +125,30 @@ type updateModelRequest struct {
 	SellCachedInputPer1M *float64 `json:"sell_cached_input_per_1m"`
 	// Logo, when non-nil, replaces the customer-facing logo. Pass "" to clear.
 	Logo *string `json:"logo"`
-	BillPerToken   *bool    `json:"bill_per_token"`
-	BillPerRequest *bool    `json:"bill_per_request"`
-	SellPerRequest *float64 `json:"sell_per_request"`
+	BillPerToken        *bool    `json:"bill_per_token"`
+	BillPerRequest      *bool    `json:"bill_per_request"`
+	SellPerRequest      *float64 `json:"sell_per_request"`
+	BillMinPerRequest   *bool    `json:"bill_min_per_request"`
+	SellMinPerRequest   *float64 `json:"sell_min_per_request"`
+	RoutingStrategy       *string `json:"routing_strategy"`
+	StickyRoundRobinLimit *int    `json:"sticky_round_robin_limit"`
+	RPMLimit              *int    `json:"rpm_limit"`
 }
 
-func validateBillingModes(billToken, billRequest bool, sellIn, sellOut, sellCached, sellPerReq *float64) string {
+func validateBillingModes(
+	billToken, billRequest bool,
+	sellIn, sellOut, sellCached, sellPerReq *float64,
+	billMinPerReq bool,
+	sellMinPerReq *float64,
+) string {
+	if billToken && billRequest {
+		return "billing mode must be either bill_per_token or bill_per_request, not both"
+	}
 	if !billToken && !billRequest {
-		return "at least one billing mode (bill_per_token or bill_per_request) must be enabled"
+		return "exactly one billing mode (bill_per_token or bill_per_request) must be enabled"
+	}
+	if billRequest && billMinPerReq {
+		return "bill_min_per_request is only available with bill_per_token"
 	}
 	if billToken {
 		hasTokenPrice := (sellIn != nil && *sellIn > 0) ||
@@ -137,6 +156,11 @@ func validateBillingModes(billToken, billRequest bool, sellIn, sellOut, sellCach
 			(sellCached != nil && *sellCached > 0)
 		if !hasTokenPrice {
 			return "bill_per_token requires at least one sell token price > 0"
+		}
+		if billMinPerReq {
+			if sellMinPerReq == nil || *sellMinPerReq <= 0 {
+				return "bill_min_per_request requires sell_min_per_request > 0"
+			}
 		}
 	}
 	if billRequest {
@@ -212,12 +236,19 @@ type modelResponse struct {
 	SellCachedInputPer1M *float64 `json:"sell_cached_input_per_1m,omitempty"`
 	// Logo is the customer-facing logo URL or asset path.
 	Logo string `json:"logo,omitempty"`
-	BillPerToken   bool     `json:"bill_per_token"`
-	BillPerRequest bool     `json:"bill_per_request"`
-	SellPerRequest *float64 `json:"sell_per_request,omitempty"`
+	BillPerToken        bool     `json:"bill_per_token"`
+	BillPerRequest      bool     `json:"bill_per_request"`
+	SellPerRequest      *float64 `json:"sell_per_request,omitempty"`
+	BillMinPerRequest   bool     `json:"bill_min_per_request"`
+	SellMinPerRequest   *float64 `json:"sell_min_per_request,omitempty"`
 	// Deployments contains the model's deployment entries when present.
 	Deployments []deploymentResponse `json:"deployments,omitempty"`
-	CreatedAt   string               `json:"created_at"`
+	// RouteCount is the number of enabled combo route steps (API products only).
+	RouteCount            int    `json:"route_count,omitempty"`
+	RoutingStrategy       string `json:"routing_strategy,omitempty"`
+	StickyRoundRobinLimit int    `json:"sticky_round_robin_limit,omitempty"`
+	RPMLimit              int    `json:"rpm_limit,omitempty"`
+	CreatedAt             string `json:"created_at"`
 	UpdatedAt   string               `json:"updated_at"`
 }
 
@@ -290,6 +321,11 @@ func modelToResponse(m *db.Model, fallbackName string) modelResponse {
 		BillPerToken:         m.BillPerToken,
 		BillPerRequest:       m.BillPerRequest,
 		SellPerRequest:       m.SellPerRequest,
+		BillMinPerRequest:    m.BillMinPerRequest,
+		SellMinPerRequest:    m.SellMinPerRequest,
+		RoutingStrategy:      m.RoutingStrategy,
+		StickyRoundRobinLimit: m.StickyRoundRobinLimit,
+		RPMLimit:             m.RPMLimit,
 		CreatedAt:            m.CreatedAt,
 		UpdatedAt:            m.UpdatedAt,
 	}
@@ -336,6 +372,9 @@ func dbModelToProxy(m *db.Model, apiKeyPlaintext string, fallbackName string) pr
 		BillPerToken:         m.BillPerToken,
 		BillPerRequest:       m.BillPerRequest,
 		SellPerRequest:       m.SellPerRequest,
+		BillMinPerRequest:    m.BillMinPerRequest,
+		SellMinPerRequest:    m.SellMinPerRequest,
+		RPMLimit:             m.RPMLimit,
 	}
 }
 
@@ -571,9 +610,21 @@ func (h *Handler) CreateModel(c fiber.Ctx) error {
 	if req.BillPerRequest != nil {
 		billPerRequest = *req.BillPerRequest
 	}
+	billMinPerRequest := false
+	if req.BillMinPerRequest != nil {
+		billMinPerRequest = *req.BillMinPerRequest
+	}
+	if billPerRequest {
+		billMinPerRequest = false
+	}
 	if req.BillPerRequest != nil || req.BillPerToken != nil || req.SellPerRequest != nil ||
-		req.SellInputPer1M != nil || req.SellOutputPer1M != nil || req.SellCachedInputPer1M != nil {
-		if msg := validateBillingModes(billPerToken, billPerRequest, req.SellInputPer1M, req.SellOutputPer1M, req.SellCachedInputPer1M, req.SellPerRequest); msg != "" {
+		req.SellInputPer1M != nil || req.SellOutputPer1M != nil || req.SellCachedInputPer1M != nil ||
+		req.BillMinPerRequest != nil || req.SellMinPerRequest != nil {
+		if msg := validateBillingModes(
+			billPerToken, billPerRequest,
+			req.SellInputPer1M, req.SellOutputPer1M, req.SellCachedInputPer1M, req.SellPerRequest,
+			billMinPerRequest, req.SellMinPerRequest,
+		); msg != "" {
 			return apierror.BadRequest(c, msg)
 		}
 	}
@@ -581,6 +632,9 @@ func (h *Handler) CreateModel(c fiber.Ctx) error {
 	aliasStr, aliasMsg := h.validateAndJoinAliases(ctx, req.Aliases, "")
 	if aliasMsg != "" {
 		return apierror.BadRequest(c, aliasMsg)
+	}
+	if req.RPMLimit != nil && *req.RPMLimit < 0 {
+		return apierror.BadRequest(c, "rpm_limit must be >= 0")
 	}
 
 	// Validate and resolve the fallback model when provided.
@@ -654,6 +708,8 @@ func (h *Handler) CreateModel(c fiber.Ctx) error {
 		BillPerToken:         billPerToken,
 		BillPerRequest:       billPerRequest,
 		SellPerRequest:       req.SellPerRequest,
+		BillMinPerRequest:    billMinPerRequest,
+		SellMinPerRequest:    req.SellMinPerRequest,
 	})
 	if err != nil {
 		if errors.Is(err, db.ErrConflict) {
@@ -661,6 +717,14 @@ func (h *Handler) CreateModel(c fiber.Ctx) error {
 		}
 		h.Log.ErrorContext(ctx, "create model: db insert", slog.String("error", err.Error()))
 		return apierror.InternalError(c, "failed to create model")
+	}
+
+	if req.RPMLimit != nil {
+		m, err = h.DB.UpdateModel(ctx, m.ID, db.UpdateModelParams{RPMLimit: req.RPMLimit})
+		if err != nil {
+			h.Log.ErrorContext(ctx, "create model: set rpm_limit", slog.String("error", err.Error()))
+			return apierror.InternalError(c, "failed to store rpm limit")
+		}
 	}
 
 	// Encrypt the API key using the immutable model ID as AAD and persist it.
@@ -736,6 +800,12 @@ func (h *Handler) ListModels(c fiber.Ctx) error {
 			slog.String("error", depsErr.Error()))
 	}
 
+	routeCounts, routeErr := h.DB.CountModelRouteStepsByModelIDs(c.Context(), modelIDs)
+	if routeErr != nil {
+		h.Log.ErrorContext(c.Context(), "list models: fetch route counts",
+			slog.String("error", routeErr.Error()))
+	}
+
 	// Build an id→name map from the current page to resolve FallbackModelID
 	// without extra DB round-trips. Cross-page fallback targets (models on a
 	// different page) are resolved by resolveMissingFallbackNames via individual
@@ -758,6 +828,9 @@ func (h *Handler) ListModels(c fiber.Ctx) error {
 			fallbackName = idToName[*models[i].FallbackModelID]
 		}
 		resp.Data[i] = modelToResponse(&models[i], fallbackName)
+		if count := routeCounts[models[i].ID]; count > 0 {
+			resp.Data[i].RouteCount = count
+		}
 		if deps := depsByModel[models[i].ID]; len(deps) > 0 {
 			resp.Data[i].Deployments = make([]deploymentResponse, len(deps))
 			for j := range deps {
@@ -916,7 +989,8 @@ func (h *Handler) UpdateModel(c fiber.Ctx) error {
 	}
 
 	if req.BillPerToken != nil || req.BillPerRequest != nil || req.SellPerRequest != nil ||
-		req.SellInputPer1M != nil || req.SellOutputPer1M != nil || req.SellCachedInputPer1M != nil {
+		req.SellInputPer1M != nil || req.SellOutputPer1M != nil || req.SellCachedInputPer1M != nil ||
+		req.BillMinPerRequest != nil || req.SellMinPerRequest != nil {
 		billToken := existing.BillPerToken
 		billRequest := existing.BillPerRequest
 		if req.BillPerToken != nil {
@@ -924,6 +998,13 @@ func (h *Handler) UpdateModel(c fiber.Ctx) error {
 		}
 		if req.BillPerRequest != nil {
 			billRequest = *req.BillPerRequest
+		}
+		billMin := existing.BillMinPerRequest
+		if req.BillMinPerRequest != nil {
+			billMin = *req.BillMinPerRequest
+		}
+		if billRequest {
+			billMin = false
 		}
 		sellIn := existing.SellInputPer1M
 		if req.SellInputPer1M != nil {
@@ -941,7 +1022,15 @@ func (h *Handler) UpdateModel(c fiber.Ctx) error {
 		if req.SellPerRequest != nil {
 			sellPerReq = req.SellPerRequest
 		}
-		if msg := validateBillingModes(billToken, billRequest, sellIn, sellOut, sellCached, sellPerReq); msg != "" {
+		sellMinPerReq := existing.SellMinPerRequest
+		if req.SellMinPerRequest != nil {
+			sellMinPerReq = req.SellMinPerRequest
+		}
+		if msg := validateBillingModes(
+			billToken, billRequest,
+			sellIn, sellOut, sellCached, sellPerReq,
+			billMin, sellMinPerReq,
+		); msg != "" {
 			return apierror.BadRequest(c, msg)
 		}
 	}
@@ -971,6 +1060,28 @@ func (h *Handler) UpdateModel(c fiber.Ctx) error {
 		BillPerToken:         req.BillPerToken,
 		BillPerRequest:       req.BillPerRequest,
 		SellPerRequest:       req.SellPerRequest,
+		BillMinPerRequest:    req.BillMinPerRequest,
+		SellMinPerRequest:    req.SellMinPerRequest,
+		RoutingStrategy:      req.RoutingStrategy,
+		StickyRoundRobinLimit: req.StickyRoundRobinLimit,
+		RPMLimit:             req.RPMLimit,
+	}
+
+	if req.RPMLimit != nil && *req.RPMLimit < 0 {
+		return apierror.BadRequest(c, "rpm_limit must be >= 0")
+	}
+
+	if req.BillPerRequest != nil && *req.BillPerRequest {
+		off := false
+		params.BillMinPerRequest = &off
+	}
+
+	if req.RoutingStrategy != nil {
+		switch *req.RoutingStrategy {
+		case "fallback", "round-robin":
+		default:
+			return apierror.BadRequest(c, "routing_strategy must be fallback or round-robin")
+		}
 	}
 
 	if req.Aliases != nil {
@@ -1063,23 +1174,23 @@ func (h *Handler) UpdateModel(c fiber.Ctx) error {
 	}
 
 	if updated.IsActive {
-		// When the name changed, the registry entry under the old name must be
-		// removed before the updated entry is added under the new name.
-		if existing.Name != updated.Name {
-			h.Registry.RemoveModel(existing.Name)
-		}
-		// When the fallback was cleared, newFallbackName is already empty.
-		if req.FallbackModelName != nil && *req.FallbackModelName == "" {
-			newFallbackName = ""
-		}
-		plaintext, decErr := h.decryptModelAPIKey(updated)
-		if decErr != nil {
-			h.Log.ErrorContext(ctx, "update model: decrypt api key for registry", slog.String("error", decErr.Error()))
-			// Registry is not updated but the DB write succeeded — return the
-			// updated record and log the inconsistency. A process restart will
-			// reconcile the registry from the database.
+		if h.ReloadModels != nil {
+			if reloadErr := h.ReloadModels(ctx); reloadErr != nil {
+				h.Log.ErrorContext(ctx, "update model: reload registry", slog.String("error", reloadErr.Error()))
+			}
 		} else {
-			h.Registry.AddModel(dbModelToProxy(updated, plaintext, newFallbackName))
+			if existing.Name != updated.Name {
+				h.Registry.RemoveModel(existing.Name)
+			}
+			if req.FallbackModelName != nil && *req.FallbackModelName == "" {
+				newFallbackName = ""
+			}
+			plaintext, decErr := h.decryptModelAPIKey(updated)
+			if decErr != nil {
+				h.Log.ErrorContext(ctx, "update model: decrypt api key for registry", slog.String("error", decErr.Error()))
+			} else {
+				h.Registry.AddModel(dbModelToProxy(updated, plaintext, newFallbackName))
+			}
 		}
 	} else {
 		h.Registry.RemoveModel(existing.Name)

@@ -12,6 +12,7 @@ export interface ProviderItem {
   logo?: string
   base_url?: string
   has_api_key?: boolean
+  rpm_limit?: number
   created_at: string
   updated_at: string
 }
@@ -50,6 +51,14 @@ export function useProviders(cursor = '', limit = 50) {
   })
 }
 
+export function useProvider(id: string) {
+  return useQuery({
+    queryKey: ['provider', id],
+    queryFn: () => apiClient<ProviderItem>(`/providers/${id}`),
+    enabled: Boolean(id),
+  })
+}
+
 export interface ProviderParams {
   name?: string
   contact_info?: string
@@ -60,6 +69,7 @@ export interface ProviderParams {
   logo?: string
   base_url?: string
   api_key?: string
+  rpm_limit?: number
 }
 
 export function useCreateProvider() {
@@ -149,10 +159,7 @@ export interface ImportProviderParams {
 
 export interface ImportProviderResult {
   upstream_id: string
-  product_name: string
-  model_id?: string
-  created_model: boolean
-  route_id?: string
+  inventory_id?: string
   error?: string
 }
 
@@ -166,8 +173,9 @@ export function useImportProvider() {
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['providers'] })
-      void queryClient.invalidateQueries({ queryKey: ['models'] })
-      void queryClient.invalidateQueries({ queryKey: ['public-catalog'] })
+      void queryClient.invalidateQueries({ queryKey: ['provider'] })
+      void queryClient.invalidateQueries({ queryKey: ['provider-upstream-models'] })
+      void queryClient.invalidateQueries({ queryKey: ['upstream-models'] })
     },
   })
 }

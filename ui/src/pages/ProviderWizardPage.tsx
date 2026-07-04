@@ -8,9 +8,11 @@ export default function ProviderWizardPage() {
   const preset = searchParams.get('preset')
 
   useEffect(() => {
-    const q = new URLSearchParams({ add: '1' })
-    if (preset) q.set('preset', preset)
-    navigate(`/providers?${q.toString()}`, { replace: true })
+    if (preset) {
+      navigate(`/providers/new?preset=${preset}`, { replace: true })
+    } else {
+      navigate('/providers/new', { replace: true })
+    }
   }, [navigate, preset])
 
   return null

@@ -11,7 +11,8 @@ import (
 
 // providerSelectColumns is the ordered column list used in all provider SELECT
 // queries. It must match the scan order in scanProvider.
-const providerSelectColumns = "id, name, contact_info, status, notes, slug, protocol, logo, base_url, api_key_encrypted, created_at, updated_at, deleted_at"
+const providerSelectColumns = "id, name, contact_info, status, notes, slug, protocol, logo, base_url, api_key_encrypted, " +
+	"connection_strategy, sticky_round_robin_limit, rpm_limit, created_at, updated_at, deleted_at"
 
 // Provider represents an upstream partner supplying API capacity.
 type Provider struct {
@@ -34,7 +35,13 @@ type Provider struct {
 	// APIKeyEncrypted is the default upstream API key, AES-256-GCM encrypted
 	// with AAD "provider:<id>". Nil when no key is stored.
 	APIKeyEncrypted *string
-	CreatedAt       string
+	// ConnectionStrategy selects keys: fill-first or round-robin.
+	ConnectionStrategy string
+	// StickyRoundRobinLimit is consecutive uses per key before rotating.
+	StickyRoundRobinLimit int
+	// RPMLimit caps requests per minute across all keys for this provider (0 = unlimited).
+	RPMLimit int
+	CreatedAt             string
 	UpdatedAt       string
 	DeletedAt       *string
 }
@@ -66,6 +73,9 @@ type UpdateProviderParams struct {
 	// APIKeyEncrypted replaces the stored key when non-nil. To clear the key,
 	// pass a pointer to the empty string.
 	APIKeyEncrypted *string
+	ConnectionStrategy     *string
+	StickyRoundRobinLimit  *int
+	RPMLimit               *int
 }
 
 // CreateProvider inserts a new provider and returns the persisted record.
@@ -159,7 +169,7 @@ func (d *DB) ListProviders(ctx context.Context, cursor string, limit int) ([]Pro
 	var providers []Provider
 	for rows.Next() {
 		var pr Provider
-		if err := rows.Scan(&pr.ID, &pr.Name, &pr.ContactInfo, &pr.Status, &pr.Notes, &pr.Slug, &pr.Protocol, &pr.Logo, &pr.BaseURL, &pr.APIKeyEncrypted, &pr.CreatedAt, &pr.UpdatedAt, &pr.DeletedAt); err != nil {
+		if err := scanProviderFields(&pr, rows); err != nil {
 			return nil, fmt.Errorf("ListProviders scan: %w", err)
 		}
 		providers = append(providers, pr)
@@ -217,6 +227,15 @@ func (d *DB) UpdateProvider(ctx context.Context, id string, params UpdateProvide
 			addSet("api_key_encrypted", *params.APIKeyEncrypted)
 		}
 	}
+	if params.ConnectionStrategy != nil {
+		addSet("connection_strategy", *params.ConnectionStrategy)
+	}
+	if params.StickyRoundRobinLimit != nil {
+		addSet("sticky_round_robin_limit", *params.StickyRoundRobinLimit)
+	}
+	if params.RPMLimit != nil {
+		addSet("rpm_limit", *params.RPMLimit)
+	}
 
 	if len(sets) == 0 {
 		return d.GetProvider(ctx, id)
@@ -241,31 +260,63 @@ func (d *DB) UpdateProvider(ctx context.Context, id string, params UpdateProvide
 	return d.GetProvider(ctx, id)
 }
 
-// DeleteProvider soft-deletes a provider. It returns ErrNotFound if the
-// provider does not exist or is already deleted.
+// DeleteProvider soft-deletes a provider and removes dependent inventory so
+// combo pickers and route steps never reference a deleted provider.
+// It returns ErrNotFound if the provider does not exist or is already deleted.
 func (d *DB) DeleteProvider(ctx context.Context, id string) error {
 	p := d.dialect.Placeholder
-	query := "UPDATE providers SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP" +
-		" WHERE id = " + p(1) + " AND deleted_at IS NULL"
+	return d.WithTx(ctx, func(q Querier) error {
+		if _, err := q.ExecContext(ctx,
+			"DELETE FROM provider_upstream_models WHERE provider_id = "+p(1), id); err != nil {
+			return fmt.Errorf("DeleteProvider %s: purge upstream inventory: %w", id, translateError(err))
+		}
+		if _, err := q.ExecContext(ctx,
+			"UPDATE provider_connections SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP"+
+				" WHERE provider_id = "+p(1)+" AND deleted_at IS NULL", id); err != nil {
+			return fmt.Errorf("DeleteProvider %s: soft-delete connections: %w", id, translateError(err))
+		}
+		if _, err := q.ExecContext(ctx,
+			"DELETE FROM model_route_steps WHERE provider_id = "+p(1), id); err != nil {
+			return fmt.Errorf("DeleteProvider %s: purge route steps: %w", id, translateError(err))
+		}
+		if _, err := q.ExecContext(ctx,
+			"UPDATE model_deployments SET provider_id = NULL, updated_at = CURRENT_TIMESTAMP"+
+				" WHERE provider_id = "+p(1), id); err != nil {
+			return fmt.Errorf("DeleteProvider %s: clear deployment provider refs: %w", id, translateError(err))
+		}
 
-	res, err := d.sql.ExecContext(ctx, query, id)
-	if err != nil {
-		return fmt.Errorf("DeleteProvider %s: %w", id, translateError(err))
-	}
-	affected, err := res.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("DeleteProvider %s: rows affected: %w", id, err)
-	}
-	if affected == 0 {
-		return fmt.Errorf("DeleteProvider %s: %w", id, ErrNotFound)
-	}
-	return nil
+		res, err := q.ExecContext(ctx,
+			"UPDATE providers SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP"+
+				" WHERE id = "+p(1)+" AND deleted_at IS NULL", id)
+		if err != nil {
+			return fmt.Errorf("DeleteProvider %s: %w", id, translateError(err))
+		}
+		affected, err := res.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("DeleteProvider %s: rows affected: %w", id, err)
+		}
+		if affected == 0 {
+			return fmt.Errorf("DeleteProvider %s: %w", id, ErrNotFound)
+		}
+		return nil
+	})
+}
+
+type providerScanner interface {
+	Scan(...any) error
+}
+
+func scanProviderFields(pr *Provider, s providerScanner) error {
+	return s.Scan(
+		&pr.ID, &pr.Name, &pr.ContactInfo, &pr.Status, &pr.Notes, &pr.Slug, &pr.Protocol, &pr.Logo, &pr.BaseURL, &pr.APIKeyEncrypted,
+		&pr.ConnectionStrategy, &pr.StickyRoundRobinLimit, &pr.RPMLimit,
+		&pr.CreatedAt, &pr.UpdatedAt, &pr.DeletedAt,
+	)
 }
 
 func scanProvider(row *sql.Row) (*Provider, error) {
 	var pr Provider
-	err := row.Scan(&pr.ID, &pr.Name, &pr.ContactInfo, &pr.Status, &pr.Notes, &pr.Slug, &pr.Protocol, &pr.Logo, &pr.BaseURL, &pr.APIKeyEncrypted, &pr.CreatedAt, &pr.UpdatedAt, &pr.DeletedAt)
-	if err != nil {
+	if err := scanProviderFields(&pr, row); err != nil {
 		return nil, err
 	}
 	return &pr, nil

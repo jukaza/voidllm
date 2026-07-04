@@ -127,3 +127,48 @@ func TestGetModelIDByName(t *testing.T) {
 		}
 	})
 }
+
+// TestCreateModel_ReusesNameAfterSoftDelete verifies that a soft-deleted product
+// no longer blocks creating a new model with the same API name.
+func TestCreateModel_ReusesNameAfterSoftDelete(t *testing.T) {
+	t.Parallel()
+
+	d := openMigratedDB(t)
+	ctx := context.Background()
+
+	const name = "reusable-product-name"
+
+	original, err := d.CreateModel(ctx, CreateModelParams{
+		Name:     name,
+		Provider: "openai",
+		BaseURL:  "https://api.openai.com/v1",
+		Source:   "api",
+	})
+	if err != nil {
+		t.Fatalf("CreateModel(original): %v", err)
+	}
+
+	if err := d.DeleteModel(ctx, original.ID); err != nil {
+		t.Fatalf("DeleteModel: %v", err)
+	}
+
+	replacement, err := d.CreateModel(ctx, CreateModelParams{
+		Name:     name,
+		Provider: "ollama",
+		BaseURL:  "https://ollama.example/v1",
+		Source:   "api",
+	})
+	if err != nil {
+		t.Fatalf("CreateModel(replacement): %v", err)
+	}
+	if replacement.Name != name {
+		t.Errorf("replacement.Name = %q, want %q", replacement.Name, name)
+	}
+	if replacement.ID == original.ID {
+		t.Errorf("replacement.ID = original.ID = %q, want a new row", original.ID)
+	}
+
+	if _, err := d.GetModelByName(ctx, name); err != nil {
+		t.Fatalf("GetModelByName after recreate: %v", err)
+	}
+}

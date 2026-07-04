@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -12,6 +13,10 @@ import (
 	"github.com/voidmind-io/voidllm/pkg/crypto"
 )
 
+// deletedModelNameSuffix is appended to model.name on soft-delete so the API-visible
+// name can be reused while the row keeps a globally unique name column value.
+const deletedModelNameSuffix = "@deleted:"
+
 // modelSelectColumns is the ordered column list used in all models SELECT queries.
 // It must match the scan order in scanModel exactly.
 const modelSelectColumns = "id, name, provider, model_type, base_url, api_key_encrypted, " +
@@ -20,7 +25,8 @@ const modelSelectColumns = "id, name, provider, model_type, base_url, api_key_en
 	"is_active, source, created_by, created_at, updated_at, deleted_at, aliases, timeout, " +
 	"strategy, max_retries, fallback_model_id, pii_filter, " +
 	"is_public, sell_input_per_1m, sell_output_per_1m, sell_cached_input_per_1m, logo, " +
-	"bill_per_token, bill_per_request, sell_per_request"
+	"bill_per_token, bill_per_request, sell_per_request, bill_min_per_request, sell_min_per_request, " +
+	"routing_strategy, sticky_round_robin_limit, rpm_limit"
 
 // Model represents a model record in the database.
 // This is the storage layer representation; see proxy.Model for the in-memory registry type.
@@ -86,6 +92,16 @@ type Model struct {
 	BillPerRequest bool
 	// SellPerRequest is the customer-facing USD charge per API call.
 	SellPerRequest *float64
+	// BillMinPerRequest applies a per-request revenue floor when BillPerToken is true.
+	BillMinPerRequest bool
+	// SellMinPerRequest is the minimum USD charged per request (token billing only).
+	SellMinPerRequest *float64
+	// RoutingStrategy is the combo chain strategy: fallback or round-robin.
+	RoutingStrategy string
+	// StickyRoundRobinLimit is requests per combo step before rotating (round-robin).
+	StickyRoundRobinLimit int
+	// RPMLimit caps customer requests per minute for this product (0 = unlimited).
+	RPMLimit int
 }
 
 // CreateModelParams holds the input for creating a model.
@@ -140,6 +156,10 @@ type CreateModelParams struct {
 	BillPerRequest bool
 	// SellPerRequest is the customer-facing USD charge per API call.
 	SellPerRequest *float64
+	// BillMinPerRequest enables a per-request minimum when billing per token.
+	BillMinPerRequest bool
+	// SellMinPerRequest is the minimum USD per request (token billing only).
+	SellMinPerRequest *float64
 }
 
 // UpdateModelParams holds optional fields for updating a model.
@@ -200,6 +220,16 @@ type UpdateModelParams struct {
 	BillPerRequest *bool
 	// SellPerRequest, when non-nil, replaces the per-request sell price.
 	SellPerRequest *float64
+	// BillMinPerRequest, when non-nil, replaces the token-billing minimum flag.
+	BillMinPerRequest *bool
+	// SellMinPerRequest, when non-nil, replaces the minimum USD per request.
+	SellMinPerRequest *float64
+	// RoutingStrategy replaces combo chain strategy (fallback or round-robin).
+	RoutingStrategy *string
+	// StickyRoundRobinLimit replaces combo sticky rotation count.
+	StickyRoundRobinLimit *int
+	// RPMLimit replaces the product RPM cap (0 = unlimited).
+	RPMLimit *int
 }
 
 // CreateModel inserts a new model and returns the persisted record.
@@ -229,6 +259,10 @@ func (d *DB) CreateModel(ctx context.Context, params CreateModelParams) (*Model,
 	if !billPerToken && !billPerRequest {
 		billPerToken = true
 	}
+	billMinPerRequest := params.BillMinPerRequest
+	if billPerRequest {
+		billMinPerRequest = false
+	}
 
 	p := d.dialect.Placeholder
 	insertQuery := "INSERT INTO models " +
@@ -237,7 +271,7 @@ func (d *DB) CreateModel(ctx context.Context, params CreateModelParams) (*Model,
 		"azure_deployment, azure_api_version, gcp_project, gcp_location, " +
 		"is_active, source, created_by, aliases, timeout, strategy, max_retries, " +
 		"fallback_model_id, pii_filter, is_public, sell_input_per_1m, sell_output_per_1m, sell_cached_input_per_1m, logo, " +
-		"bill_per_token, bill_per_request, sell_per_request, " +
+		"bill_per_token, bill_per_request, sell_per_request, bill_min_per_request, sell_min_per_request, " +
 		"created_at, updated_at) " +
 		"VALUES (" +
 		p(1) + ", " + p(2) + ", " + p(3) + ", " + p(4) + ", " + p(5) + ", " + p(6) + ", " +
@@ -245,7 +279,7 @@ func (d *DB) CreateModel(ctx context.Context, params CreateModelParams) (*Model,
 		p(10) + ", " + p(11) + ", " + p(12) + ", " + p(13) + ", " +
 		"1, " + p(14) + ", " + p(15) + ", " + p(16) + ", " + p(17) + ", " + p(18) + ", " + p(19) + ", " +
 		p(20) + ", " + p(21) + ", " + p(22) + ", " + p(23) + ", " + p(24) + ", " + p(25) + ", " + p(26) + ", " +
-		p(27) + ", " + p(28) + ", " + p(29) + ", " +
+		p(27) + ", " + p(28) + ", " + p(29) + ", " + p(30) + ", " + p(31) + ", " +
 		"CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
 
 	selectQuery := "SELECT " + modelSelectColumns +
@@ -253,6 +287,13 @@ func (d *DB) CreateModel(ctx context.Context, params CreateModelParams) (*Model,
 
 	var model *Model
 	err = d.WithTx(ctx, func(q Querier) error {
+		if reclaimErr := d.reclaimSoftDeletedModelName(ctx, q, params.Name); reclaimErr != nil {
+			return reclaimErr
+		}
+		if conflictErr := d.ensureModelNameAvailable(ctx, q, params.Name, ""); conflictErr != nil {
+			return conflictErr
+		}
+
 		_, execErr := q.ExecContext(ctx, insertQuery,
 			id.String(),
 			params.Name,
@@ -283,6 +324,8 @@ func (d *DB) CreateModel(ctx context.Context, params CreateModelParams) (*Model,
 			boolToInt(billPerToken),
 			boolToInt(billPerRequest),
 			params.SellPerRequest,
+			boolToInt(billMinPerRequest),
+			params.SellMinPerRequest,
 		)
 		if execErr != nil {
 			return translateError(execErr)
@@ -522,6 +565,31 @@ func (d *DB) UpdateModel(ctx context.Context, id string, params UpdateModelParam
 		args = append(args, *params.SellPerRequest)
 		argN++
 	}
+	if params.BillMinPerRequest != nil {
+		setClauses = append(setClauses, "bill_min_per_request = "+p(argN))
+		args = append(args, boolToInt(*params.BillMinPerRequest))
+		argN++
+	}
+	if params.SellMinPerRequest != nil {
+		setClauses = append(setClauses, "sell_min_per_request = "+p(argN))
+		args = append(args, *params.SellMinPerRequest)
+		argN++
+	}
+	if params.RoutingStrategy != nil {
+		setClauses = append(setClauses, "routing_strategy = "+p(argN))
+		args = append(args, *params.RoutingStrategy)
+		argN++
+	}
+	if params.StickyRoundRobinLimit != nil {
+		setClauses = append(setClauses, "sticky_round_robin_limit = "+p(argN))
+		args = append(args, *params.StickyRoundRobinLimit)
+		argN++
+	}
+	if params.RPMLimit != nil {
+		setClauses = append(setClauses, "rpm_limit = "+p(argN))
+		args = append(args, *params.RPMLimit)
+		argN++
+	}
 
 	if len(setClauses) == 0 {
 		return d.GetModel(ctx, id)
@@ -538,6 +606,15 @@ func (d *DB) UpdateModel(ctx context.Context, id string, params UpdateModelParam
 
 	var model *Model
 	err := d.WithTx(ctx, func(q Querier) error {
+		if params.Name != nil {
+			if reclaimErr := d.reclaimSoftDeletedModelName(ctx, q, *params.Name); reclaimErr != nil {
+				return reclaimErr
+			}
+			if conflictErr := d.ensureModelNameAvailable(ctx, q, *params.Name, id); conflictErr != nil {
+				return conflictErr
+			}
+		}
+
 		result, execErr := q.ExecContext(ctx, updateQuery, args...)
 		if execErr != nil {
 			return translateError(execErr)
@@ -562,12 +639,16 @@ func (d *DB) UpdateModel(ctx context.Context, id string, params UpdateModelParam
 	return model, nil
 }
 
-// DeleteModel soft-deletes an active model by setting deleted_at.
+// DeleteModel soft-deletes an active model by setting deleted_at and renaming
+// it so the API-visible name can be reused.
 // It returns ErrNotFound if the model does not exist or is already deleted.
 func (d *DB) DeleteModel(ctx context.Context, id string) error {
 	p := d.dialect.Placeholder
-	query := "UPDATE models SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP " +
-		"WHERE id = " + p(1) + " AND deleted_at IS NULL"
+	query := "UPDATE models SET " +
+		"name = name || '" + deletedModelNameSuffix + "' || id, " +
+		"deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP " +
+		"WHERE id = " + p(1) + " AND deleted_at IS NULL " +
+		"AND name NOT LIKE '%" + deletedModelNameSuffix + "%'"
 
 	result, err := d.sql.ExecContext(ctx, query, id)
 	if err != nil {
@@ -583,6 +664,38 @@ func (d *DB) DeleteModel(ctx context.Context, id string) error {
 	}
 
 	return nil
+}
+
+// reclaimSoftDeletedModelName hard-deletes soft-deleted models that still hold
+// the given API name. Route steps cascade on delete.
+func (d *DB) reclaimSoftDeletedModelName(ctx context.Context, q Querier, name string) error {
+	p := d.dialect.Placeholder
+	_, err := q.ExecContext(ctx,
+		"DELETE FROM models WHERE name = "+p(1)+" AND deleted_at IS NOT NULL",
+		name)
+	return translateError(err)
+}
+
+// ensureModelNameAvailable returns ErrConflict when another active model already
+// uses name. excludeID skips the model being updated.
+func (d *DB) ensureModelNameAvailable(ctx context.Context, q Querier, name, excludeID string) error {
+	p := d.dialect.Placeholder
+	query := "SELECT id FROM models WHERE name = " + p(1) + " AND deleted_at IS NULL"
+	args := []any{name}
+	if excludeID != "" {
+		query += " AND id <> " + p(2)
+		args = append(args, excludeID)
+	}
+
+	var existingID string
+	err := q.QueryRowContext(ctx, query, args...).Scan(&existingID)
+	if err == nil {
+		return ErrConflict
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	return translateError(err)
 }
 
 // ActivateModel sets is_active = 1 for the given model.
@@ -702,6 +815,7 @@ func scanModel(scanner interface{ Scan(...any) error }) (*Model, error) {
 	var isPublicInt int
 	var billPerTokenInt int
 	var billPerRequestInt int
+	var billMinPerRequestInt int
 	err := scanner.Scan(
 		&m.ID, &m.Name, &m.Provider, &m.ModelType, &m.BaseURL, &m.APIKeyEncrypted,
 		&m.MaxContextTokens, &m.InputPricePer1M, &m.OutputPricePer1M,
@@ -712,6 +826,8 @@ func scanModel(scanner interface{ Scan(...any) error }) (*Model, error) {
 		&piiFilterInt,
 		&isPublicInt, &m.SellInputPer1M, &m.SellOutputPer1M, &m.SellCachedInputPer1M, &m.Logo,
 		&billPerTokenInt, &billPerRequestInt, &m.SellPerRequest,
+		&billMinPerRequestInt, &m.SellMinPerRequest,
+		&m.RoutingStrategy, &m.StickyRoundRobinLimit, &m.RPMLimit,
 	)
 	if err != nil {
 		return nil, err
@@ -721,6 +837,7 @@ func scanModel(scanner interface{ Scan(...any) error }) (*Model, error) {
 	m.IsPublic = isPublicInt == 1
 	m.BillPerToken = billPerTokenInt == 1
 	m.BillPerRequest = billPerRequestInt == 1
+	m.BillMinPerRequest = billMinPerRequestInt == 1
 	return &m, nil
 }
 

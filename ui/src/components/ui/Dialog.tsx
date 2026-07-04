@@ -10,6 +10,8 @@ export interface DialogProps {
   children: React.ReactNode
   footer?: React.ReactNode
   className?: string
+  panelClassName?: string
+  stackLevel?: 0 | 1
   closeOnEscape?: boolean
   closeOnBackdrop?: boolean
 }
@@ -21,6 +23,8 @@ export function Dialog({
   children,
   footer,
   className,
+  panelClassName,
+  stackLevel = 0,
   closeOnEscape = true,
   closeOnBackdrop = true,
 }: DialogProps) {
@@ -93,7 +97,10 @@ export function Dialog({
 
   return ReactDOM.createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      className={cn(
+        'fixed inset-0 flex items-center justify-center bg-black/70',
+        stackLevel === 1 ? 'z-[60]' : 'z-50',
+      )}
       onMouseDown={handleBackdropMouseDown}
     >
       <div
@@ -101,8 +108,10 @@ export function Dialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="rounded-2xl shadow-2xl max-w-xl w-full mx-4 p-6 border-t border-accent/15 max-h-[90vh] flex flex-col"
-        style={{ background: 'rgba(25, 25, 31, 0.85)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}
+        className={cn(
+          'rounded-2xl shadow-2xl max-w-xl w-full mx-4 p-6 border border-border bg-bg-secondary max-h-[90vh] flex flex-col',
+          panelClassName,
+        )}
         onKeyDown={handlePanelKeyDown}
       >
         <div className="flex items-center justify-between mb-4">

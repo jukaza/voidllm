@@ -77,6 +77,27 @@ type Deployment struct {
 	// Used only at registry load to inherit connection defaults; not exposed
 	// to customers.
 	ProviderID string
+	// ConnectionID is the provider_connections row used for this hop (combo runtime).
+	ConnectionID string
+	// ProviderRPMLimit is copied from the provider for combo RPM accounting.
+	ProviderRPMLimit int
+}
+
+// RouteStep is one ordered hop in a product model combo chain.
+type RouteStep struct {
+	ProviderID    string
+	UpstreamModel string
+	Provider      string
+	BaseURL       string
+	ConnStrategy  string
+	ConnSticky    int
+	// ProviderDefaultKey is the decrypted provider-level API key used when a
+	// selected connection has no key of its own.
+	ProviderDefaultKey string
+	// ProviderRPMLimit is the provider pool RPM cap (0 = unlimited).
+	ProviderRPMLimit int
+	CostInputPer1M  *float64
+	CostOutputPer1M *float64
 }
 
 // LogValue implements slog.LogValuer to prevent the upstream API key from
@@ -128,11 +149,15 @@ type Model struct {
 	SellInputPer1M       *float64
 	SellOutputPer1M      *float64
 	SellCachedInputPer1M *float64
-	// BillPerToken / BillPerRequest control which sell-price modes debit wallets.
+	// BillPerToken / BillPerRequest are mutually exclusive wallet billing modes.
 	BillPerToken   bool
 	BillPerRequest bool
-	// SellPerRequest is the flat USD charge per API call.
+	// SellPerRequest is the flat USD charge per API call (request billing only).
 	SellPerRequest *float64
+	// BillMinPerRequest applies a per-request floor when BillPerToken is true.
+	BillMinPerRequest bool
+	// SellMinPerRequest is the minimum USD charged per request (token billing).
+	SellMinPerRequest *float64
 	// FallbackModelName is the canonical name of the fallback target.
 	// Empty when no fallback is configured. Set to empty by the registry
 	// builder if the license does not include FeatureFallbackChains.
@@ -156,6 +181,15 @@ type Model struct {
 	// A per-deployment PIIFilter takes precedence over this field.
 	// The pointer is treated as immutable after registry load.
 	PIIFilter *bool
+	// RouteSteps is the combo chain for product models. When non-empty the
+	// proxy resolves connections at runtime instead of using Deployments.
+	RouteSteps []RouteStep
+	// RoutingStrategy is the combo strategy: fallback or round-robin.
+	RoutingStrategy string
+	// StickyRoundRobinLimit is requests per combo step before rotating.
+	StickyRoundRobinLimit int
+	// RPMLimit caps customer requests per minute for this product (0 = unlimited).
+	RPMLimit int
 }
 
 // LogValue implements slog.LogValuer to prevent the upstream API key from
@@ -439,9 +473,13 @@ func (r *Registry) AddModel(m Model) {
 		Strategy:          m.Strategy,
 		MaxRetries:        m.MaxRetries,
 		Deployments:       deployments,
-		FallbackModelName: m.FallbackModelName,
-		destPrivate:       classifyDestPrivate(m.BaseURL),
-		PIIFilter:         m.PIIFilter,
+		FallbackModelName:     m.FallbackModelName,
+		destPrivate:           classifyDestPrivate(m.BaseURL),
+		PIIFilter:             m.PIIFilter,
+		RouteSteps:            copyRouteSteps(m.RouteSteps),
+		RoutingStrategy:       m.RoutingStrategy,
+		StickyRoundRobinLimit: m.StickyRoundRobinLimit,
+		RPMLimit:              m.RPMLimit,
 	}
 	r.models[m.Name] = entry
 
@@ -547,7 +585,17 @@ func copyModel(m *Model) Model {
 	copy(result.Aliases, m.Aliases)
 	result.Deployments = make([]Deployment, len(m.Deployments))
 	copy(result.Deployments, m.Deployments)
+	result.RouteSteps = copyRouteSteps(m.RouteSteps)
 	return result
+}
+
+func copyRouteSteps(steps []RouteStep) []RouteStep {
+	if len(steps) == 0 {
+		return nil
+	}
+	out := make([]RouteStep, len(steps))
+	copy(out, steps)
+	return out
 }
 
 // rebuildSorted rebuilds the pre-sorted slice of model pointers from the models map.

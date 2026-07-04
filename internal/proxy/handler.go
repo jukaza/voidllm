@@ -30,6 +30,7 @@ import (
 	"github.com/voidmind-io/voidllm/internal/pii"
 	"github.com/voidmind-io/voidllm/internal/ratelimit"
 	"github.com/voidmind-io/voidllm/internal/shutdown"
+	"github.com/voidmind-io/voidllm/internal/upstream"
 	"github.com/voidmind-io/voidllm/internal/usage"
 )
 
@@ -42,13 +43,15 @@ type WalletChecker interface {
 	Check(userID string) error
 }
 
-// UpstreamRecorder receives per-deployment throughput accounting from the
-// hot path. *ratelimit.UpstreamLimiter implements this.
+// UpstreamRecorder receives per-scope throughput accounting from the hot path.
+// *ratelimit.UpstreamLimiter implements this.
 type UpstreamRecorder interface {
-	// RecordRequest counts one request sent to the deployment.
-	RecordRequest(depID string)
-	// RecordTokens counts response tokens against the deployment's minute window.
-	RecordTokens(depID string, tokens int64)
+	// Allow reports whether a scope is under its RPM/TPM/daily caps.
+	Allow(scopeID string, rpmLimit, tpmLimit, dailyRequestLimit int) bool
+	// RecordRequest counts one request sent upstream for the scope.
+	RecordRequest(scopeID string)
+	// RecordTokens counts response tokens against the scope's minute window.
+	RecordTokens(scopeID string, tokens int64)
 }
 
 // DeploymentPicker selects an ordered list of deployment candidates for a model.
@@ -87,6 +90,8 @@ type ProxyHandler struct {
 	// bodies and restores original values in responses. A nil value
 	// disables PII anonymization entirely with zero overhead on the hot path.
 	PIIEngine *pii.Engine
+	// UpstreamStore selects provider connections for combo product models.
+	UpstreamStore *upstream.Store
 }
 
 // NewProxyHandler constructs a ProxyHandler with a pre-configured HTTP client.
@@ -228,6 +233,13 @@ func (p *ProxyHandler) Handle(c fiber.Ctx) error {
 
 	model, err := p.resolveModel(c, keyInfo, envelope.Model)
 	if err != nil {
+		if errors.Is(err, errResponseSent) {
+			return nil
+		}
+		return err
+	}
+
+	if err := p.checkProductModelRPM(c, model); err != nil {
 		if errors.Is(err, errResponseSent) {
 			return nil
 		}
@@ -544,6 +556,18 @@ func (p *ProxyHandler) tryModel(
 	pickBody func(dep Deployment) []byte,
 	envelope requestEnvelope,
 ) (*http.Response, context.CancelFunc, Adapter, Deployment, error, int, error) {
+	if len(model.RouteSteps) > 0 && p.UpstreamStore != nil {
+		return p.tryComboModel(c, model, pickBody, envelope)
+	}
+	return p.tryModelDeployments(c, model, pickBody, envelope)
+}
+
+func (p *ProxyHandler) tryModelDeployments(
+	c fiber.Ctx,
+	model Model,
+	pickBody func(dep Deployment) []byte,
+	envelope requestEnvelope,
+) (*http.Response, context.CancelFunc, Adapter, Deployment, error, int, error) {
 	// Build the ordered list of deployment candidates. When Router is nil or
 	// the model has no multi-deployment configuration, synthesize a single
 	// candidate from the model's own fields so the retry loop is uniform.
@@ -616,11 +640,9 @@ func (p *ProxyHandler) tryModel(
 			return nil, nil, nil, Deployment{}, nil, 0, buildErr
 		}
 
-		// Count the attempt against the channel's RPM/daily windows before
-		// sending so concurrent picks see the up-to-date rate.
-		if p.UpstreamLimiter != nil {
-			p.UpstreamLimiter.RecordRequest(d.ID)
-		}
+		// Count the attempt against RPM scopes before sending so concurrent
+		// picks see the up-to-date rate.
+		p.recordUpstreamRequest(model, d)
 
 		// Send the request to the upstream. The upstream span measures
 		// time-to-first-byte; Do() returns once response headers arrive.
@@ -840,6 +862,41 @@ func (p *ProxyHandler) checkLimits(c fiber.Ctx, keyInfo *auth.KeyInfo) error {
 	}
 
 	return nil
+}
+
+func (p *ProxyHandler) checkProductModelRPM(c fiber.Ctx, model Model) error {
+	if p.UpstreamLimiter == nil || model.RPMLimit <= 0 {
+		return nil
+	}
+	scope := ratelimit.ScopeProductModel(model.Name)
+	if p.UpstreamLimiter.Allow(scope, model.RPMLimit, 0, 0) {
+		return nil
+	}
+	metrics.RateLimitRejectionsTotal.WithLabelValues("product_model").Inc()
+	p.Log.LogAttrs(c.Context(), slog.LevelWarn, "product model rpm exceeded",
+		slog.String("model", model.Name),
+		slog.Int("rpm_limit", model.RPMLimit),
+	)
+	if err := apierror.Send(c, fiber.StatusTooManyRequests, "rate_limit_exceeded",
+		"model rate limit exceeded"); err != nil {
+		return err
+	}
+	return errResponseSent
+}
+
+func (p *ProxyHandler) recordUpstreamRequest(model Model, dep Deployment) {
+	if p.UpstreamLimiter == nil {
+		return
+	}
+	if dep.ID != "" {
+		p.UpstreamLimiter.RecordRequest(dep.ID)
+	}
+	if model.RPMLimit > 0 {
+		p.UpstreamLimiter.RecordRequest(ratelimit.ScopeProductModel(model.Name))
+	}
+	if dep.ProviderID != "" && dep.ProviderRPMLimit > 0 {
+		p.UpstreamLimiter.RecordRequest(ratelimit.ScopeProvider(dep.ProviderID))
+	}
 }
 
 // resolveModel performs scoped alias resolution followed by registry lookup and
@@ -1628,8 +1685,7 @@ func (p *ProxyHandler) logUsageEvent(keyInfo *auth.KeyInfo, model Model, ui Usag
 		cost = &c
 	}
 
-	// Revenue: what the customer's wallet is charged. Per-request and per-token
-	// modes stack when both are enabled on the model.
+	// Revenue: wallet charge uses exactly one billing mode per model.
 	var revenue *float64
 	var rev float64
 	hasRevenue := false
@@ -1644,11 +1700,9 @@ func (p *ProxyHandler) logUsageEvent(keyInfo *auth.KeyInfo, model Model, ui Usag
 	}
 
 	if billPerRequest && model.SellPerRequest != nil && *model.SellPerRequest > 0 {
-		rev += *model.SellPerRequest
+		rev = *model.SellPerRequest
 		hasRevenue = true
-	}
-
-	if billPerToken && (model.SellInputPer1M != nil || model.SellOutputPer1M != nil) {
+	} else if billPerToken && (model.SellInputPer1M != nil || model.SellOutputPer1M != nil) {
 		sellIn, sellOut := 0.0, 0.0
 		if model.SellInputPer1M != nil {
 			sellIn = *model.SellInputPer1M
@@ -1664,9 +1718,14 @@ func (p *ProxyHandler) logUsageEvent(keyInfo *auth.KeyInfo, model Model, ui Usag
 		if freshPrompt < 0 {
 			freshPrompt = 0
 		}
-		rev += float64(freshPrompt)/1_000_000*sellIn +
+		rev = float64(freshPrompt)/1_000_000*sellIn +
 			float64(ui.CachedTokens)/1_000_000*cachedRate +
 			float64(ui.CompletionTokens)/1_000_000*sellOut
+		if model.BillMinPerRequest && model.SellMinPerRequest != nil && *model.SellMinPerRequest > 0 {
+			if rev < *model.SellMinPerRequest {
+				rev = *model.SellMinPerRequest
+			}
+		}
 		hasRevenue = true
 	}
 

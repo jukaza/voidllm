@@ -16,7 +16,6 @@ import (
 	"github.com/voidmind-io/voidllm/internal/db"
 	"github.com/voidmind-io/voidllm/internal/jsonx"
 	"github.com/voidmind-io/voidllm/internal/provider"
-	voidredis "github.com/voidmind-io/voidllm/internal/redis"
 	"github.com/voidmind-io/voidllm/pkg/crypto"
 )
 
@@ -196,10 +195,15 @@ func (h *Handler) DiscoverProviderModels(c fiber.Ctx) error {
 		return c.JSON(fiber.Map{"success": true, "message": "connected, but no models reported", "data": []discoveredModel{}})
 	}
 
-	// Mark models that already exist as products so the wizard can offer
-	// "attach route" instead of "create model".
+	// Mark models already in provider inventory (or global catalog when no provider).
 	existing := make(map[string]bool)
-	if names, listErr := h.DB.ListModelNames(ctx); listErr == nil {
+	if req.ProviderID != "" {
+		if inv, listErr := h.DB.ListProviderUpstreamModels(ctx, req.ProviderID, false); listErr == nil {
+			for _, m := range inv {
+				existing[m.UpstreamID] = true
+			}
+		}
+	} else if names, listErr := h.DB.ListModelNames(ctx); listErr == nil {
 		for _, n := range names {
 			existing[n] = true
 		}
@@ -348,10 +352,6 @@ func (h *Handler) ImportProvider(c fiber.Ctx) error {
 	if slug != "" && !slugRe.MatchString(slug) {
 		return apierror.BadRequest(c, "slug must be 1-32 lowercase letters, digits, or hyphens")
 	}
-	markup := req.Markup
-	if markup <= 0 {
-		markup = DefaultMarkup
-	}
 
 	// Step 1: create or load the provider.
 	var prov *db.Provider
@@ -391,43 +391,28 @@ func (h *Handler) ImportProvider(c fiber.Ctx) error {
 		}
 	}
 
-	// Resolve the API key used for route creation (request > provider store).
-	routeKey := req.APIKey
-	if routeKey == "" && prov.APIKeyEncrypted != nil {
-		routeKey, err = crypto.DecryptString(*prov.APIKeyEncrypted, h.EncryptionKey, providerAAD(prov.ID))
-		if err != nil {
-			return apierror.InternalError(c, "stored api key cannot be decrypted")
+	// Optional: store API key as first provider connection.
+	if req.APIKey != "" {
+		if _, connErr := h.createOneConnection(ctx, prov.ID, "Primary", req.APIKey, "apikey", 1); connErr != nil {
+			h.Log.WarnContext(ctx, "import: create connection", slog.String("error", connErr.Error()))
 		}
 	}
 
-	routeLabel := prov.Name
-	if prov.Slug != nil {
-		routeLabel = *prov.Slug
-	}
-
-	// Step 2: per ticked model — create product model if needed, attach route.
+	// Step 2: upsert upstream inventory only — no global product models.
 	type importResult struct {
-		UpstreamID  string `json:"upstream_id"`
-		ProductName string `json:"product_name"`
-		ModelID     string `json:"model_id,omitempty"`
-		Created     bool   `json:"created_model"`
-		RouteID     string `json:"route_id,omitempty"`
-		Error       string `json:"error,omitempty"`
+		UpstreamID string `json:"upstream_id"`
+		ID         string `json:"inventory_id,omitempty"`
+		Error      string `json:"error,omitempty"`
 	}
 	results := make([]importResult, 0, len(req.Models))
 
 	for _, spec := range req.Models {
-		res := importResult{UpstreamID: spec.UpstreamID, ProductName: spec.ProductName}
-		if res.ProductName == "" {
-			res.ProductName = spec.UpstreamID
-		}
+		res := importResult{UpstreamID: spec.UpstreamID}
 		if spec.UpstreamID == "" {
 			res.Error = "upstream_id is required"
 			results = append(results, res)
 			continue
 		}
-
-		// Reference cost: request > preset table.
 		var cost *provider.CostRef
 		if spec.Cost != nil {
 			cost = spec.Cost
@@ -437,100 +422,21 @@ func (h *Handler) ImportProvider(c fiber.Ctx) error {
 				cost = &cc
 			}
 		}
-
-		// Find or create the product model.
-		modelID, lookupErr := h.DB.GetModelIDByName(ctx, res.ProductName)
-		if lookupErr != nil && !errors.Is(lookupErr, db.ErrNotFound) {
-			res.Error = "model lookup failed"
-			results = append(results, res)
-			continue
-		}
-		if errors.Is(lookupErr, db.ErrNotFound) {
-			params := db.CreateModelParams{
-				Name:         res.ProductName,
-				Provider:     protocol,
-				BaseURL:      baseURL,
-				Source:       "api",
-				IsPublic:     req.MakePublic,
-				Logo:         logo,
-				BillPerToken: true,
-			}
-			if cost != nil {
-				params.InputPricePer1M = cost.In
-				params.OutputPricePer1M = cost.Out
-				sellIn, sellOut := cost.In*markup, cost.Out*markup
-				params.SellInputPer1M = &sellIn
-				params.SellOutputPer1M = &sellOut
-				if cost.CachedIn > 0 {
-					sellCached := cost.CachedIn * markup
-					params.SellCachedInputPer1M = &sellCached
-				}
-			}
-			created, createErr := h.DB.CreateModel(ctx, params)
-			if createErr != nil {
-				res.Error = "failed to create model"
-				results = append(results, res)
-				continue
-			}
-			modelID = created.ID
-			res.Created = true
-		}
-		res.ModelID = modelID
-
-		// Attach the route. Position = append (lowest priority = backup).
-		depParams := db.CreateDeploymentParams{
-			ModelID:    modelID,
-			Name:       routeLabel + "/" + spec.UpstreamID,
-			Provider:   protocol,
-			BaseURL:    baseURL,
-			Weight:     1,
-			Priority:   nextRoutePriority(ctx, h.DB, modelID),
-			ProviderID: &prov.ID,
-		}
-		if spec.UpstreamID != res.ProductName {
-			depParams.UpstreamModel = spec.UpstreamID
-		}
+		var inCost, outCost *float64
 		if cost != nil {
-			in, out := cost.In, cost.Out
-			depParams.CostInputPer1M = &in
-			depParams.CostOutputPer1M = &out
-			if cost.CachedIn > 0 {
-				cached := cost.CachedIn
-				depParams.CostCachedInputPer1M = &cached
-			}
-			if cost.CacheWrite > 0 {
-				cw := cost.CacheWrite
-				depParams.CostCacheWritePer1M = &cw
-			}
+			inCost, outCost = &cost.In, &cost.Out
 		}
-		dep, depErr := h.DB.CreateDeployment(ctx, depParams)
-		if depErr != nil {
-			if errors.Is(depErr, db.ErrConflict) {
-				res.Error = "route already exists"
-			} else {
-				res.Error = "failed to create route"
-			}
+		m, upsertErr := h.DB.UpsertProviderUpstreamModel(ctx, db.UpsertProviderUpstreamModelParams{
+			ProviderID: prov.ID, UpstreamID: spec.UpstreamID,
+			IsEnabled: true, CostInputPer1M: inCost, CostOutputPer1M: outCost,
+		})
+		if upsertErr != nil {
+			res.Error = "failed to import upstream model"
 			results = append(results, res)
 			continue
 		}
-		if routeKey != "" {
-			enc, encErr := crypto.EncryptString(routeKey, h.EncryptionKey, deploymentAAD(dep.ID))
-			if encErr == nil {
-				_, _ = h.DB.UpdateDeployment(ctx, dep.ID, db.UpdateDeploymentParams{APIKeyEncrypted: &enc})
-			}
-		}
-		res.RouteID = dep.ID
+		res.ID = m.ID
 		results = append(results, res)
-	}
-
-	// Step 3: reload registry once for the whole batch.
-	if h.ReloadModels != nil {
-		if reloadErr := h.ReloadModels(ctx); reloadErr != nil {
-			h.Log.ErrorContext(ctx, "import: reload models", slog.String("error", reloadErr.Error()))
-		}
-	}
-	if h.Redis != nil {
-		_ = h.Redis.PublishInvalidation(ctx, voidredis.ChannelModels, "reload")
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{

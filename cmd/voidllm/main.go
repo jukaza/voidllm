@@ -37,6 +37,9 @@ func main() {
 		case "migrate-schema":
 			runMigrateSchema(os.Args[2:])
 			return
+		case "migrate-provider-data":
+			runMigrateProviderData(os.Args[2:])
+			return
 		}
 	}
 

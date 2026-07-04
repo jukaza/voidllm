@@ -43,6 +43,7 @@ import (
 	"github.com/voidmind-io/voidllm/internal/retention"
 	"github.com/voidmind-io/voidllm/internal/router"
 	"github.com/voidmind-io/voidllm/internal/shutdown"
+	"github.com/voidmind-io/voidllm/internal/upstream"
 	"github.com/voidmind-io/voidllm/internal/update"
 	"github.com/voidmind-io/voidllm/internal/usage"
 	"github.com/voidmind-io/voidllm/internal/wallet"
@@ -219,6 +220,14 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 			idToName[m.ID] = m.Name
 		}
 
+		upstreamCostByKey := make(map[string]struct{ in, out *float64 })
+		if allUpstream, uerr := database.ListAllProviderUpstreamModels(loadCtx, false); uerr == nil {
+			for _, um := range allUpstream {
+				key := um.ProviderID + ":" + um.UpstreamID
+				upstreamCostByKey[key] = struct{ in, out *float64 }{um.CostInputPer1M, um.CostOutputPer1M}
+			}
+		}
+
 		for _, m := range dbModels {
 			var apiKey string
 			if m.APIKeyEncrypted != nil {
@@ -262,6 +271,16 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 			}
 			deployments := make([]proxy.Deployment, 0, len(dbDeps))
 			for _, dep := range dbDeps {
+				if dep.ProviderID != nil {
+					if p, ok := providerByID[*dep.ProviderID]; ok && p.Status == "paused" {
+						log.LogAttrs(loadCtx, slog.LevelWarn, "skipping deployment: provider is paused",
+							slog.String("model", m.Name),
+							slog.String("deployment", dep.Name),
+							slog.String("provider", p.Name),
+						)
+						continue
+					}
+				}
 				var depAPIKey string
 				if dep.APIKeyEncrypted != nil {
 					var decErr error
@@ -324,6 +343,73 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 				strategy = "priority"
 			}
 
+			var routeSteps []proxy.RouteStep
+			if dbSteps, stepErr := database.ListModelRouteSteps(loadCtx, m.ID, true); stepErr == nil && len(dbSteps) > 0 {
+				for _, step := range dbSteps {
+					prov, ok := providerByID[step.ProviderID]
+					if !ok {
+						log.LogAttrs(loadCtx, slog.LevelWarn, "skipping route step: provider not found",
+							slog.String("model", m.Name),
+							slog.String("provider_id", step.ProviderID),
+							slog.String("upstream", step.UpstreamModel),
+						)
+						continue
+					}
+					if prov.Status == "paused" {
+						log.LogAttrs(loadCtx, slog.LevelWarn, "skipping route step: provider is paused",
+							slog.String("model", m.Name),
+							slog.String("provider", prov.Name),
+							slog.String("upstream", step.UpstreamModel),
+						)
+						continue
+					}
+					costKey := step.ProviderID + ":" + step.UpstreamModel
+					if _, hasCost := upstreamCostByKey[costKey]; !hasCost {
+						if um, umErr := database.GetProviderUpstreamModelByUpstreamID(loadCtx, step.ProviderID, step.UpstreamModel); umErr != nil {
+							log.LogAttrs(loadCtx, slog.LevelWarn, "skipping route step: upstream model not in inventory",
+								slog.String("model", m.Name),
+								slog.String("provider", prov.Name),
+								slog.String("upstream", step.UpstreamModel),
+							)
+							continue
+						} else if !um.IsEnabled {
+							log.LogAttrs(loadCtx, slog.LevelWarn, "skipping route step: upstream model is disabled",
+								slog.String("model", m.Name),
+								slog.String("provider", prov.Name),
+								slog.String("upstream", step.UpstreamModel),
+							)
+							continue
+						}
+					}
+					connStrategy := prov.ConnectionStrategy
+					if connStrategy == "" {
+						connStrategy = "fill-first"
+					}
+					sticky := prov.StickyRoundRobinLimit
+					if sticky < 1 {
+						sticky = 3
+					}
+					costs := upstreamCostByKey[costKey]
+					routeSteps = append(routeSteps, proxy.RouteStep{
+						ProviderID: step.ProviderID, UpstreamModel: step.UpstreamModel,
+						Provider: prov.Protocol, BaseURL: prov.BaseURL,
+						ConnStrategy: connStrategy, ConnSticky: sticky,
+						ProviderDefaultKey: providerKeys[prov.ID],
+						ProviderRPMLimit:   prov.RPMLimit,
+						CostInputPer1M: costs.in, CostOutputPer1M: costs.out,
+					})
+				}
+			}
+
+			routingStrategy := m.RoutingStrategy
+			if routingStrategy == "" {
+				routingStrategy = "fallback"
+			}
+			stickyRR := m.StickyRoundRobinLimit
+			if stickyRR < 1 {
+				stickyRR = 1
+			}
+
 			registry.AddModel(proxy.Model{
 				Name:                 m.Name,
 				Provider:             m.Provider,
@@ -349,6 +435,12 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 				BillPerToken:         m.BillPerToken,
 				BillPerRequest:       m.BillPerRequest,
 				SellPerRequest:       m.SellPerRequest,
+				BillMinPerRequest:    m.BillMinPerRequest,
+				SellMinPerRequest:    m.SellMinPerRequest,
+				RouteSteps:           routeSteps,
+				RoutingStrategy:      routingStrategy,
+				StickyRoundRobinLimit: stickyRR,
+				RPMLimit:             m.RPMLimit,
 			})
 		}
 		return nil
@@ -563,6 +655,7 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 	modelRouter.SetUpstreamLimiter(upstreamLimiter)
 
 	proxyHandler := proxy.NewProxyHandler(registry, log)
+	proxyHandler.UpstreamStore = &upstream.Store{DB: database, EncryptionKey: encKey}
 	proxyHandler.AliasCache = aliasCache
 	proxyHandler.CircuitBreakers = cbRegistry
 	proxyHandler.Router = modelRouter
