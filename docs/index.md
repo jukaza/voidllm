@@ -25,28 +25,13 @@ Privacy-first LLM proxy and AI gateway. Self-hosted, single binary, sub-500us ov
 
 - [Provider Setup](models/providers.md) - OpenAI, Anthropic, Azure, Ollama, vLLM, custom
 - [Load Balancing](models/load-balancing.md) - strategies, failover, circuit breakers
-- [Aliases](models/aliases.md) - logical names for models (per org/team)
-
-## MCP Gateway
-
-- [Overview](mcp/overview.md) - what is MCP, why a gateway
-- [Server Setup](mcp/servers.md) - register servers, access control, auth
-- [Code Mode](mcp/code-mode.md) - WASM-sandboxed multi-tool orchestration
-- [IDE Integration](mcp/ide-integration.md) - Claude Code, Cursor, Windsurf
+- [Aliases](models/aliases.md) - global logical names for models
 
 ## Security
 
-- [RBAC](security/rbac.md) - roles, permissions, access control hierarchy
+- [RBAC](security/rbac.md) - system admin and member roles
 - [Privacy](security/privacy.md) - zero-knowledge architecture, GDPR
 - [Hardening](security/hardening.md) - security checklist, TLS, network policies
-
-## Enterprise
-
-- [License](enterprise/license.md) - activation, verification, graceful degradation
-- [SSO / OIDC](enterprise/sso.md) - Google, Azure AD, any OIDC provider
-- [Audit Logs](enterprise/audit.md) - admin action logging
-- [OpenTelemetry](enterprise/otel.md) - distributed tracing
-- [Pricing](enterprise/pricing.md) - Community, Pro, Enterprise, Founding Member
 
 ## API
 

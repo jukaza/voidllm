@@ -92,7 +92,7 @@ const docTemplate = `{
         },
         "/auth/register": {
             "post": {
-                "description": "Creates a customer account with a personal org, prepaid wallet, and first API key.",
+                "description": "Creates a customer account with a prepaid wallet and first API key.",
                 "consumes": [
                     "application/json"
                 ],
@@ -302,7 +302,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns models accessible to the caller's org, team, and key scope.",
+                "description": "Returns models accessible to the authenticated key.",
                 "produces": [
                     "application/json"
                 ],

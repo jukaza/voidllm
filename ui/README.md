@@ -30,15 +30,11 @@ The dev server runs on `http://localhost:5173` and proxies API requests to `http
 |---|---|---|
 | Dashboard | `/` | Role-scoped stats, top models, recent usage |
 | Keys | `/keys` | Create, rotate, revoke API keys |
-| Teams | `/teams` | Team management + members |
-| Models | `/models` | Model registry, aliases, access control |
+| Models | `/models` | Model registry and global aliases |
 | Usage | `/usage` | Usage analytics with time range + group by |
 | Cost Reports | `/cost-reports` | Cost analysis + budget alerts |
-| Organizations | `/orgs` | Multi-org management (enterprise) |
-| Audit Log | `/audit-log` | Admin action history (enterprise) |
-| SSO Config | `/orgs/:id/sso` | OIDC provider configuration (enterprise) |
-| License | `/license` | Plan status, feature list, key activation |
-| Settings | `/settings` | Org name, slug, rate limits |
+| Users | `/users` | System user management (system admin) |
+| Settings | `/settings` | Instance settings |
 | Profile | `/profile` | User profile, password change |
 | Playground | `/playground` | Chat completions test interface |
 

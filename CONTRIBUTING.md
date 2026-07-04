@@ -83,9 +83,9 @@ air
 Follow [Conventional Commits](https://www.conventionalcommits.org/):
 
 ```
-feat: add team membership CRUD
-fix: close cross-org IDOR in membership deletion
-refactor: extract requireOrgAccess helper
+feat: add wallet top-up endpoint
+fix: close cross-user key IDOR in key listing
+refactor: extract usage scope helpers
 docs: add deployment constraints to README
 test: add concurrent CAS correctness test for rate limiter
 ```

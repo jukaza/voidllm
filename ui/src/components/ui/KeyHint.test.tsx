@@ -21,18 +21,6 @@ describe('KeyHint', () => {
       expect(screen.getByText('e8b1')).toBeInTheDocument()
     })
 
-    it('splits on ellipsis correctly for team key', () => {
-      render(<KeyHint hint="vl_tk_...a2c3" />)
-      expect(screen.getByText('vl_tk_...')).toBeInTheDocument()
-      expect(screen.getByText('a2c3')).toBeInTheDocument()
-    })
-
-    it('splits on ellipsis correctly for sa key', () => {
-      render(<KeyHint hint="vl_sa_...f4d5" />)
-      expect(screen.getByText('vl_sa_...')).toBeInTheDocument()
-      expect(screen.getByText('f4d5')).toBeInTheDocument()
-    })
-
     it('splits on ellipsis correctly for session key', () => {
       render(<KeyHint hint="vl_sk_...0684" />)
       expect(screen.getByText('vl_sk_...')).toBeInTheDocument()

@@ -94,37 +94,6 @@ data:
         insecure: {{ .Values.config.settings.otel.insecure }}
         sample_rate: {{ .Values.config.settings.otel.sampleRate }}
       {{- end }}
-      {{- if .Values.config.settings.sso.enabled }}
-      sso:
-        enabled: true
-        issuer: {{ .Values.config.settings.sso.issuer | quote }}
-        client_id: {{ .Values.config.settings.sso.clientId | quote }}
-        client_secret: ${VOIDLLM_SSO_CLIENT_SECRET}
-        redirect_url: {{ .Values.config.settings.sso.redirectUrl | quote }}
-        scopes:
-          {{- toYaml .Values.config.settings.sso.scopes | nindent 10 }}
-        {{- if .Values.config.settings.sso.allowedDomains }}
-        allowed_domains:
-          {{- toYaml .Values.config.settings.sso.allowedDomains | nindent 10 }}
-        {{- end }}
-        default_role: {{ .Values.config.settings.sso.defaultRole | quote }}
-        {{- if .Values.config.settings.sso.defaultOrg }}
-        default_org: {{ .Values.config.settings.sso.defaultOrg | quote }}
-        {{- end }}
-        auto_provision: {{ .Values.config.settings.sso.autoProvision }}
-        group_sync: {{ .Values.config.settings.sso.groupSync }}
-        group_claim: {{ .Values.config.settings.sso.groupClaim | quote }}
-      {{- end }}
-
-      mcp:
-        call_timeout: {{ .Values.config.settings.mcp.callTimeout }}
-        allow_private_urls: {{ .Values.config.settings.mcp.allowPrivateUrls }}
-        code_mode:
-          enabled: {{ .Values.config.settings.mcp.codeMode.enabled }}
-          memory_limit_mb: {{ .Values.config.settings.mcp.codeMode.memoryLimitMb }}
-          timeout: {{ .Values.config.settings.mcp.codeMode.timeout }}
-          pool_size: {{ .Values.config.settings.mcp.codeMode.poolSize }}
-          max_tool_calls: {{ .Values.config.settings.mcp.codeMode.maxToolCalls }}
       health_check:
         health:
           enabled: {{ .Values.config.settings.healthCheck.health.enabled }}
@@ -132,11 +101,6 @@ data:
         functional:
           enabled: {{ .Values.config.settings.healthCheck.functional.enabled }}
           interval: {{ .Values.config.settings.healthCheck.functional.interval }}
-
-    {{- if .Values.config.mcpServers }}
-    mcp_servers:
-      {{- toYaml .Values.config.mcpServers | nindent 6 }}
-    {{- end }}
 
     {{- if .Values.config.models }}
     models:

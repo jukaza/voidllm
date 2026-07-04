@@ -16,7 +16,7 @@ VoidLLM is a zero-knowledge proxy. It never stores, logs, or persists any prompt
 | Upstream API keys | Yes | Encrypted at rest (AES-256-GCM) |
 | User accounts | Yes | Email, display name, password hash |
 | Usage events | Yes | Who, when, which model, token counts, cost, duration |
-| MCP tool call logs | Yes | Server, tool name, duration, status |
+
 | Audit logs | Yes (Enterprise) | Admin action metadata |
 
 ## What VoidLLM never stores
@@ -49,7 +49,7 @@ Content passes through process memory during streaming but is never written to d
 The zero-knowledge architecture significantly reduces the GDPR compliance surface area:
 
 - No personal data from prompts is processed or stored by VoidLLM
-- Usage metadata (API key ID, org, team, model, tokens) may qualify as personal data if linkable to an individual
+- Usage metadata (API key ID, user ID, model, tokens) may qualify as personal data if linkable to an individual
 - VoidLLM acts as a data processor for usage metadata; you (the deployer) are the data controller
 - Data processing agreements with upstream LLM providers (for prompt/response content) are between you and the provider - VoidLLM is not a party
 

@@ -65,8 +65,6 @@ config:
 
   settings:
     bootstrap:
-      orgName: "Default"
-      orgSlug: ""
       adminEmail: "admin@voidllm.local"
     usage:
       bufferSize: 1000
@@ -92,31 +90,6 @@ config:
       endpoint: "localhost:4317"
       insecure: false
       sampleRate: 1.0
-    sso:
-      # -- Enable SSO/OIDC (requires license with sso_oidc feature)
-      enabled: false
-      issuer: ""
-      clientId: ""
-      redirectUrl: ""
-      scopes: ["openid", "email", "profile"]
-      allowedDomains: []
-      defaultRole: "member"
-      defaultOrg: ""
-      autoProvision: true
-      groupSync: false
-      groupClaim: "groups"
-    mcp:
-      # -- MCP tool call timeout
-      callTimeout: 30s
-      # -- Allow MCP servers on private/loopback IPs (disable for production)
-      allowPrivateUrls: false
-      codeMode:
-        # -- Enable Code Mode (WASM-sandboxed JS execution for MCP tool orchestration)
-        enabled: false
-        memoryLimitMb: 16
-        timeout: 30s
-        poolSize: 8
-        maxToolCalls: 50
     healthCheck:
       health:
         enabled: true
@@ -124,14 +97,6 @@ config:
       functional:
         enabled: true
         interval: 5m
-
-  # -- Static MCP server definitions (optional — can be managed via Admin API)
-  mcpServers: []
-  # - name: GitHub
-  #   alias: github
-  #   url: https://mcp.github.com/sse
-  #   auth_type: bearer
-  #   auth_token: ${GITHUB_TOKEN}
 
   # -- Static model definitions (optional — can be managed via Admin API)
   models: []
@@ -151,8 +116,6 @@ secrets:
   encryptionKey: ""
   # -- License key (optional, for Pro/Enterprise features)
   license: ""
-  # -- SSO/OIDC client secret (required when SSO is enabled)
-  ssoClientSecret: ""
   # -- Extra environment variables for model API keys
   extraEnv: {}
   # OPENAI_KEY: "sk-..."

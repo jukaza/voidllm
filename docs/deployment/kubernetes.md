@@ -80,17 +80,6 @@ Enterprise features are disabled by default and must be explicitly enabled. Add 
 --set config.settings.otel.endpoint=tempo:4317
 ```
 
-**SSO / OIDC:**
-```bash
---set config.settings.sso.enabled=true \
---set config.settings.sso.issuer=https://accounts.google.com \
---set config.settings.sso.clientId=xxx \
---set secrets.ssoClientSecret=yyy \
---set config.settings.sso.redirectUrl=https://voidllm.company.com/api/v1/auth/oidc/callback
-```
-
-All three require a license key (`secrets.license`). See the [Enterprise docs](../enterprise/license.md) for activation.
-
 See the full [values.yaml](https://github.com/voidmind-io/voidllm/blob/main/chart/voidllm/values.yaml) for all Helm configuration options.
 
 ## Istio Support

@@ -59,5 +59,5 @@ http:
 
 - **Streaming:** Ensure your reverse proxy does not buffer responses. SSE streaming requires `proxy_buffering off` (Nginx) or equivalent.
 - **Timeouts:** Set upstream timeouts high enough for LLM responses (60s+). Short timeouts will kill streaming responses.
-- **WebSocket:** Not required. VoidLLM uses HTTP POST for all proxy and MCP requests.
+- **WebSocket:** Not required. VoidLLM uses HTTP POST for all proxy requests.
 - **TLS:** Terminate TLS at the reverse proxy or ingress level. VoidLLM supports TLS on the admin port (`server.admin.tls`) but not on the proxy port.

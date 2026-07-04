@@ -47,7 +47,7 @@ On first start, VoidLLM prints your credentials to stdout:
 ```
 
 - **Email + Password** - for logging into the UI at `http://localhost:8080`
-- **API Key** (`vl_uk_...`) - for SDK calls and MCP connections
+- **API Key** (`vl_uk_...`) - for SDK and API calls
 - These are shown once - save them
 
 ## Add a Model
@@ -86,24 +86,6 @@ Base URL: http://localhost:8080/v1
 API Key: vl_uk_...
 ```
 
-### Claude Code (MCP Server)
-
-Add to your MCP config:
-```json
-{
-  "mcpServers": {
-    "voidllm": {
-      "url": "http://localhost:8080/api/v1/mcp/voidllm",
-      "headers": {
-        "Authorization": "Bearer vl_uk_..."
-      }
-    }
-  }
-}
-```
-
-See [IDE Integration](mcp/ide-integration.md) for detailed setup.
-
 ## Explore the UI
 
 Open `http://localhost:8080` and explore:
@@ -111,8 +93,7 @@ Open `http://localhost:8080` and explore:
 - **Dashboard** - request stats, token usage, model health
 - **Keys** - create and manage API keys
 - **Models** - add models, configure aliases, view health
-- **Usage** - track consumption by team, user, model
-- **MCP Servers** - register external MCP servers
+- **Usage** - track consumption by user, model, and key
 - **Playground** - test models directly in the browser
 
 ## Next Steps
@@ -120,5 +101,4 @@ Open `http://localhost:8080` and explore:
 - [Configuration Reference](configuration.md) - all YAML settings
 - [Deployment Guide](deployment/docker.md) - Docker, Kubernetes, PostgreSQL
 - [Load Balancing](models/load-balancing.md) - multi-deployment failover
-- [MCP Gateway](mcp/overview.md) - proxy external MCP servers
-- [RBAC](security/rbac.md) - org/team/user/key access control
+- [RBAC](security/rbac.md) - system admin and member roles

@@ -37,7 +37,7 @@ type AuditLogEntry struct {
 	Timestamp time.Time
 	// ActorID is the user or service account ID that performed the action.
 	ActorID string
-	// ActorType describes the kind of actor: "user", "service_account", or "system".
+	// ActorType describes the kind of actor: "user" or "system".
 	ActorType string
 	// ActorKeyID is the api_keys.id of the key used for the action.
 	ActorKeyID string

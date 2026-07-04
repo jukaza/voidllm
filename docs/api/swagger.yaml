@@ -1,5 +1,6 @@
+basePath: /api/v1
 definitions:
-  internal_api_admin.apiKeyResponse:
+  admin.apiKeyResponse:
     properties:
       created_at:
         type: string
@@ -21,29 +22,37 @@ definitions:
         type: integer
       name:
         type: string
-      org_id:
-        type: string
       requests_per_day:
         type: integer
       requests_per_minute:
         type: integer
-      service_account_id:
-        type: string
-      team_id:
-        type: string
       updated_at:
         type: string
       user_id:
         type: string
     type: object
-  internal_api_admin.availableModelsResponse:
+  admin.availableModel:
+    properties:
+      name:
+        type: string
+      type:
+        type: string
+    type: object
+  admin.availableModelsResponse:
     properties:
       models:
         items:
-          type: string
+          $ref: '#/definitions/admin.availableModel'
         type: array
     type: object
-  internal_api_admin.createAPIKeyRequest:
+  admin.changeOwnPasswordRequest:
+    properties:
+      current_password:
+        type: string
+      new_password:
+        type: string
+    type: object
+  admin.createAPIKeyRequest:
     properties:
       daily_token_limit:
         type: integer
@@ -59,14 +68,10 @@ definitions:
         type: integer
       requests_per_minute:
         type: integer
-      service_account_id:
-        type: string
-      team_id:
-        type: string
       user_id:
         type: string
     type: object
-  internal_api_admin.createAPIKeyResponse:
+  admin.createAPIKeyResponse:
     properties:
       created_at:
         type: string
@@ -88,55 +93,72 @@ definitions:
         type: integer
       name:
         type: string
-      org_id:
-        type: string
       requests_per_day:
         type: integer
       requests_per_minute:
         type: integer
-      service_account_id:
-        type: string
-      team_id:
-        type: string
       updated_at:
         type: string
       user_id:
         type: string
     type: object
-  internal_api_admin.createInviteRequest:
+  admin.createDeploymentRequest:
     properties:
-      email:
+      api_key:
         type: string
-      role:
+      azure_api_version:
         type: string
+      azure_deployment:
+        type: string
+      base_url:
+        type: string
+      cost_cache_write_per_1m:
+        type: number
+      cost_cached_input_per_1m:
+        type: number
+      cost_input_per_1m:
+        description: Cost prices in USD per 1M tokens. Nil = fall back to model-level
+          pricing.
+        type: number
+      cost_output_per_1m:
+        type: number
+      daily_request_limit:
+        type: integer
+      gcp_location:
+        description: GCPLocation is the Google Cloud region (e.g. "us-central1").
+          Required when provider is "vertex".
+        type: string
+      gcp_project:
+        description: GCPProject is the Google Cloud project ID. Required when provider
+          is "vertex".
+        type: string
+      name:
+        type: string
+      pii_filter:
+        description: |-
+          PIIFilter explicitly enables or disables PII anonymization for requests
+          routed to this deployment. Omit to inherit from the model or network default.
+        type: boolean
+      priority:
+        type: integer
+      provider:
+        type: string
+      provider_id:
+        description: ProviderID links this route to a provider (partner/source).
+        type: string
+      rpm_limit:
+        type: integer
+      tpm_limit:
+        type: integer
+      upstream_model:
+        description: |-
+          UpstreamModel is the model name sent upstream. Empty = use the model's
+          canonical name. Non-empty enables cross-model routes.
+        type: string
+      weight:
+        type: integer
     type: object
-  internal_api_admin.createInviteResponse:
-    properties:
-      created_at:
-        type: string
-      email:
-        type: string
-      expires_at:
-        type: string
-      id:
-        type: string
-      org_id:
-        type: string
-      role:
-        type: string
-      token:
-        type: string
-      token_hint:
-        type: string
-    type: object
-  internal_api_admin.createModelAliasRequest:
-    properties:
-      alias:
-        type: string
-      model_name:
-        type: string
-    type: object
-  internal_api_admin.createModelRequest:
+  admin.createModelRequest:
     properties:
       aliases:
         description: Aliases are optional short names that resolve to this model in
@@ -152,137 +174,164 @@ definitions:
         type: string
       base_url:
         type: string
+      bill_min_per_request:
+        type: boolean
+      bill_per_request:
+        type: boolean
+      bill_per_token:
+        type: boolean
+      fallback_model_name:
+        description: |-
+          FallbackModelName is the name of the model to try if all deployments of
+          this model are unavailable. Requires an Enterprise license with the
+          fallback_chains feature. Leave empty to disable fallback.
+        type: string
+      gcp_location:
+        description: GCPLocation is the Google Cloud region (e.g. "us-central1").
+          Required when provider is "vertex".
+        type: string
+      gcp_project:
+        description: GCPProject is the Google Cloud project ID. Required when provider
+          is "vertex".
+        type: string
       input_price_per_1m:
         type: number
+      is_public:
+        description: IsPublic marks the model as visible on the public storefront
+          price list.
+        type: boolean
+      logo:
+        description: Logo is the customer-facing logo URL or asset path.
+        type: string
       max_context_tokens:
+        type: integer
+      max_retries:
+        description: |-
+          MaxRetries is the maximum number of deployments to attempt before returning
+          an error. 0 means try all available deployments.
         type: integer
       name:
         type: string
       output_price_per_1m:
         type: number
+      pii_filter:
+        description: |-
+          PIIFilter explicitly enables or disables PII anonymization for requests
+          routed to this model. When omitted the network-level default is used.
+          Pass true to force anonymization on, false to force it off.
+        type: boolean
       provider:
         type: string
-    type: object
-  internal_api_admin.createOrgMembershipRequest:
-    properties:
-      role:
-        type: string
-      user_id:
-        type: string
-    type: object
-  internal_api_admin.createOrgRequest:
-    properties:
-      daily_token_limit:
+      rpm_limit:
         type: integer
-      monthly_token_limit:
-        type: integer
-      name:
-        type: string
-      requests_per_day:
-        type: integer
-      requests_per_minute:
-        type: integer
-      slug:
-        type: string
-      timezone:
-        type: string
-    type: object
-  internal_api_admin.createServiceAccountRequest:
-    properties:
-      name:
-        type: string
-      team_id:
-        type: string
-    type: object
-  internal_api_admin.createTeamMembershipRequest:
-    properties:
-      role:
-        type: string
-      user_id:
-        type: string
-    type: object
-  internal_api_admin.createTeamRequest:
-    properties:
-      daily_token_limit:
-        type: integer
-      monthly_token_limit:
-        type: integer
-      name:
-        type: string
-      requests_per_day:
-        type: integer
-      requests_per_minute:
-        type: integer
-      slug:
-        type: string
-    type: object
-  internal_api_admin.createUserRequest:
-    properties:
-      display_name:
-        type: string
-      email:
-        type: string
-      is_system_admin:
-        type: boolean
-      password:
-        type: string
-    type: object
-  internal_api_admin.dashboardStatsResponse:
-    properties:
-      active_keys:
-        type: integer
-      cost_estimate_24h:
+      sell_cached_input_per_1m:
         type: number
-      requests_24h:
-        type: integer
-      scope:
-        description: 'Scope indicates the data boundary: "org", "team", or "user".'
+      sell_input_per_1m:
+        description: |-
+          SellInputPer1M / SellOutputPer1M / SellCachedInputPer1M are the
+          customer-facing prices in USD per 1M tokens. Omit to leave the model
+          unbilled (requests do not debit wallets).
+        type: number
+      sell_min_per_request:
+        type: number
+      sell_output_per_1m:
+        type: number
+      sell_per_request:
+        type: number
+      strategy:
+        description: |-
+          Strategy is the load balancing strategy used when multiple deployments are
+          configured. Valid values: "round-robin", "weighted", "priority". Omit or
+          pass an empty string for single-deployment (legacy) mode.
         type: string
-      tokens_24h:
-        type: integer
-      total_members:
-        type: integer
-      total_teams:
-        type: integer
+      timeout:
+        description: |-
+          Timeout is the per-model upstream timeout as a Go duration string (e.g. "30s",
+          "2m"). When non-empty it overrides the global stream/response timeout for
+          this model. Omit or pass an empty string to use the global default.
+        type: string
+      type:
+        type: string
     type: object
-  internal_api_admin.inviteResponse:
+  admin.deploymentResponse:
     properties:
+      azure_api_version:
+        type: string
+      azure_deployment:
+        type: string
+      base_url:
+        type: string
+      cost_cache_write_per_1m:
+        type: number
+      cost_cached_input_per_1m:
+        type: number
+      cost_input_per_1m:
+        type: number
+      cost_output_per_1m:
+        type: number
       created_at:
         type: string
-      created_by:
+      daily_request_limit:
+        type: integer
+      gcp_location:
+        description: GCPLocation is the Google Cloud region. Non-empty only for provider
+          "vertex".
         type: string
-      email:
-        type: string
-      expires_at:
+      gcp_project:
+        description: GCPProject is the Google Cloud project ID. Non-empty only for
+          provider "vertex".
         type: string
       id:
         type: string
-      org_id:
+      is_active:
+        type: boolean
+      model_id:
         type: string
-      role:
+      name:
         type: string
-      status:
+      pii_filter:
+        description: |-
+          PIIFilter is the per-deployment PII anonymization override. Nil means
+          inherit from the model-level or network-level default; true forces
+          anonymization on; false forces it off.
+        type: boolean
+      priority:
+        type: integer
+      provider:
         type: string
-      token_hint:
+      provider_id:
         type: string
+      rpm_limit:
+        type: integer
+      tpm_limit:
+        type: integer
+      updated_at:
+        type: string
+      upstream_model:
+        description: |-
+          UpstreamModel is the model name sent upstream; empty means the
+          canonical model name is used.
+        type: string
+      weight:
+        type: integer
     type: object
-  internal_api_admin.loginRequest:
+  admin.loginRequest:
     properties:
       email:
         type: string
       password:
         type: string
     type: object
-  internal_api_admin.loginResponse:
+  admin.loginResponse:
     properties:
       expires_at:
         type: string
       token:
         type: string
       user:
-        $ref: '#/definitions/internal_api_admin.meResponse'
+        $ref: '#/definitions/admin.meResponse'
     type: object
-  internal_api_admin.meResponse:
+  admin.meResponse:
     properties:
       display_name:
         type: string
@@ -292,45 +341,10 @@ definitions:
         type: string
       is_system_admin:
         type: boolean
-      org_id:
-        type: string
       role:
         type: string
     type: object
-  internal_api_admin.modelAccessRequest:
-    properties:
-      models:
-        items:
-          type: string
-        type: array
-    type: object
-  internal_api_admin.modelAccessResponse:
-    properties:
-      models:
-        items:
-          type: string
-        type: array
-    type: object
-  internal_api_admin.modelAliasResponse:
-    properties:
-      alias:
-        type: string
-      created_at:
-        type: string
-      created_by:
-        type: string
-      id:
-        type: string
-      model_name:
-        type: string
-      org_id:
-        type: string
-      scope_type:
-        type: string
-      team_id:
-        type: string
-    type: object
-  internal_api_admin.modelResponse:
+  admin.modelResponse:
     properties:
       aliases:
         items:
@@ -342,7 +356,31 @@ definitions:
         type: string
       base_url:
         type: string
+      bill_min_per_request:
+        type: boolean
+      bill_per_request:
+        type: boolean
+      bill_per_token:
+        type: boolean
       created_at:
+        type: string
+      deployments:
+        description: Deployments contains the model's deployment entries when present.
+        items:
+          $ref: '#/definitions/admin.deploymentResponse'
+        type: array
+      fallback_model_name:
+        description: |-
+          FallbackModelName is the name of the fallback model, or empty when none
+          is configured.
+        type: string
+      gcp_location:
+        description: GCPLocation is the Google Cloud region. Non-empty only for provider
+          "vertex".
+        type: string
+      gcp_project:
+        description: GCPProject is the Google Cloud project ID. Non-empty only for
+          provider "vertex".
         type: string
       id:
         type: string
@@ -350,267 +388,98 @@ definitions:
         type: number
       is_active:
         type: boolean
+      is_public:
+        description: IsPublic marks the model as visible on the public storefront
+          price list.
+        type: boolean
+      logo:
+        description: Logo is the customer-facing logo URL or asset path.
+        type: string
       max_context_tokens:
+        type: integer
+      max_retries:
+        description: |-
+          MaxRetries is the maximum number of deployments to attempt before
+          returning an error. 0 means try all available deployments.
         type: integer
       name:
         type: string
       output_price_per_1m:
         type: number
+      pii_filter:
+        description: |-
+          PIIFilter is the per-model PII anonymization override. Nil means the
+          network-level default is used; true forces anonymization on; false off.
+        type: boolean
       provider:
         type: string
+      route_count:
+        description: RouteCount is the number of enabled combo route steps (API products
+          only).
+        type: integer
+      routing_strategy:
+        type: string
+      rpm_limit:
+        type: integer
+      sell_cached_input_per_1m:
+        type: number
+      sell_input_per_1m:
+        description: Sell prices are the customer-facing prices per 1M tokens.
+        type: number
+      sell_min_per_request:
+        type: number
+      sell_output_per_1m:
+        type: number
+      sell_per_request:
+        type: number
       source:
         type: string
-      updated_at:
-        type: string
-    type: object
-  internal_api_admin.orgMembershipResponse:
-    properties:
-      created_at:
-        type: string
-      id:
-        type: string
-      org_id:
-        type: string
-      role:
-        type: string
-      user_id:
-        type: string
-    type: object
-  internal_api_admin.orgResponse:
-    properties:
-      created_at:
-        type: string
-      daily_token_limit:
+      sticky_round_robin_limit:
         type: integer
-      deleted_at:
+      strategy:
+        description: |-
+          Strategy is the load balancing strategy used when multiple deployments
+          are configured (e.g. "round-robin", "weighted", "priority"). An empty
+          string means single-deployment (legacy) mode.
         type: string
-      id:
+      timeout:
+        description: |-
+          Timeout is the per-model upstream timeout (e.g. "30s", "2m").
+          An empty string means the global default is used.
         type: string
-      monthly_token_limit:
-        type: integer
-      name:
-        type: string
-      requests_per_day:
-        type: integer
-      requests_per_minute:
-        type: integer
-      slug:
-        type: string
-      timezone:
+      type:
         type: string
       updated_at:
         type: string
     type: object
-  internal_api_admin.paginatedAPIKeysResponse:
+  admin.paginatedModelsResponse:
     properties:
       data:
         items:
-          $ref: '#/definitions/internal_api_admin.apiKeyResponse'
+          $ref: '#/definitions/admin.modelResponse'
         type: array
       has_more:
         type: boolean
       next_cursor:
         type: string
     type: object
-  internal_api_admin.paginatedInvitesResponse:
+  admin.registerResponse:
     properties:
-      data:
-        items:
-          $ref: '#/definitions/internal_api_admin.inviteResponse'
-        type: array
-      has_more:
-        type: boolean
-      next_cursor:
-        type: string
-    type: object
-  internal_api_admin.paginatedModelsResponse:
-    properties:
-      data:
-        items:
-          $ref: '#/definitions/internal_api_admin.modelResponse'
-        type: array
-      has_more:
-        type: boolean
-      next_cursor:
-        type: string
-    type: object
-  internal_api_admin.paginatedOrgMembershipsResponse:
-    properties:
-      data:
-        items:
-          $ref: '#/definitions/internal_api_admin.orgMembershipResponse'
-        type: array
-      has_more:
-        type: boolean
-      next_cursor:
-        type: string
-    type: object
-  internal_api_admin.paginatedOrgsResponse:
-    properties:
-      data:
-        items:
-          $ref: '#/definitions/internal_api_admin.orgResponse'
-        type: array
-      has_more:
-        type: boolean
-      next_cursor:
-        type: string
-    type: object
-  internal_api_admin.paginatedServiceAccountsResponse:
-    properties:
-      data:
-        items:
-          $ref: '#/definitions/internal_api_admin.serviceAccountResponse'
-        type: array
-      has_more:
-        type: boolean
-      next_cursor:
-        type: string
-    type: object
-  internal_api_admin.paginatedTeamMembershipsResponse:
-    properties:
-      data:
-        items:
-          $ref: '#/definitions/internal_api_admin.teamMembershipResponse'
-        type: array
-      has_more:
-        type: boolean
-      next_cursor:
-        type: string
-    type: object
-  internal_api_admin.paginatedTeamsResponse:
-    properties:
-      data:
-        items:
-          $ref: '#/definitions/internal_api_admin.teamResponse'
-        type: array
-      has_more:
-        type: boolean
-      next_cursor:
-        type: string
-    type: object
-  internal_api_admin.paginatedUsersResponse:
-    properties:
-      data:
-        items:
-          $ref: '#/definitions/internal_api_admin.userResponse'
-        type: array
-      has_more:
-        type: boolean
-      next_cursor:
-        type: string
-    type: object
-  internal_api_admin.peekInviteResponse:
-    properties:
-      email:
+      api_key:
         type: string
       expires_at:
         type: string
-      org_name:
-        type: string
-      role:
-        type: string
-    type: object
-  internal_api_admin.redeemInviteRequest:
-    properties:
-      display_name:
-        type: string
-      password:
-        type: string
       token:
         type: string
+      user:
+        $ref: '#/definitions/admin.meResponse'
     type: object
-  internal_api_admin.redeemInviteResponse:
-    properties:
-      display_name:
-        type: string
-      email:
-        type: string
-      id:
-        type: string
-      org_id:
-        type: string
-      role:
-        type: string
-    type: object
-  internal_api_admin.serviceAccountResponse:
-    properties:
-      created_at:
-        type: string
-      created_by:
-        type: string
-      deleted_at:
-        type: string
-      id:
-        type: string
-      key_count:
-        type: integer
-      name:
-        type: string
-      org_id:
-        type: string
-      team_id:
-        type: string
-      updated_at:
-        type: string
-    type: object
-  internal_api_admin.swaggerErrorDetail:
-    properties:
-      code:
-        example: not_found
-        type: string
-      message:
-        example: resource not found
-        type: string
-    type: object
-  internal_api_admin.swaggerErrorResponse:
+  admin.swaggerErrorResponse:
     properties:
       error:
-        $ref: '#/definitions/internal_api_admin.swaggerErrorDetail'
+        $ref: '#/definitions/apierror.SwaggerDetail'
     type: object
-  internal_api_admin.teamMembershipResponse:
-    properties:
-      created_at:
-        type: string
-      id:
-        type: string
-      role:
-        type: string
-      team_id:
-        type: string
-      user_id:
-        type: string
-    type: object
-  internal_api_admin.teamResponse:
-    properties:
-      created_at:
-        type: string
-      daily_token_limit:
-        type: integer
-      deleted_at:
-        type: string
-      id:
-        type: string
-      key_count:
-        type: integer
-      member_count:
-        type: integer
-      monthly_token_limit:
-        type: integer
-      name:
-        type: string
-      org_id:
-        type: string
-      requests_per_day:
-        type: integer
-      requests_per_minute:
-        type: integer
-      slug:
-        type: string
-      updated_at:
-        type: string
-    type: object
-  internal_api_admin.testConnectionRequest:
+  admin.testConnectionRequest:
     properties:
       api_key:
         type: string
@@ -619,29 +488,69 @@ definitions:
       provider:
         type: string
     type: object
-  internal_api_admin.testConnectionResponse:
+  admin.testConnectionResponse:
     properties:
       message:
         type: string
       success:
         type: boolean
     type: object
-  internal_api_admin.updateAPIKeyRequest:
+  admin.updateDeploymentRequest:
     properties:
-      daily_token_limit:
-        type: integer
-      expires_at:
+      api_key:
         type: string
-      monthly_token_limit:
+      azure_api_version:
+        type: string
+      azure_deployment:
+        type: string
+      base_url:
+        type: string
+      cost_cache_write_per_1m:
+        type: number
+      cost_cached_input_per_1m:
+        type: number
+      cost_input_per_1m:
+        type: number
+      cost_output_per_1m:
+        type: number
+      daily_request_limit:
         type: integer
+      gcp_location:
+        description: GCPLocation, when non-nil, replaces the stored Google Cloud region.
+        type: string
+      gcp_project:
+        description: GCPProject, when non-nil, replaces the stored Google Cloud project
+          ID.
+        type: string
       name:
         type: string
-      requests_per_day:
+      pii_filter:
+        description: |-
+          PIIFilter, when non-nil, replaces the PII anonymization override for
+          this deployment. Pass true to force anonymization on, false to force it off.
+          Omit the field entirely to leave the existing setting unchanged.
+        type: boolean
+      priority:
         type: integer
-      requests_per_minute:
+      provider:
+        type: string
+      provider_id:
+        description: ProviderID, when non-nil, replaces the linked provider. Pass
+          "" to clear.
+        type: string
+      rpm_limit:
+        type: integer
+      tpm_limit:
+        type: integer
+      upstream_model:
+        description: |-
+          UpstreamModel, when non-nil, replaces the upstream model name. Pass ""
+          to revert to the canonical model name.
+        type: string
+      weight:
         type: integer
     type: object
-  internal_api_admin.updateModelRequest:
+  admin.updateModelRequest:
     properties:
       aliases:
         description: |-
@@ -658,128 +567,98 @@ definitions:
         type: string
       base_url:
         type: string
+      bill_min_per_request:
+        type: boolean
+      bill_per_request:
+        type: boolean
+      bill_per_token:
+        type: boolean
+      fallback_model_name:
+        description: |-
+          FallbackModelName, when non-nil, replaces the fallback model. Pass a
+          pointer to an empty string to clear the fallback. Requires Enterprise
+          license with the fallback_chains feature when setting a non-empty value.
+        type: string
+      gcp_location:
+        description: GCPLocation, when non-nil, replaces the Google Cloud region.
+        type: string
+      gcp_project:
+        description: GCPProject, when non-nil, replaces the Google Cloud project ID.
+        type: string
       input_price_per_1m:
         type: number
+      is_public:
+        description: IsPublic, when non-nil, replaces the storefront visibility flag.
+        type: boolean
+      logo:
+        description: Logo, when non-nil, replaces the customer-facing logo. Pass ""
+          to clear.
+        type: string
       max_context_tokens:
+        type: integer
+      max_retries:
+        description: MaxRetries, when non-nil, replaces the maximum deployment retry
+          count.
         type: integer
       name:
         type: string
       output_price_per_1m:
         type: number
+      pii_filter:
+        description: |-
+          PIIFilter, when non-nil, replaces the PII anonymization override for this
+          model. Pass true to force anonymization on, false to force it off, or
+          omit the field entirely to leave the existing setting unchanged.
+          Send the JSON key with a null value to clear the override and revert to
+          the network-level default (NULL in the DB).
+        type: boolean
       provider:
         type: string
-    type: object
-  internal_api_admin.updateOrgMembershipRequest:
-    properties:
-      role:
+      routing_strategy:
         type: string
-    type: object
-  internal_api_admin.updateOrgRequest:
-    properties:
-      daily_token_limit:
+      rpm_limit:
         type: integer
-      monthly_token_limit:
-        type: integer
-      name:
-        type: string
-      requests_per_day:
-        type: integer
-      requests_per_minute:
-        type: integer
-      slug:
-        type: string
-      timezone:
-        type: string
-    type: object
-  internal_api_admin.updateServiceAccountRequest:
-    properties:
-      name:
-        type: string
-    type: object
-  internal_api_admin.updateTeamMembershipRequest:
-    properties:
-      role:
-        type: string
-    type: object
-  internal_api_admin.updateTeamRequest:
-    properties:
-      daily_token_limit:
-        type: integer
-      monthly_token_limit:
-        type: integer
-      name:
-        type: string
-      requests_per_day:
-        type: integer
-      requests_per_minute:
-        type: integer
-      slug:
-        type: string
-    type: object
-  internal_api_admin.updateUserRequest:
-    properties:
-      display_name:
-        type: string
-      email:
-        type: string
-      is_system_admin:
-        type: boolean
-      password:
-        type: string
-    type: object
-  internal_api_admin.usageDataPoint:
-    properties:
-      avg_duration_ms:
+      sell_cached_input_per_1m:
         type: number
-      completion_tokens:
-        type: integer
-      cost_estimate:
+      sell_input_per_1m:
+        description: Sell prices, when non-nil, replace the customer-facing prices.
         type: number
-      group_key:
-        type: string
-      prompt_tokens:
+      sell_min_per_request:
+        type: number
+      sell_output_per_1m:
+        type: number
+      sell_per_request:
+        type: number
+      sticky_round_robin_limit:
         type: integer
-      total_requests:
-        type: integer
-      total_tokens:
-        type: integer
-    type: object
-  internal_api_admin.usageResponse:
-    properties:
-      data:
-        items:
-          $ref: '#/definitions/internal_api_admin.usageDataPoint'
-        type: array
-      from:
+      strategy:
+        description: |-
+          Strategy, when non-nil, replaces the load balancing strategy. Pass a
+          pointer to an empty string to revert to single-deployment mode.
         type: string
-      group_by:
+      timeout:
+        description: |-
+          Timeout, when non-nil, replaces the per-model timeout. Pass a pointer to
+          an empty string to clear the timeout and revert to the global default.
         type: string
-      org_id:
-        type: string
-      to:
+      type:
         type: string
     type: object
-  internal_api_admin.userResponse:
+  apierror.SwaggerDetail:
     properties:
-      auth_provider:
+      code:
+        example: not_found
         type: string
-      created_at:
-        type: string
-      deleted_at:
-        type: string
-      display_name:
-        type: string
-      email:
-        type: string
-      id:
-        type: string
-      is_system_admin:
-        type: boolean
-      updated_at:
+      message:
+        example: resource not found
         type: string
     type: object
 info:
   contact: {}
+  description: Prepaid LLM API marketplace with OpenAI-compatible proxy, wallet billing,
+    and model catalog.
+  title: VoidLLM API
+  version: 0.2.0
 paths:
   /auth/login:
     post:
@@ -793,62 +672,116 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/internal_api_admin.loginRequest'
+          $ref: '#/definitions/admin.loginRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_api_admin.loginResponse'
+            $ref: '#/definitions/admin.loginResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
       summary: Authenticate with email and password
       tags:
       - auth
-  /dashboard/stats:
+  /auth/providers:
     get:
-      description: 'Returns aggregate key counts and 24-hour usage metrics. Scope
-        is determined by the caller''s role: org (admin), team (team_admin), or user
-        (member).'
+      description: Returns which login methods are enabled.
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_api_admin.dashboardStatsResponse'
+            additionalProperties:
+              type: boolean
+            type: object
+      summary: List available authentication providers
+      tags:
+      - auth
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Creates a customer account with a prepaid wallet and first API
+        key.
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/admin.registerResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/admin.swaggerErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/admin.swaggerErrorResponse'
+      summary: Public customer signup
+      tags:
+      - auth
+  /keys:
+    post:
+      consumes:
+      - application/json
+      description: Creates a new API key. Members may only create user keys for themselves.
+        The plaintext key is returned exactly once.
+      parameters:
+      - description: API key parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/admin.createAPIKeyRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/admin.createAPIKeyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/admin.swaggerErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/admin.swaggerErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
       security:
       - BearerAuth: []
-      summary: Get dashboard statistics
+      summary: Create an API key
       tags:
-      - dashboard
-  /invites/peek:
+      - keys
+  /keys/{key_id}:
     get:
-      description: Returns invite metadata (org name, role, expiry) for display in
-        the registration UI. No authentication required.
+      description: Returns a single API key scoped by role.
       parameters:
-      - description: Invite token
-        in: query
-        name: token
+      - description: API key ID
+        in: path
+        name: key_id
         required: true
         type: string
       produces:
@@ -857,57 +790,28 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_api_admin.peekInviteResponse'
-        "400":
-          description: Bad Request
+            $ref: '#/definitions/admin.apiKeyResponse'
+        "401":
+          description: Unauthorized
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "410":
-          description: Gone
+            $ref: '#/definitions/admin.swaggerErrorResponse'
+        "403":
+          description: Forbidden
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/admin.swaggerErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      summary: Peek at an invite
+            $ref: '#/definitions/admin.swaggerErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get an API key
       tags:
-      - invites
-  /invites/redeem:
-    post:
-      consumes:
-      - application/json
-      description: Creates a new user account and org membership from a valid invite
-        token. No authentication required.
-      parameters:
-      - description: Redemption parameters
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/internal_api_admin.redeemInviteRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/internal_api_admin.redeemInviteResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      summary: Redeem an invite
-      tags:
-      - invites
+      - keys
   /me:
     get:
       description: Returns the profile of the user associated with the current session
@@ -918,23 +822,23 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_api_admin.meResponse'
+            $ref: '#/definitions/admin.meResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
       security:
       - BearerAuth: []
       summary: Get authenticated user profile
@@ -942,22 +846,56 @@ paths:
       - auth
   /me/available-models:
     get:
-      description: Returns model names accessible to the caller's org, team, and key
-        scope.
+      description: Returns models accessible to the authenticated key.
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_api_admin.availableModelsResponse'
+            $ref: '#/definitions/admin.availableModelsResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
       security:
       - BearerAuth: []
       summary: List models available to the authenticated key
+      tags:
+      - auth
+  /me/password:
+    post:
+      consumes:
+      - application/json
+      description: Verifies the current password and sets a new one. Revokes all other
+        active sessions. Requires a user-scoped session key.
+      parameters:
+      - description: Password change request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/admin.changeOwnPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/admin.swaggerErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/admin.swaggerErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/admin.swaggerErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Change own password
       tags:
       - auth
   /models:
@@ -982,23 +920,23 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_api_admin.paginatedModelsResponse'
+            $ref: '#/definitions/admin.paginatedModelsResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
       security:
       - BearerAuth: []
       summary: List models
@@ -1015,34 +953,34 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/internal_api_admin.createModelRequest'
+          $ref: '#/definitions/admin.createModelRequest'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/internal_api_admin.modelResponse'
+            $ref: '#/definitions/admin.modelResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
       security:
       - BearerAuth: []
       summary: Create a model
@@ -1066,19 +1004,19 @@ paths:
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
       security:
       - BearerAuth: []
       summary: Delete a model
@@ -1098,23 +1036,23 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_api_admin.modelResponse'
+            $ref: '#/definitions/admin.modelResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
       security:
       - BearerAuth: []
       summary: Get a model
@@ -1136,38 +1074,38 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/internal_api_admin.updateModelRequest'
+          $ref: '#/definitions/admin.updateModelRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_api_admin.modelResponse'
+            $ref: '#/definitions/admin.modelResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
       security:
       - BearerAuth: []
       summary: Update a model
@@ -1189,23 +1127,23 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_api_admin.modelResponse'
+            $ref: '#/definitions/admin.modelResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
       security:
       - BearerAuth: []
       summary: Activate a model
@@ -1227,26 +1165,241 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_api_admin.modelResponse'
+            $ref: '#/definitions/admin.modelResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
       security:
       - BearerAuth: []
       summary: Deactivate a model
+      tags:
+      - models
+  /models/{model_id}/deployments:
+    get:
+      description: Returns all non-deleted deployments for the specified model, ordered
+        by priority. Requires system admin.
+      parameters:
+      - description: Model ID
+        in: path
+        name: model_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/admin.deploymentResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/admin.swaggerErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/admin.swaggerErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/admin.swaggerErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/admin.swaggerErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List deployments
+      tags:
+      - deployments
+    post:
+      consumes:
+      - application/json
+      description: Creates a new upstream deployment for the specified model. The
+        API key is encrypted at rest. Requires system admin.
+      parameters:
+      - description: Model ID
+        in: path
+        name: model_id
+        required: true
+        type: string
+      - description: Deployment parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/admin.createDeploymentRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/admin.deploymentResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/admin.swaggerErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/admin.swaggerErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/admin.swaggerErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/admin.swaggerErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/admin.swaggerErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/admin.swaggerErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a deployment
+      tags:
+      - deployments
+  /models/{model_id}/deployments/{deployment_id}:
+    delete:
+      description: Soft-deletes a deployment and publishes a registry reload. Requires
+        system admin.
+      parameters:
+      - description: Model ID
+        in: path
+        name: modelId
+        required: true
+        type: string
+      - description: Deployment ID
+        in: path
+        name: deployment_id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/admin.swaggerErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/admin.swaggerErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/admin.swaggerErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/admin.swaggerErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a deployment
+      tags:
+      - deployments
+    patch:
+      consumes:
+      - application/json
+      description: Partially updates a deployment and publishes a registry reload.
+        Requires system admin.
+      parameters:
+      - description: Model ID
+        in: path
+        name: modelId
+        required: true
+        type: string
+      - description: Deployment ID
+        in: path
+        name: deployment_id
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/admin.updateDeploymentRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/admin.deploymentResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/admin.swaggerErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/admin.swaggerErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/admin.swaggerErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/admin.swaggerErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/admin.swaggerErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/admin.swaggerErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a deployment
+      tags:
+      - deployments
+  /models/health:
+    get:
+      description: Returns the latest health check results for all registered models.
+        Requires member role or above.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/admin.swaggerErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/admin.swaggerErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get upstream model health
       tags:
       - models
   /models/test-connection:
@@ -1261,2338 +1414,56 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/internal_api_admin.testConnectionRequest'
+          $ref: '#/definitions/admin.testConnectionRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_api_admin.testConnectionResponse'
+            $ref: '#/definitions/admin.testConnectionResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
+            $ref: '#/definitions/admin.swaggerErrorResponse'
       security:
       - BearerAuth: []
       summary: Test upstream provider connectivity
       tags:
       - models
-  /orgs:
-    get:
-      description: System admins get a paginated list of all orgs; other roles receive
-        only their own org.
-      parameters:
-      - description: Page size (default 20, max 100)
-        in: query
-        name: limit
-        type: integer
-      - description: Pagination cursor (UUIDv7 of the last seen org)
-        in: query
-        name: cursor
-        type: string
-      - description: Include soft-deleted orgs (system admin only)
-        in: query
-        name: include_deleted
-        type: boolean
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api_admin.paginatedOrgsResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: List organizations
-      tags:
-      - orgs
-    post:
-      consumes:
-      - application/json
-      description: Creates a new organization. Only system admins may call this endpoint.
-      parameters:
-      - description: Organization parameters
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/internal_api_admin.createOrgRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/internal_api_admin.orgResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Create an organization
-      tags:
-      - orgs
-  /orgs/{org_id}:
-    delete:
-      description: Soft-deletes an organization. Only system admins may call this
-        endpoint.
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "204":
-          description: No Content
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Delete an organization
-      tags:
-      - orgs
-    get:
-      description: Returns a single organization. System admins may fetch any org;
-        other roles may only fetch their own.
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api_admin.orgResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Get an organization
-      tags:
-      - orgs
-    patch:
-      consumes:
-      - application/json
-      description: Updates the organization. System admins may update any org; org
-        admins may only update their own.
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: Fields to update
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/internal_api_admin.updateOrgRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api_admin.orgResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Update an organization
-      tags:
-      - orgs
-  /orgs/{org_id}/invites:
-    get:
-      description: Returns a cursor-paginated list of invite tokens for the organization,
-        with computed status (pending, expired, redeemed).
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: Page size (default 20, max 100)
-        in: query
-        name: limit
-        type: integer
-      - description: Pagination cursor (UUIDv7 of the last seen invite)
-        in: query
-        name: cursor
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api_admin.paginatedInvitesResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: List invites
-      tags:
-      - invites
-    post:
-      consumes:
-      - application/json
-      description: Generates an invite token for the given email. Only system admins
-        may invite with role org_admin. The plaintext token is returned exactly once.
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: Invite parameters
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/internal_api_admin.createInviteRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/internal_api_admin.createInviteResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Create an invite
-      tags:
-      - invites
-  /orgs/{org_id}/invites/{invite_id}:
-    delete:
-      description: Permanently deletes the invite token, preventing redemption.
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: Invite ID
-        in: path
-        name: invite_id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "204":
-          description: No Content
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Revoke an invite
-      tags:
-      - invites
-  /orgs/{org_id}/keys:
-    get:
-      description: Returns a cursor-paginated list of API keys. Scope is filtered
-        by role.
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: Page size (default 20, max 100)
-        in: query
-        name: limit
-        type: integer
-      - description: Pagination cursor (UUIDv7 of the last seen key)
-        in: query
-        name: cursor
-        type: string
-      - description: Include soft-deleted keys (system admin only)
-        in: query
-        name: include_deleted
-        type: boolean
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api_admin.paginatedAPIKeysResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: List API keys
-      tags:
-      - keys
-    post:
-      consumes:
-      - application/json
-      description: Creates a new API key for the organization. Members may only create
-        user keys for themselves. The plaintext key is returned exactly once.
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: API key parameters
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/internal_api_admin.createAPIKeyRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/internal_api_admin.createAPIKeyResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Create an API key
-      tags:
-      - keys
-  /orgs/{org_id}/keys/{key_id}:
-    delete:
-      description: Soft-deletes the API key and immediately evicts it from the auth
-        cache. The key will be rejected by the proxy without delay.
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: API key ID
-        in: path
-        name: key_id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "204":
-          description: No Content
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Delete an API key
-      tags:
-      - keys
-    get:
-      description: 'Returns a single API key. Visibility is scoped by role: org admins
-        see all keys, team admins see their team keys, members see only their own.'
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: API key ID
-        in: path
-        name: key_id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api_admin.apiKeyResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Get an API key
-      tags:
-      - keys
-    patch:
-      consumes:
-      - application/json
-      description: Updates name, rate limits, token limits, or expiry of an API key.
-        Only provided fields are changed.
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: API key ID
-        in: path
-        name: key_id
-        required: true
-        type: string
-      - description: Fields to update
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/internal_api_admin.updateAPIKeyRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api_admin.apiKeyResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Update an API key
-      tags:
-      - keys
-  /orgs/{org_id}/keys/{key_id}/model-access:
-    get:
-      description: Returns the list of model names in the API key's allowlist. An
-        empty list means all team-allowed models are permitted.
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: API key ID
-        in: path
-        name: key_id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api_admin.modelAccessResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Get key model access
-      tags:
-      - model-access
-    put:
-      consumes:
-      - application/json
-      description: Atomically replaces the API key's model allowlist. All models must
-        be allowed at the team and org level. Pass an empty array to clear.
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: API key ID
-        in: path
-        name: key_id
-        required: true
-        type: string
-      - description: Model allowlist
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/internal_api_admin.modelAccessRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api_admin.modelAccessResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Set key model access
-      tags:
-      - model-access
-  /orgs/{org_id}/members:
-    get:
-      description: Returns a cursor-paginated list of organization memberships.
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: Page size (default 20, max 100)
-        in: query
-        name: limit
-        type: integer
-      - description: Pagination cursor (UUIDv7 of the last seen membership)
-        in: query
-        name: cursor
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api_admin.paginatedOrgMembershipsResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: List org members
-      tags:
-      - org-members
-    post:
-      consumes:
-      - application/json
-      description: Adds a user to the organization with the specified role. Only system
-        admins may assign the org_admin role.
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: Membership parameters
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/internal_api_admin.createOrgMembershipRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/internal_api_admin.orgMembershipResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Add an org member
-      tags:
-      - org-members
-  /orgs/{org_id}/members/{membership_id}:
-    delete:
-      description: Removes a user from the organization by deleting their membership
-        record.
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: Membership ID
-        in: path
-        name: membership_id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "204":
-          description: No Content
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Remove an org member
-      tags:
-      - org-members
-    patch:
-      consumes:
-      - application/json
-      description: Changes the role of an org membership. Only system admins may assign
-        org_admin.
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: Membership ID
-        in: path
-        name: membership_id
-        required: true
-        type: string
-      - description: Fields to update
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/internal_api_admin.updateOrgMembershipRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api_admin.orgMembershipResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Update an org membership
-      tags:
-      - org-members
-  /orgs/{org_id}/model-access:
-    get:
-      description: Returns the list of model names in the org's allowlist. An empty
-        list means all models are permitted.
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api_admin.modelAccessResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Get org model access
-      tags:
-      - model-access
-    put:
-      consumes:
-      - application/json
-      description: Atomically replaces the org's model allowlist. Pass an empty array
-        to allow all models.
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: Model allowlist
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/internal_api_admin.modelAccessRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api_admin.modelAccessResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Set org model access
-      tags:
-      - model-access
-  /orgs/{org_id}/model-aliases:
-    get:
-      description: Returns all model aliases defined at the org scope.
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/internal_api_admin.modelAliasResponse'
-            type: array
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: List org model aliases
-      tags:
-      - model-aliases
-    post:
-      consumes:
-      - application/json
-      description: Creates a model alias scoped to the org. The alias must not conflict
-        with any canonical model name.
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: Alias parameters
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/internal_api_admin.createModelAliasRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/internal_api_admin.modelAliasResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Create an org model alias
-      tags:
-      - model-aliases
-  /orgs/{org_id}/model-aliases/{alias_id}:
-    delete:
-      description: Permanently removes the model alias from the org scope.
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: Alias ID
-        in: path
-        name: alias_id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "204":
-          description: No Content
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Delete an org model alias
-      tags:
-      - model-aliases
-  /orgs/{org_id}/service-accounts:
-    get:
-      description: Returns a cursor-paginated list of service accounts. Members only
-        see accounts they created.
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: Page size (default 20, max 100)
-        in: query
-        name: limit
-        type: integer
-      - description: Pagination cursor (UUIDv7 of the last seen service account)
-        in: query
-        name: cursor
-        type: string
-      - description: Include soft-deleted service accounts (system admin only)
-        in: query
-        name: include_deleted
-        type: boolean
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api_admin.paginatedServiceAccountsResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: List service accounts
-      tags:
-      - service-accounts
-    post:
-      consumes:
-      - application/json
-      description: Creates a new service account. Must be called with a user key (not
-        a service account key).
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: Service account parameters
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/internal_api_admin.createServiceAccountRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/internal_api_admin.serviceAccountResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Create a service account
-      tags:
-      - service-accounts
-  /orgs/{org_id}/service-accounts/{sa_id}:
-    delete:
-      description: Soft-deletes the service account. Members may only delete service
-        accounts they created.
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: Service account ID
-        in: path
-        name: sa_id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "204":
-          description: No Content
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Delete a service account
-      tags:
-      - service-accounts
-    get:
-      description: Returns a single service account. Members only see service accounts
-        they created.
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: Service account ID
-        in: path
-        name: sa_id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api_admin.serviceAccountResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Get a service account
-      tags:
-      - service-accounts
-    patch:
-      consumes:
-      - application/json
-      description: Updates the service account name. Members may only update service
-        accounts they created.
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: Service account ID
-        in: path
-        name: sa_id
-        required: true
-        type: string
-      - description: Fields to update
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/internal_api_admin.updateServiceAccountRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api_admin.serviceAccountResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Update a service account
-      tags:
-      - service-accounts
-  /orgs/{org_id}/teams:
-    get:
-      description: Returns a cursor-paginated list of teams. Org admins see all teams;
-        others see only teams they belong to.
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: Page size (default 20, max 100)
-        in: query
-        name: limit
-        type: integer
-      - description: Pagination cursor (UUIDv7 of the last seen team)
-        in: query
-        name: cursor
-        type: string
-      - description: Include soft-deleted teams (system admin only)
-        in: query
-        name: include_deleted
-        type: boolean
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api_admin.paginatedTeamsResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: List teams
-      tags:
-      - teams
-    post:
-      consumes:
-      - application/json
-      description: Creates a new team within the organization. Requires org admin
-        or higher.
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: Team parameters
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/internal_api_admin.createTeamRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/internal_api_admin.teamResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Create a team
-      tags:
-      - teams
-  /orgs/{org_id}/teams/{team_id}:
-    delete:
-      description: Soft-deletes the team. Requires org admin or higher.
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: Team ID
-        in: path
-        name: team_id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "204":
-          description: No Content
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Delete a team
-      tags:
-      - teams
-    get:
-      description: Returns a single team with member and key counts. Team admins only
-        see teams they belong to.
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: Team ID
-        in: path
-        name: team_id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api_admin.teamResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Get a team
-      tags:
-      - teams
-    patch:
-      consumes:
-      - application/json
-      description: Updates team name, slug, or limits. Only provided fields are changed.
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: Team ID
-        in: path
-        name: team_id
-        required: true
-        type: string
-      - description: Fields to update
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/internal_api_admin.updateTeamRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api_admin.teamResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Update a team
-      tags:
-      - teams
-  /orgs/{org_id}/teams/{team_id}/members:
-    get:
-      description: Returns a cursor-paginated list of team memberships.
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: Team ID
-        in: path
-        name: team_id
-        required: true
-        type: string
-      - description: Page size (default 20, max 100)
-        in: query
-        name: limit
-        type: integer
-      - description: Pagination cursor (UUIDv7 of the last seen membership)
-        in: query
-        name: cursor
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api_admin.paginatedTeamMembershipsResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: List team members
-      tags:
-      - team-members
-    post:
-      consumes:
-      - application/json
-      description: Adds a user to the team with the specified role (team_admin or
-        member).
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: Team ID
-        in: path
-        name: team_id
-        required: true
-        type: string
-      - description: Membership parameters
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/internal_api_admin.createTeamMembershipRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/internal_api_admin.teamMembershipResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Add a team member
-      tags:
-      - team-members
-  /orgs/{org_id}/teams/{team_id}/members/{membership_id}:
-    delete:
-      description: Removes a user from the team by deleting their membership record.
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: Team ID
-        in: path
-        name: team_id
-        required: true
-        type: string
-      - description: Membership ID
-        in: path
-        name: membership_id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "204":
-          description: No Content
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Remove a team member
-      tags:
-      - team-members
-    patch:
-      consumes:
-      - application/json
-      description: Changes the role of a team membership (team_admin or member).
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: Team ID
-        in: path
-        name: team_id
-        required: true
-        type: string
-      - description: Membership ID
-        in: path
-        name: membership_id
-        required: true
-        type: string
-      - description: Fields to update
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/internal_api_admin.updateTeamMembershipRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api_admin.teamMembershipResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Update a team membership
-      tags:
-      - team-members
-  /orgs/{org_id}/teams/{team_id}/model-access:
-    get:
-      description: Returns the list of model names in the team's allowlist. An empty
-        list means all org-allowed models are permitted.
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: Team ID
-        in: path
-        name: team_id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api_admin.modelAccessResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Get team model access
-      tags:
-      - model-access
-    put:
-      consumes:
-      - application/json
-      description: Atomically replaces the team's model allowlist. All models must
-        be allowed at the org level. Pass an empty array to clear.
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: Team ID
-        in: path
-        name: team_id
-        required: true
-        type: string
-      - description: Model allowlist
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/internal_api_admin.modelAccessRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api_admin.modelAccessResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Set team model access
-      tags:
-      - model-access
-  /orgs/{org_id}/teams/{team_id}/model-aliases:
-    get:
-      description: Returns all model aliases defined at the team scope.
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: Team ID
-        in: path
-        name: team_id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/internal_api_admin.modelAliasResponse'
-            type: array
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: List team model aliases
-      tags:
-      - model-aliases
-    post:
-      consumes:
-      - application/json
-      description: Creates a model alias scoped to the team. The alias must not conflict
-        with any canonical model name.
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: Team ID
-        in: path
-        name: team_id
-        required: true
-        type: string
-      - description: Alias parameters
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/internal_api_admin.createModelAliasRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/internal_api_admin.modelAliasResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Create a team model alias
-      tags:
-      - model-aliases
-  /orgs/{org_id}/teams/{team_id}/model-aliases/{alias_id}:
-    delete:
-      description: Permanently removes the model alias from the team scope.
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: Team ID
-        in: path
-        name: team_id
-        required: true
-        type: string
-      - description: Alias ID
-        in: path
-        name: alias_id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "204":
-          description: No Content
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Delete a team model alias
-      tags:
-      - model-aliases
-  /orgs/{org_id}/usage:
-    get:
-      description: Returns aggregated usage metrics for the organization over a time
-        range (max 90 days). Requires org admin.
-      parameters:
-      - description: Organization ID
-        in: path
-        name: org_id
-        required: true
-        type: string
-      - description: Start of range (RFC3339)
-        in: query
-        name: from
-        required: true
-        type: string
-      - description: End of range (RFC3339)
-        in: query
-        name: to
-        required: true
-        type: string
-      - description: 'Aggregation dimension: model, team, key, user, day, hour'
-        in: query
-        name: group_by
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api_admin.usageResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Get org usage
-      tags:
-      - usage
-  /usage/me:
-    get:
-      description: Returns aggregated usage metrics scoped to the current key or user.
-        Any authenticated key may call this endpoint.
-      parameters:
-      - description: Start of range (RFC3339)
-        in: query
-        name: from
-        required: true
-        type: string
-      - description: End of range (RFC3339)
-        in: query
-        name: to
-        required: true
-        type: string
-      - description: 'Aggregation dimension: model, team, key, user, day, hour'
-        in: query
-        name: group_by
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api_admin.usageResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Get own usage
-      tags:
-      - usage
-  /users:
-    get:
-      description: Returns a cursor-paginated list of all users. Requires system admin.
-      parameters:
-      - description: Page size (default 20, max 100)
-        in: query
-        name: limit
-        type: integer
-      - description: Pagination cursor (UUIDv7 of the last seen user)
-        in: query
-        name: cursor
-        type: string
-      - description: Include soft-deleted users
-        in: query
-        name: include_deleted
-        type: boolean
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api_admin.paginatedUsersResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: List users
-      tags:
-      - users
-    post:
-      consumes:
-      - application/json
-      description: Creates a new user account. Only system admins may set is_system_admin=true.
-      parameters:
-      - description: User parameters
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/internal_api_admin.createUserRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/internal_api_admin.userResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Create a user
-      tags:
-      - users
-  /users/{user_id}:
-    delete:
-      description: Soft-deletes a user. Requires system admin.
-      parameters:
-      - description: User ID
-        in: path
-        name: user_id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "204":
-          description: No Content
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Delete a user
-      tags:
-      - users
-    get:
-      description: Returns a single user. Org admins may only fetch users within their
-        org; system admins may fetch any user.
-      parameters:
-      - description: User ID
-        in: path
-        name: user_id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api_admin.userResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Get a user
-      tags:
-      - users
-    patch:
-      consumes:
-      - application/json
-      description: Updates user profile fields. Only system admins may change is_system_admin.
-      parameters:
-      - description: User ID
-        in: path
-        name: user_id
-        required: true
-        type: string
-      - description: Fields to update
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/internal_api_admin.updateUserRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api_admin.userResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api_admin.swaggerErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Update a user
-      tags:
-      - users
+securityDefinitions:
+  BearerAuth:
+    description: API key (vl_uk_) or session key (vl_sk_)
+    in: header
+    name: Authorization
+    type: apiKey
 swagger: "2.0"
+tags:
+- description: Authentication and user profile
+  name: auth
+- description: API key management
+  name: keys
+- description: User management
+  name: users
+- description: Model registry management
+  name: models
+- description: Model alias management
+  name: model-aliases
+- description: Dashboard statistics
+  name: dashboard
+- description: Usage analytics
+  name: usage
+- description: Prepaid wallet and top-ups
+  name: wallet
+- description: Upstream provider management
+  name: providers
+- description: Top-up review and marketplace admin
+  name: marketplace

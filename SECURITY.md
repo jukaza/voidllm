@@ -25,7 +25,7 @@ Include:
 
 The following are in scope:
 - Authentication bypass (API key validation, RBAC enforcement)
-- Authorization issues (cross-org/cross-team data access)
+- Authorization issues (cross-user or cross-key data access)
 - SQL injection
 - SSRF via upstream URL manipulation
 - Header injection or leakage

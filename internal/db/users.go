@@ -108,15 +108,10 @@ func (d *DB) CreateUser(ctx context.Context, params CreateUserParams) (*User, er
 	return user, nil
 }
 
-// CreateUserWithMembership creates a user and an organization membership
-// atomically within a single transaction. orgID must be non-empty; every user
-// belongs to exactly one organization. role is the org membership role
-// (e.g. "member", "system_admin").
+// CreateUserWithMembership is a compatibility wrapper around CreateUser.
+// The orgID and role parameters are ignored after the marketplace pivot.
 //
 // Returns ErrConflict if the email is already taken.
-// Returns ErrForeignKey if orgID does not reference an existing organization,
-// allowing callers to map this to a 400 "organization not found" response
-// without an additional pre-flight SELECT.
 func (d *DB) CreateUserWithMembership(ctx context.Context, userParams CreateUserParams, orgID, role string) (*User, error) {
 	return d.CreateUser(ctx, userParams)
 }
@@ -320,7 +315,7 @@ func (d *DB) DeleteUser(ctx context.Context, id string) error {
 
 // GetUserPasswordHash retrieves the user ID and bcrypt password hash for login
 // verification. Returns ErrNotFound if the user does not exist or is deleted.
-// Returns ErrNoPassword if password_hash is NULL, indicating an SSO-only account.
+// Returns ErrNoPassword if password_hash is NULL, indicating an external-auth account.
 func (d *DB) GetUserPasswordHash(ctx context.Context, email string) (string, string, error) {
 	query := "SELECT id, password_hash FROM users WHERE email = " +
 		d.dialect.Placeholder(1) + " AND deleted_at IS NULL"
@@ -341,7 +336,7 @@ func (d *DB) GetUserPasswordHash(ctx context.Context, email string) (string, str
 // for a user identified by their ID. It is used by the self-service password
 // change endpoint to verify the current password before accepting a new one.
 // Returns ErrNotFound if the user does not exist or is deleted.
-// Returns ErrNoPassword if password_hash is NULL, indicating an SSO-only account.
+// Returns ErrNoPassword if password_hash is NULL, indicating an external-auth account.
 func (d *DB) GetUserPasswordHashByID(ctx context.Context, userID string) (authProvider string, hash string, err error) {
 	query := "SELECT auth_provider, password_hash FROM users WHERE id = " +
 		d.dialect.Placeholder(1) + " AND deleted_at IS NULL"

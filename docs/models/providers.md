@@ -33,7 +33,7 @@ models:
     api_key: ${ANTHROPIC_KEY}
 ```
 
-Note: Claude Code talks directly to Anthropic's API for LLM access - you can't route its LLM requests through VoidLLM. But you can add VoidLLM as an [MCP server](../mcp/ide-integration.md) in Claude Code to manage your proxy and access external tools.
+Note: Claude Code talks directly to Anthropic's API for LLM access — you can't route its LLM requests through VoidLLM. Point other OpenAI-compatible clients at VoidLLM's `/v1` proxy endpoint instead.
 
 ## Azure OpenAI
 

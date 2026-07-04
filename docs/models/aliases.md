@@ -1,6 +1,6 @@
 ---
 title: "Model Aliases"
-description: "Logical model names scoped per org and team"
+description: "Global logical model names for clients"
 section: models
 order: 3
 ---
@@ -19,34 +19,25 @@ models:
     aliases: [default, smart]
 ```
 
-A client sends `model: "default"` - VoidLLM resolves it to `gpt-4o` and routes accordingly. Later, if you switch to Claude, update the config and `default` now points to a different model. Zero client changes.
+A client sends `model: "default"` — VoidLLM resolves it to `gpt-4o` and routes accordingly. Later, if you switch to Claude, update the config and `default` now points to a different model. Zero client changes.
 
-## Scope and Resolution
+## Global Aliases
 
-When a client sends `model: "default"`, VoidLLM resolves the alias in this order:
+Aliases are **global** in the marketplace model. They can be set in:
 
-1. **Team alias** - checked first (if the key is team-scoped)
-2. **Org alias** - checked second
-3. **Global alias** - from the YAML config (`aliases` field on the model)
+- YAML config (`aliases` field on each model)
+- Admin UI (Create/Edit Model)
+- Admin API (`POST /api/v1/model-aliases`)
 
-The first match wins. This means a team can override what `default` means for their scope without affecting other teams.
-
-**Example:** Global `default = gpt-4o`. Team A sets `default = claude-sonnet`. Team A gets Claude, everyone else gets GPT-4o.
-
-Global aliases are set in the YAML config or via the Create/Edit Model dialog in the UI. Org and team aliases are currently API-only.
+When a client sends `model: "default"`, VoidLLM looks up the global alias table first, then falls back to a model name match.
 
 ## API
 
 ```bash
-# Set org alias
-curl -X PUT https://voidllm.example.com/api/v1/orgs/{org_id}/model-aliases \
+curl -X POST https://voidllm.example.com/api/v1/model-aliases \
   -H "Authorization: Bearer vl_uk_..." \
+  -H "Content-Type: application/json" \
   -d '{"alias": "default", "model_name": "claude-sonnet"}'
-
-# Set team alias
-curl -X PUT https://voidllm.example.com/api/v1/orgs/{org_id}/teams/{team_id}/model-aliases \
-  -H "Authorization: Bearer vl_uk_..." \
-  -d '{"alias": "fast", "model_name": "llama-70b"}'
 ```
 
 ## Common Patterns

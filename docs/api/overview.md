@@ -16,7 +16,7 @@ All requests require an API key in the `Authorization` header:
 Authorization: Bearer vl_uk_...
 ```
 
-Key types: `vl_uk_` (user), `vl_tk_` (team), `vl_sa_` (service account), `vl_sk_` (session).
+Key types: `vl_uk_` (user API key), `vl_sk_` (session key, 24h TTL).
 
 ## Proxy API (`/v1/*`)
 
@@ -36,24 +36,15 @@ VoidLLM does not validate request bodies beyond extracting the `model` field. Th
 
 ## Admin API (`/api/v1/*`)
 
-Management endpoints for organizations, teams, users, keys, models, and MCP servers.
+Management endpoints for keys, models, usage, wallet, and users.
 
-### Organizations
+### Auth
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/api/v1/orgs` | List organizations |
-| `POST` | `/api/v1/orgs` | Create organization |
-| `GET` | `/api/v1/orgs/:id` | Get organization |
-| `PATCH` | `/api/v1/orgs/:id` | Update organization |
-
-### Teams
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/api/v1/orgs/:org_id/teams` | List teams |
-| `POST` | `/api/v1/orgs/:org_id/teams` | Create team |
-| `GET` | `/api/v1/teams/:id` | Get team |
-| `PATCH` | `/api/v1/teams/:id` | Update team |
-| `DELETE` | `/api/v1/teams/:id` | Delete team |
+| `POST` | `/api/v1/auth/login` | Email/password login |
+| `POST` | `/api/v1/auth/register` | Public customer signup |
+| `GET` | `/api/v1/auth/me` | Current user profile |
+| `GET` | `/api/v1/auth/providers` | Available login methods |
 
 ### API Keys
 | Method | Endpoint | Description |
@@ -72,18 +63,25 @@ Management endpoints for organizations, teams, users, keys, models, and MCP serv
 | `DELETE` | `/api/v1/models/:id` | Delete model |
 | `POST` | `/api/v1/models/:id/test` | Test upstream connectivity |
 
+### Model Aliases
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/v1/model-aliases` | List global aliases |
+| `POST` | `/api/v1/model-aliases` | Create alias |
+| `DELETE` | `/api/v1/model-aliases/:id` | Delete alias |
+
 ### Usage
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/api/v1/orgs/:org_id/usage` | Org usage stats |
+| `GET` | `/api/v1/usage` | System-wide usage (system admin) |
 | `GET` | `/api/v1/usage/me` | Current user's usage |
 
-### MCP
+### Users (system admin)
 | Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/api/v1/mcp/voidllm` | Built-in MCP tools |
-| `POST` | `/api/v1/mcp/:alias` | Proxy to external MCP server |
-| `POST` | `/api/v1/mcp` | Code Mode tools |
+| `GET` | `/api/v1/users` | List users |
+| `POST` | `/api/v1/users` | Create user |
+| `DELETE` | `/api/v1/users/:id` | Delete user |
 
 ## Health Endpoints
 
@@ -102,26 +100,15 @@ When VoidLLM is running, the full OpenAPI spec is available at:
 
 A static copy of the spec is also available in the repository: [swagger.yaml](https://github.com/voidmind-io/voidllm/blob/main/docs/api/swagger.yaml)
 
-## Error Responses
+## Error Format
 
-All errors follow a consistent format:
+All Admin API errors follow a consistent JSON envelope:
 
 ```json
 {
-  "error": {
-    "code": "not_found",
-    "message": "model not found",
-    "request_id": "019d3ba2-8130-7d96-b60e-2e0da53e2650"
-  }
+  "error": "unauthorized",
+  "message": "invalid API key"
 }
 ```
 
-| Status | Code | Meaning |
-|---|---|---|
-| 400 | `bad_request` | Invalid request body or parameters |
-| 401 | `unauthorized` | Missing or invalid API key |
-| 403 | `forbidden` | Insufficient permissions |
-| 404 | `not_found` | Resource not found |
-| 409 | `conflict` | Resource already exists |
-| 429 | `rate_limit_exceeded` | Rate limit or token budget exceeded |
-| 502 | `upstream_unavailable` | LLM provider unreachable |
+Common HTTP status codes: `400` (bad request), `401` (unauthorized), `403` (forbidden), `404` (not found), `409` (conflict), `429` (rate limited), `500` (internal error).

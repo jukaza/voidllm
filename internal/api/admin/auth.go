@@ -239,11 +239,11 @@ type availableModelsResponse struct {
 
 // AvailableModels handles GET /api/v1/me/available-models.
 // It returns the list of models accessible to the current key's scope,
-// respecting the org → team → key access hierarchy enforced by the access cache.
+// respecting the caller's key scope.
 // Any authenticated key may call this endpoint — no additional role is required.
 //
 // @Summary      List models available to the authenticated key
-// @Description  Returns models accessible to the caller's org, team, and key scope.
+// @Description  Returns models accessible to the authenticated key.
 // @Tags         auth
 // @Produce      json
 // @Success      200  {object}  availableModelsResponse
@@ -307,7 +307,7 @@ type changeOwnPasswordRequest struct {
 // ChangeOwnPassword handles POST /api/v1/me/password. It verifies the caller's
 // current password, then replaces it with the new one and invalidates all other
 // active sessions for the user. The current session remains valid.
-// Only local (non-SSO) accounts may use this endpoint.
+// Only password-based accounts may use this endpoint.
 //
 // @Summary      Change own password
 // @Description  Verifies the current password and sets a new one. Revokes all other active sessions. Requires a user-scoped session key.
@@ -361,7 +361,7 @@ func (h *Handler) ChangeOwnPassword(c fiber.Ctx) error {
 		return apierror.InternalError(c, "failed to verify current password")
 	}
 
-	// SSO accounts never have a local password even if auth_provider is set.
+	// External-auth accounts never have a local password hash.
 	// The ErrNoPassword sentinel above covers the NULL hash case; this guard
 	// catches rows where auth_provider is set to a non-local value but the hash
 	// column is somehow populated — defensive, belt-and-suspenders.
@@ -482,6 +482,5 @@ func (h *Handler) Me(c fiber.Ctx) error {
 func (h *Handler) AuthProviders(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"local": true,
-		"oidc":  false,
 	})
 }

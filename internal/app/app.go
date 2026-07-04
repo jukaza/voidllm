@@ -829,7 +829,7 @@ func (a *Application) Start() error {
 	// Populate Swagger spec metadata. Host is intentionally empty so that the
 	// Swagger UI uses the current origin — no hard-coded address required.
 	docs.SwaggerInfo.Title = "VoidLLM API"
-	docs.SwaggerInfo.Description = "Lightweight LLM proxy with org/team/user hierarchy"
+	docs.SwaggerInfo.Description = "API key reseller marketplace with prepaid wallet and LLM proxy"
 	docs.SwaggerInfo.Version = "0.2.0"
 	docs.SwaggerInfo.BasePath = "/api/v1"
 	docs.SwaggerInfo.Host = ""

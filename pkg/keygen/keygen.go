@@ -18,21 +18,10 @@ const (
 	KeyTypeSession = "session_key"
 )
 
-// Legacy key types still accepted by ValidatePrefix for keys created before the
-// marketplace pivot. New keys are not generated for these types.
-const (
-	KeyTypeTeam   = "team_key"
-	KeyTypeSA     = "sa_key"
-	KeyTypeInvite = "invite_token"
-)
-
 // Key prefix constants are the human-readable prefixes embedded in every key.
 const (
 	PrefixUser    = "vl_uk_"
 	PrefixSession = "vl_sk_"
-	PrefixTeam    = "vl_tk_"
-	PrefixSA      = "vl_sa_"
-	PrefixInvite  = "vl_iv_"
 )
 
 // Generate creates a new random API key for the given keyType. The returned
@@ -98,14 +87,8 @@ func ValidatePrefix(key string) (string, error) {
 	switch {
 	case strings.HasPrefix(key, PrefixUser):
 		return KeyTypeUser, nil
-	case strings.HasPrefix(key, PrefixTeam):
-		return KeyTypeTeam, nil
-	case strings.HasPrefix(key, PrefixSA):
-		return KeyTypeSA, nil
 	case strings.HasPrefix(key, PrefixSession):
 		return KeyTypeSession, nil
-	case strings.HasPrefix(key, PrefixInvite):
-		return KeyTypeInvite, nil
 	default:
 		return "", fmt.Errorf("validate prefix: unrecognized key prefix")
 	}

@@ -15,7 +15,7 @@ var ErrNotFound = errors.New("not found")
 // ErrConflict is returned when an insert or update violates a uniqueness constraint.
 var ErrConflict = errors.New("conflict")
 
-// ErrNoPassword is returned when a user has no password hash (SSO-only account).
+// ErrNoPassword is returned when a user has no password hash (external-auth account).
 var ErrNoPassword = errors.New("no password")
 
 // ErrForeignKey is returned when an insert or update violates a foreign key constraint.

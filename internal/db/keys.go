@@ -8,7 +8,7 @@ import (
 
 // KeyRecord holds all columns returned by LoadAllActiveKeys. It carries the
 // raw database values needed to populate the in-memory key cache including
-// the org, team, and user metadata that are resolved via JOIN at load time.
+// the user metadata that are resolved via JOIN at load time.
 // The KeyHash field is intentionally included here because the cache is keyed
 // on hash; callers must never expose it in API responses.
 type KeyRecord struct {
@@ -16,7 +16,7 @@ type KeyRecord struct {
 	ID string
 	// KeyHash is the HMAC-SHA256 hash of the raw key used as the cache key.
 	KeyHash string
-	// KeyType is one of the keygen package constants (user_key, team_key, sa_key, session_key).
+	// KeyType is one of the keygen package constants (user_key, session_key).
 	KeyType string
 	// Name is the human-readable label assigned to the key.
 	Name string

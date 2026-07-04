@@ -12,7 +12,7 @@ import (
 )
 
 // LoadKeysIntoCache queries all active (non-deleted) API keys from the database
-// in a single JOIN query, resolves their effective RBAC role and org/team
+// in a single JOIN query, resolves their effective RBAC role and per-key
 // limits inline, and populates the key cache. Existing cache entries are
 // replaced atomically via LoadAll. Rows with unparseable data are skipped with
 // an error log rather than aborting the entire load.

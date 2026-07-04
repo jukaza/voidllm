@@ -23,9 +23,8 @@ kubectl logs deploy/voidllm | grep "BOOTSTRAP"
 - **OpenAI-compatible proxy** - route to OpenAI, Anthropic, Azure, Ollama, vLLM
 - **Sub-500us overhead** - Go + Fiber, in-memory auth and model resolution
 - **Built-in admin UI** - embedded in the binary, no separate deployment
-- **RBAC** - org/team/user/key hierarchy with rate limits and token budgets
+- **RBAC** - system admin and member roles with per-key rate limits and token budgets
 - **Load balancing** - round-robin, least-latency, weighted, priority with automatic failover
-- **MCP Gateway** - proxy external MCP servers with scoped access control
 - **Zero-knowledge** - never stores prompt or response content
 
 ## Configuration

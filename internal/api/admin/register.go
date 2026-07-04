@@ -33,11 +33,11 @@ type registerResponse struct {
 }
 
 // Register handles POST /api/v1/auth/register — public self-signup for the
-// marketplace. It creates the user, a personal organization, an empty wallet,
-// and the customer's first API key, then opens a session.
+// marketplace. It creates the user, an empty wallet, and the customer's first
+// API key, then opens a session.
 //
 // @Summary      Public customer signup
-// @Description  Creates a customer account with a personal org, prepaid wallet, and first API key.
+// @Description  Creates a customer account with a prepaid wallet and first API key.
 // @Tags         auth
 // @Accept       json
 // @Produce      json

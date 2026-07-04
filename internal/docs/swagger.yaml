@@ -714,8 +714,8 @@ paths:
     post:
       consumes:
       - application/json
-      description: Creates a customer account with a personal org, prepaid wallet,
-        and first API key.
+      description: Creates a customer account with a prepaid wallet and first API
+        key.
       produces:
       - application/json
       responses:
@@ -846,7 +846,7 @@ paths:
       - auth
   /me/available-models:
     get:
-      description: Returns models accessible to the caller's org, team, and key scope.
+      description: Returns models accessible to the authenticated key.
       produces:
       - application/json
       responses:

@@ -25,14 +25,11 @@ func TestGenerate(t *testing.T) {
 			wantErr:    false,
 		},
 		{
-			name:    "legacy team key type cannot be generated",
-			keyType: keygen.KeyTypeTeam,
-			wantErr: true,
-		},
-		{
-			name:    "legacy service account key type cannot be generated",
-			keyType: keygen.KeyTypeSA,
-			wantErr: true,
+			name:       "session key has correct prefix and length",
+			keyType:    keygen.KeyTypeSession,
+			wantPrefix: keygen.PrefixSession,
+			wantLen:    54,
+			wantErr:    false,
 		},
 		{
 			name:    "invalid key type returns error",
@@ -235,16 +232,15 @@ func TestValidatePrefix(t *testing.T) {
 			wantErr:     false,
 		},
 		{
-			name:        "team key prefix recognized",
-			key:         "vl_tk_anything",
-			wantKeyType: keygen.KeyTypeTeam,
+			name:        "session key prefix recognized",
+			key:         "vl_sk_anything",
+			wantKeyType: keygen.KeyTypeSession,
 			wantErr:     false,
 		},
 		{
-			name:        "service account prefix recognized",
-			key:         "vl_sa_anything",
-			wantKeyType: keygen.KeyTypeSA,
-			wantErr:     false,
+			name:    "legacy team key prefix rejected",
+			key:     "vl_tk_anything",
+			wantErr: true,
 		},
 		{
 			name:    "openai-style key rejected",
