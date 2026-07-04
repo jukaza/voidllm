@@ -15,15 +15,13 @@ export function formatTokens(n: number): string {
   return new Intl.NumberFormat().format(n)
 }
 
-/** Format a number as USD currency. */
+/** Format a number as VND currency. */
 export function formatCost(n: number): string {
-  // Show more decimals for small amounts (LLM costs are often fractions of a cent)
-  const decimals = Math.abs(n) < 0.01 ? 6 : Math.abs(n) < 1 ? 4 : 2
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat('vi-VN', {
     style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: decimals,
+    currency: 'VND',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
   }).format(n)
 }
 

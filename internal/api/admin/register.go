@@ -22,22 +22,19 @@ type registerRequest struct {
 	DisplayName string `json:"display_name"`
 }
 
-// registerResponse is returned on successful public signup. It carries the
-// customer's first API key in plaintext — shown exactly once — plus a session
-// token so the UI can log the customer straight in.
+// registerResponse is returned on successful public signup. It carries a
+// session token so the UI can log the customer straight in.
 type registerResponse struct {
 	Token     string     `json:"token"`
 	ExpiresAt string     `json:"expires_at"`
-	APIKey    string     `json:"api_key"`
 	User      meResponse `json:"user"`
 }
 
 // Register handles POST /api/v1/auth/register — public self-signup for the
-// marketplace. It creates the user, an empty wallet, and the customer's first
-// API key, then opens a session.
+// marketplace. It creates the user, an empty wallet, and a session.
 //
 // @Summary      Public customer signup
-// @Description  Creates a customer account with a prepaid wallet and first API key.
+// @Description  Creates a customer account with a prepaid wallet and session.
 // @Tags         auth
 // @Accept       json
 // @Produce      json
@@ -108,33 +105,6 @@ func (h *Handler) Register(c fiber.Ctx) error {
 		h.Wallet.Register(user.ID)
 	}
 
-	// First API key, auto-issued so the customer can call the proxy right away.
-	apiKeyPlain, err := keygen.Generate(keygen.KeyTypeUser)
-	if err != nil {
-		h.Log.ErrorContext(ctx, "register: generate api key", slog.String("error", err.Error()))
-		return apierror.InternalError(c, "signup failed")
-	}
-	apiKeyHash := keygen.Hash(apiKeyPlain, h.HMACSecret)
-	apiKeyRec, err := h.DB.CreateAPIKey(ctx, db.CreateAPIKeyParams{
-		KeyHash:   apiKeyHash,
-		KeyHint:   keygen.Hint(apiKeyPlain),
-		KeyType:   keygen.KeyTypeUser,
-		Name:      "Default key",
-		UserID:    &user.ID,
-		CreatedBy: user.ID,
-	})
-	if err != nil {
-		h.Log.ErrorContext(ctx, "register: create api key", slog.String("error", err.Error()))
-		return apierror.InternalError(c, "signup failed")
-	}
-	h.KeyCache.Set(apiKeyHash, auth.KeyInfo{
-		ID:      apiKeyRec.ID,
-		KeyType: keygen.KeyTypeUser,
-		Role:    auth.RoleMember,
-		UserID:  user.ID,
-		Name:    apiKeyRec.Name,
-	})
-
 	// Open a 24h session so the UI can log the customer in immediately.
 	sessionKey, err := keygen.Generate(keygen.KeyTypeSession)
 	if err != nil {
@@ -177,7 +147,6 @@ func (h *Handler) Register(c fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(registerResponse{
 		Token:     sessionKey,
 		ExpiresAt: expiresAtStr,
-		APIKey:    apiKeyPlain,
 		User: meResponse{
 			ID:          user.ID,
 			Email:       user.Email,
@@ -203,7 +172,7 @@ func (h *Handler) MyWallet(c fiber.Ctx) error {
 	w, err := h.DB.GetWalletByUser(c.Context(), keyInfo.UserID)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
-			return c.JSON(walletResponse{Balance: 0, Currency: "USD"})
+			return c.JSON(walletResponse{Balance: 0, Currency: "VND"})
 		}
 		h.Log.ErrorContext(c.Context(), "my wallet", slog.String("error", err.Error()))
 		return apierror.InternalError(c, "failed to load wallet")

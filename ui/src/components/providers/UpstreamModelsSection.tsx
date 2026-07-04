@@ -18,6 +18,7 @@ import {
 } from '../../hooks/useProviders'
 import { useToast } from '../../hooks/useToast'
 import { useTranslation } from '../../lib/i18n'
+import { CostPairCell } from '../ui/PriceDisplay'
 
 interface UpstreamModelsSectionProps {
   providerId: string
@@ -133,9 +134,7 @@ export function UpstreamModelsSection({ providerId }: UpstreamModelsSectionProps
       header: t('provider_detail.col_ref_cost'),
       render: (row) =>
         row.cost_input_per_1m != null && row.cost_output_per_1m != null ? (
-          <span className="text-xs tabular-nums text-text-tertiary">
-            ${row.cost_input_per_1m} / ${row.cost_output_per_1m}
-          </span>
+          <CostPairCell input={row.cost_input_per_1m} output={row.cost_output_per_1m} />
         ) : (
           <span className="text-text-tertiary text-xs">—</span>
         ),
@@ -240,9 +239,11 @@ export function UpstreamModelsSection({ providerId }: UpstreamModelsSectionProps
                       </td>
                       <td className="px-3 py-2 font-mono text-xs">{m.id}</td>
                       <td className="px-3 py-2 text-xs tabular-nums text-text-tertiary hidden sm:table-cell">
-                        {m.known_cost
-                          ? `$${m.known_cost.in} / $${m.known_cost.out}`
-                          : '—'}
+                        {m.known_cost ? (
+                          <CostPairCell input={m.known_cost.in} output={m.known_cost.out} />
+                        ) : (
+                          '—'
+                        )}
                       </td>
                       <td className="px-3 py-2">
                         {inInventory ? (

@@ -40,7 +40,7 @@ type createDeploymentRequest struct {
 	RPMLimit          int     `json:"rpm_limit"`
 	TPMLimit          int     `json:"tpm_limit"`
 	DailyRequestLimit int     `json:"daily_request_limit"`
-	// Cost prices in USD per 1M tokens. Nil = fall back to model-level pricing.
+	// Cost prices in VND per 1M tokens. Nil = fall back to model-level pricing.
 	CostInputPer1M       *float64 `json:"cost_input_per_1m"`
 	CostOutputPer1M      *float64 `json:"cost_output_per_1m"`
 	CostCachedInputPer1M *float64 `json:"cost_cached_input_per_1m"`

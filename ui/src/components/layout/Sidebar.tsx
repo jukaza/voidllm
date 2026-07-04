@@ -2,6 +2,8 @@ import { useMemo } from 'react'
 import { NavLink, Link } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useMe } from '../../hooks/useMe'
+import { useMyWallet } from '../../hooks/useWallet'
+import { formatCost } from '../../lib/utils'
 import { LOCAL_STORAGE_KEY } from '../../lib/constants'
 import { useTranslation } from '../../lib/i18n'
 
@@ -208,6 +210,7 @@ function LockIcon() {
 
 export function Sidebar() {
   const { data } = useMe()
+  const { data: wallet } = useMyWallet()
   const queryClient = useQueryClient()
   const { language, setLanguage, t } = useTranslation()
 
@@ -308,6 +311,16 @@ export function Sidebar() {
             </button>
           </div>
         </div>
+
+        <Link
+          to="/wallet"
+          className="mb-3 flex items-center justify-between rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 no-underline transition-colors hover:border-accent/30 hover:bg-accent/5"
+        >
+          <span className="text-[11px] text-text-tertiary">{t('wallet.balance')}</span>
+          <span className="text-sm font-semibold text-text-primary tabular-nums">
+            {wallet != null ? formatCost(wallet.balance) : '—'}
+          </span>
+        </Link>
 
         <div className="flex items-center justify-between mb-2">
           <Link

@@ -7,7 +7,7 @@ import { Button } from '../components/ui/Button'
 import { Select } from '../components/ui/Select'
 import { ConfirmDialog } from '../components/ui/Dialog'
 import { TimeAgo } from '../components/ui/TimeAgo'
-import { shortenId } from '../lib/utils'
+import { formatCost, shortenId } from '../lib/utils'
 import { useAdminTopups, useReviewTopup } from '../hooks/useWallet'
 import type { TopupRequestItem } from '../hooks/useWallet'
 import { useToast } from '../hooks/useToast'
@@ -42,7 +42,7 @@ export default function MarketplacePage() {
             variant: 'success',
             message:
               confirm.action === 'approved'
-                ? t('marketplace.topup_approved', { balance: res.balance.toFixed(2) })
+                ? t('marketplace.topup_approved', { balance: formatCost(res.balance) })
                 : t('marketplace.topup_rejected'),
           })
           setConfirm(null)
@@ -71,7 +71,7 @@ export default function MarketplacePage() {
     {
       key: 'amount',
       header: t('wallet.col_amount'),
-      render: (row) => <span className="tabular-nums">${row.amount.toFixed(2)}</span>,
+      render: (row) => <span className="tabular-nums">{formatCost(row.amount)}</span>,
     },
     {
       key: 'status',
@@ -139,7 +139,7 @@ export default function MarketplacePage() {
             : t('marketplace.confirm_reject_title')
         }
         description={t('marketplace.confirm_review_message', {
-          amount: confirm ? `$${confirm.topup.amount.toFixed(2)}` : '',
+          amount: confirm ? formatCost(confirm.topup.amount) : '',
         })}
         confirmLabel={
           confirm?.action === 'approved' ? t('marketplace.approve') : t('marketplace.reject')

@@ -40,5 +40,5 @@ export function deriveCacheSellPrices(
 }
 
 function roundPrice(v: number): number {
-  return Math.round(v * 10000) / 10000
+  return Math.round(v)
 }

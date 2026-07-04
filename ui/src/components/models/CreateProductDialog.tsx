@@ -18,6 +18,7 @@ import { useReplaceModelRoutes } from '../../hooks/useModelRoutes'
 import { useToast } from '../../hooks/useToast'
 import { useTranslation } from '../../lib/i18n'
 import { PRODUCT_NAME_REGEX, stepToKey } from './upstream-model-utils'
+import { SellPricingFields } from './SellPricingFields'
 
 interface CreateProductDialogProps {
   open: boolean
@@ -352,38 +353,24 @@ export function CreateProductDialog({ open, onClose }: CreateProductDialogProps)
                 }}
                 disabled={isPending}
               />
-              {billingMode === 'token' ? (
-                <>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    <Input label={t('models.sell_input')} type="number" value={sellInputPer1m} onChange={(e) => setSellInputPer1m(e.target.value)} placeholder="3" disabled={isPending} />
-                    <Input label={t('models.sell_output')} type="number" value={sellOutputPer1m} onChange={(e) => setSellOutputPer1m(e.target.value)} placeholder="12" disabled={isPending} />
-                    <Input label={t('models.sell_cached')} type="number" value={sellCachedInputPer1m} onChange={(e) => setSellCachedInputPer1m(e.target.value)} placeholder="1.5" disabled={isPending} />
-                    <Input label={t('models.sell_cache_write')} type="number" value={sellCacheWritePer1m} onChange={(e) => setSellCacheWritePer1m(e.target.value)} placeholder="4.5" disabled={isPending} />
-                  </div>
-                  <div className="rounded-lg border border-border/50 p-3 space-y-2">
-                    <Toggle
-                      checked={billMinPerRequest}
-                      onChange={setBillMinPerRequest}
-                      label={t('models.bill_min_per_request')}
-                      disabled={isPending}
-                      size="sm"
-                    />
-                    <p className="text-[10px] text-text-tertiary">{t('models.bill_min_per_request_desc')}</p>
-                    {billMinPerRequest && (
-                      <Input
-                        label={t('models.sell_min_per_request')}
-                        type="number"
-                        value={sellMinPerRequest}
-                        onChange={(e) => setSellMinPerRequest(e.target.value)}
-                        placeholder="0.001"
-                        disabled={isPending}
-                      />
-                    )}
-                  </div>
-                </>
-              ) : (
-                <Input label={t('models.sell_per_request')} type="number" value={sellPerRequest} onChange={(e) => setSellPerRequest(e.target.value)} placeholder="0.01" disabled={isPending} />
-              )}
+              <SellPricingFields
+                billingMode={billingMode}
+                billMinPerRequest={billMinPerRequest}
+                onBillMinPerRequestChange={setBillMinPerRequest}
+                sellInputPer1m={sellInputPer1m}
+                onSellInputPer1mChange={setSellInputPer1m}
+                sellOutputPer1m={sellOutputPer1m}
+                onSellOutputPer1mChange={setSellOutputPer1m}
+                sellCachedInputPer1m={sellCachedInputPer1m}
+                onSellCachedInputPer1mChange={setSellCachedInputPer1m}
+                sellCacheWritePer1m={sellCacheWritePer1m}
+                onSellCacheWritePer1mChange={setSellCacheWritePer1m}
+                sellMinPerRequest={sellMinPerRequest}
+                onSellMinPerRequestChange={setSellMinPerRequest}
+                sellPerRequest={sellPerRequest}
+                onSellPerRequestChange={setSellPerRequest}
+                disabled={isPending}
+              />
               <Toggle checked={isPublic} onChange={setIsPublic} label={t('models.public_storefront')} disabled={isPending} size="sm" />
               <Input
                 label={t('models.rpm_limit')}

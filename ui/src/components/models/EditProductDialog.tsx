@@ -6,6 +6,7 @@ import { Select } from '../ui/Select'
 import { Toggle } from '../ui/Toggle'
 import { IconPicker } from '../ui/IconPicker'
 import { ComboRouteEditor } from './ComboRouteEditor'
+import { SellPricingFields } from './SellPricingFields'
 import { resolveModelIcon } from '../../lib/provider-icons'
 import type { BillingMode, ModelResponse, UpdateModelParams } from '../../hooks/useModels'
 import { billingModeFromModel, useUpdateModel } from '../../hooks/useModels'
@@ -204,87 +205,46 @@ export function EditProductDialog({ model, onClose }: EditProductDialogProps) {
           />
         )}
 
-        <div className="rounded-lg border border-white/5 p-4 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-text-secondary">{t('models.sell_pricing')}</p>
-              <p className="text-xs text-text-tertiary">{t('models.sell_pricing_desc')}</p>
+        <div className="rounded-lg border border-border/60 bg-bg-secondary/30 p-4 space-y-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-text-primary">{t('models.sell_pricing')}</p>
+              <p className="text-xs text-text-tertiary mt-0.5">{t('models.sell_pricing_desc')}</p>
             </div>
-            <Select
-              label={t('models.billing_mode')}
-              options={[
-                { value: 'token', label: t('models.bill_per_token') },
-                { value: 'request', label: t('models.bill_per_request') },
-              ]}
-              value={billingMode}
-              onChange={(v) => {
-                setBillingMode(v as BillingMode)
-                if (v === 'request') setBillMinPerRequest(false)
-              }}
-              disabled={isPending || isYaml}
-            />
+            <div className="w-full sm:w-48 shrink-0">
+              <Select
+                label={t('models.billing_mode')}
+                options={[
+                  { value: 'token', label: t('models.bill_per_token') },
+                  { value: 'request', label: t('models.bill_per_request') },
+                ]}
+                value={billingMode}
+                onChange={(v) => {
+                  setBillingMode(v as BillingMode)
+                  if (v === 'request') setBillMinPerRequest(false)
+                }}
+                disabled={isPending || isYaml}
+              />
+            </div>
           </div>
-          {billingMode === 'token' ? (
-            <>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <Input
-                  label={t('models.sell_input')}
-                  type="number"
-                  value={sellInputPer1m}
-                  onChange={(e) => setSellInputPer1m(e.target.value)}
-                  disabled={isPending || isYaml}
-                />
-                <Input
-                  label={t('models.sell_output')}
-                  type="number"
-                  value={sellOutputPer1m}
-                  onChange={(e) => setSellOutputPer1m(e.target.value)}
-                  disabled={isPending || isYaml}
-                />
-                <Input
-                  label={t('models.sell_cached')}
-                  type="number"
-                  value={sellCachedInputPer1m}
-                  onChange={(e) => setSellCachedInputPer1m(e.target.value)}
-                  disabled={isPending || isYaml}
-                />
-                <Input
-                  label={t('models.sell_cache_write')}
-                  type="number"
-                  value={sellCacheWritePer1m}
-                  onChange={(e) => setSellCacheWritePer1m(e.target.value)}
-                  disabled={isPending || isYaml}
-                />
-              </div>
-              <div className="rounded-lg border border-border/50 p-3 space-y-2">
-                <Toggle
-                  checked={billMinPerRequest}
-                  onChange={setBillMinPerRequest}
-                  label={t('models.bill_min_per_request')}
-                  disabled={isPending || isYaml}
-                  size="sm"
-                />
-                <p className="text-[10px] text-text-tertiary">{t('models.bill_min_per_request_desc')}</p>
-                {billMinPerRequest && (
-                  <Input
-                    label={t('models.sell_min_per_request')}
-                    type="number"
-                    value={sellMinPerRequest}
-                    onChange={(e) => setSellMinPerRequest(e.target.value)}
-                    disabled={isPending || isYaml}
-                  />
-                )}
-              </div>
-            </>
-          ) : (
-            <Input
-              label={t('models.sell_per_request')}
-              type="number"
-              value={sellPerRequest}
-              onChange={(e) => setSellPerRequest(e.target.value)}
-              disabled={isPending || isYaml}
-            />
-          )}
+          <SellPricingFields
+            billingMode={billingMode}
+            billMinPerRequest={billMinPerRequest}
+            onBillMinPerRequestChange={setBillMinPerRequest}
+            sellInputPer1m={sellInputPer1m}
+            onSellInputPer1mChange={setSellInputPer1m}
+            sellOutputPer1m={sellOutputPer1m}
+            onSellOutputPer1mChange={setSellOutputPer1m}
+            sellCachedInputPer1m={sellCachedInputPer1m}
+            onSellCachedInputPer1mChange={setSellCachedInputPer1m}
+            sellCacheWritePer1m={sellCacheWritePer1m}
+            onSellCacheWritePer1mChange={setSellCacheWritePer1m}
+            sellMinPerRequest={sellMinPerRequest}
+            onSellMinPerRequestChange={setSellMinPerRequest}
+            sellPerRequest={sellPerRequest}
+            onSellPerRequestChange={setSellPerRequest}
+            disabled={isPending || isYaml}
+          />
         </div>
 
         <Toggle

@@ -25,13 +25,13 @@ type Preset struct {
 	// ModelsPath is the relative path of the model-listing endpoint used by
 	// discover. Empty means model discovery is not supported (custom/local).
 	ModelsPath string `json:"models_path"`
-	// DefaultCost maps upstream model name → reference cost prices in USD
+	// DefaultCost maps upstream model name → reference cost prices in VND
 	// per 1M tokens. Used to pre-fill route cost prices on import; the admin
 	// can override. Prices drift — treat as reference, not billing truth.
 	DefaultCost map[string]CostRef `json:"default_cost,omitempty"`
 }
 
-// CostRef is a reference cost price pair (USD per 1M tokens).
+// CostRef is a reference cost price pair (VND per 1M tokens).
 type CostRef struct {
 	In  float64 `json:"in"`
 	Out float64 `json:"out"`
@@ -50,10 +50,10 @@ var Presets = []Preset{
 		KeyHint: "sk-...", DocsURL: "https://platform.openai.com/api-keys",
 		ModelsPath: "/models",
 		DefaultCost: map[string]CostRef{
-			"gpt-4o":      {In: 2.5, Out: 10, CachedIn: 1.25},
-			"gpt-4o-mini": {In: 0.15, Out: 0.6, CachedIn: 0.075},
-			"gpt-4.1":     {In: 2, Out: 8, CachedIn: 0.5},
-			"o3":          {In: 2, Out: 8, CachedIn: 0.5},
+			"gpt-4o":      {In: 60000, Out: 250000, CachedIn: 30000},
+			"gpt-4o-mini": {In: 4000, Out: 15000, CachedIn: 2000},
+			"gpt-4.1":     {In: 50000, Out: 200000, CachedIn: 12500},
+			"o3":          {In: 50000, Out: 200000, CachedIn: 12500},
 		},
 	},
 	{
@@ -62,9 +62,9 @@ var Presets = []Preset{
 		KeyHint: "sk-ant-...", DocsURL: "https://console.anthropic.com/settings/keys",
 		ModelsPath: "/v1/models",
 		DefaultCost: map[string]CostRef{
-			"claude-sonnet-4-5": {In: 3, Out: 15, CachedIn: 0.3, CacheWrite: 3.75},
-			"claude-haiku-4-5":  {In: 1, Out: 5, CachedIn: 0.1, CacheWrite: 1.25},
-			"claude-opus-4-8":   {In: 15, Out: 75, CachedIn: 1.5, CacheWrite: 18.75},
+			"claude-sonnet-4-5": {In: 75000, Out: 375000, CachedIn: 7500, CacheWrite: 93750},
+			"claude-haiku-4-5":  {In: 25000, Out: 125000, CachedIn: 2500, CacheWrite: 31250},
+			"claude-opus-4-8":   {In: 375000, Out: 1875000, CachedIn: 37500, CacheWrite: 468750},
 		},
 	},
 	{
@@ -73,8 +73,8 @@ var Presets = []Preset{
 		KeyHint: "AIza...", DocsURL: "https://aistudio.google.com/apikey",
 		ModelsPath: "/v1beta/models",
 		DefaultCost: map[string]CostRef{
-			"gemini-2.5-pro":   {In: 1.25, Out: 10, CachedIn: 0.31},
-			"gemini-2.5-flash": {In: 0.3, Out: 2.5, CachedIn: 0.075},
+			"gemini-2.5-pro":   {In: 31250, Out: 250000, CachedIn: 7750},
+			"gemini-2.5-flash": {In: 8000, Out: 60000, CachedIn: 2000},
 		},
 	},
 	{
@@ -83,8 +83,8 @@ var Presets = []Preset{
 		KeyHint: "sk-...", DocsURL: "https://platform.deepseek.com/api_keys",
 		ModelsPath: "/models",
 		DefaultCost: map[string]CostRef{
-			"deepseek-chat":     {In: 0.27, Out: 1.1, CachedIn: 0.07},
-			"deepseek-reasoner": {In: 0.55, Out: 2.19, CachedIn: 0.14},
+			"deepseek-chat":     {In: 7000, Out: 28000, CachedIn: 2000},
+			"deepseek-reasoner": {In: 14000, Out: 55000, CachedIn: 3500},
 		},
 	},
 	{

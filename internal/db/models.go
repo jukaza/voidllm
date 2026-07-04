@@ -75,15 +75,15 @@ type Model struct {
 	PIIFilter *bool
 	// IsPublic marks the model as visible on the public storefront price list.
 	IsPublic bool
-	// SellInputPer1M is the customer-facing price in USD per 1M input tokens.
+	// SellInputPer1M is the customer-facing price in VND per 1M input tokens.
 	// Nil means no sell pricing configured (requests are not billed).
 	SellInputPer1M *float64
-	// SellOutputPer1M is the customer-facing price in USD per 1M output tokens.
+	// SellOutputPer1M is the customer-facing price in VND per 1M output tokens.
 	SellOutputPer1M *float64
-	// SellCachedInputPer1M is the customer-facing price in USD per 1M cached
+	// SellCachedInputPer1M is the customer-facing price in VND per 1M cached
 	// input tokens. Nil falls back to SellInputPer1M.
 	SellCachedInputPer1M *float64
-	// SellCacheWritePer1M is the customer-facing price in USD per 1M cache-write
+	// SellCacheWritePer1M is the customer-facing price in VND per 1M cache-write
 	// tokens (Anthropic). Nil falls back to SellInputPer1M.
 	SellCacheWritePer1M *float64
 	// Logo is the customer-facing logo URL or asset path. Empty = FE falls
@@ -93,11 +93,11 @@ type Model struct {
 	BillPerToken bool
 	// BillPerRequest enables a flat per-request wallet charge when true.
 	BillPerRequest bool
-	// SellPerRequest is the customer-facing USD charge per API call.
+	// SellPerRequest is the customer-facing VND charge per API call.
 	SellPerRequest *float64
 	// BillMinPerRequest applies a per-request revenue floor when BillPerToken is true.
 	BillMinPerRequest bool
-	// SellMinPerRequest is the minimum USD charged per request (token billing only).
+	// SellMinPerRequest is the minimum VND charged per request (token billing only).
 	SellMinPerRequest *float64
 	// RoutingStrategy is the combo chain strategy: fallback or round-robin.
 	RoutingStrategy string
@@ -145,13 +145,13 @@ type CreateModelParams struct {
 	PIIFilter *bool
 	// IsPublic marks the model as visible on the public storefront price list.
 	IsPublic bool
-	// SellInputPer1M is the customer-facing price in USD per 1M input tokens.
+	// SellInputPer1M is the customer-facing price in VND per 1M input tokens.
 	SellInputPer1M *float64
-	// SellOutputPer1M is the customer-facing price in USD per 1M output tokens.
+	// SellOutputPer1M is the customer-facing price in VND per 1M output tokens.
 	SellOutputPer1M *float64
-	// SellCachedInputPer1M is the customer-facing price in USD per 1M cached input tokens.
+	// SellCachedInputPer1M is the customer-facing price in VND per 1M cached input tokens.
 	SellCachedInputPer1M *float64
-	// SellCacheWritePer1M is the customer-facing price in USD per 1M cache-write tokens.
+	// SellCacheWritePer1M is the customer-facing price in VND per 1M cache-write tokens.
 	SellCacheWritePer1M *float64
 	// Logo is the customer-facing logo URL or asset path.
 	Logo string
@@ -159,11 +159,11 @@ type CreateModelParams struct {
 	BillPerToken bool
 	// BillPerRequest enables flat per-request wallet billing. Defaults to false.
 	BillPerRequest bool
-	// SellPerRequest is the customer-facing USD charge per API call.
+	// SellPerRequest is the customer-facing VND charge per API call.
 	SellPerRequest *float64
 	// BillMinPerRequest enables a per-request minimum when billing per token.
 	BillMinPerRequest bool
-	// SellMinPerRequest is the minimum USD per request (token billing only).
+	// SellMinPerRequest is the minimum VND per request (token billing only).
 	SellMinPerRequest *float64
 }
 
@@ -229,7 +229,7 @@ type UpdateModelParams struct {
 	SellPerRequest *float64
 	// BillMinPerRequest, when non-nil, replaces the token-billing minimum flag.
 	BillMinPerRequest *bool
-	// SellMinPerRequest, when non-nil, replaces the minimum USD per request.
+	// SellMinPerRequest, when non-nil, replaces the minimum VND per request.
 	SellMinPerRequest *float64
 	// RoutingStrategy replaces combo chain strategy (fallback or round-robin).
 	RoutingStrategy *string

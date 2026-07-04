@@ -92,7 +92,7 @@ const docTemplate = `{
         },
         "/auth/register": {
             "post": {
-                "description": "Creates a customer account with a prepaid wallet and first API key.",
+                "description": "Creates a customer account with a prepaid wallet and session.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1385,7 +1385,7 @@ const docTemplate = `{
                     "type": "number"
                 },
                 "cost_input_per_1m": {
-                    "description": "Cost prices in USD per 1M tokens. Nil = fall back to model-level pricing.",
+                    "description": "Cost prices in VND per 1M tokens. Nil = fall back to model-level pricing.",
                     "type": "number"
                 },
                 "cost_output_per_1m": {
@@ -1515,7 +1515,7 @@ const docTemplate = `{
                     "type": "number"
                 },
                 "sell_input_per_1m": {
-                    "description": "SellInputPer1M / SellOutputPer1M / SellCachedInputPer1M are the\ncustomer-facing prices in USD per 1M tokens. Omit to leave the model\nunbilled (requests do not debit wallets).",
+                    "description": "SellInputPer1M / SellOutputPer1M / SellCachedInputPer1M are the\ncustomer-facing prices in VND per 1M tokens. Omit to leave the model\nunbilled (requests do not debit wallets).",
                     "type": "number"
                 },
                 "sell_min_per_request": {
@@ -1820,9 +1820,6 @@ const docTemplate = `{
         "admin.registerResponse": {
             "type": "object",
             "properties": {
-                "api_key": {
-                    "type": "string"
-                },
                 "expires_at": {
                     "type": "string"
                 },

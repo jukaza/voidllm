@@ -42,14 +42,14 @@ type Deployment struct {
 	TPMLimit int
 	// DailyRequestLimit is the max requests per day this channel accepts. 0 = unlimited.
 	DailyRequestLimit int
-	// CostInputPer1M / CostOutputPer1M are this channel's cost prices in USD
+	// CostInputPer1M / CostOutputPer1M are this channel's cost prices in VND
 	// per 1M tokens. Nil falls back to the model-level Pricing.
 	CostInputPer1M  *float64
 	CostOutputPer1M *float64
-	// CostCachedInputPer1M is this channel's cost price in USD per 1M cache-hit
+	// CostCachedInputPer1M is this channel's cost price in VND per 1M cache-hit
 	// prompt tokens. Nil falls back to CostInputPer1M (or model Pricing).
 	CostCachedInputPer1M *float64
-	// CostCacheWritePer1M is this channel's cost price in USD per 1M
+	// CostCacheWritePer1M is this channel's cost price in VND per 1M
 	// cache-write tokens. Nil means cache writes are not costed separately.
 	CostCacheWritePer1M *float64
 	// UpstreamModel is the model name sent to this deployment's endpoint.
@@ -146,7 +146,7 @@ type Model struct {
 	// request across the available deployments. Must be >= 0.
 	MaxRetries int
 	// SellInputPer1M / SellOutputPer1M / SellCachedInputPer1M are the
-	// customer-facing prices in USD per 1M tokens. Nil means the model has no
+	// customer-facing prices in VND per 1M tokens. Nil means the model has no
 	// sell pricing configured and requests on it are not billed to wallets.
 	SellInputPer1M       *float64
 	SellOutputPer1M      *float64
@@ -155,11 +155,11 @@ type Model struct {
 	// BillPerToken / BillPerRequest are mutually exclusive wallet billing modes.
 	BillPerToken   bool
 	BillPerRequest bool
-	// SellPerRequest is the flat USD charge per API call (request billing only).
+	// SellPerRequest is the flat VND charge per API call (request billing only).
 	SellPerRequest *float64
 	// BillMinPerRequest applies a per-request floor when BillPerToken is true.
 	BillMinPerRequest bool
-	// SellMinPerRequest is the minimum USD charged per request (token billing).
+	// SellMinPerRequest is the minimum VND charged per request (token billing).
 	SellMinPerRequest *float64
 	// FallbackModelName is the canonical name of the fallback target.
 	// Empty when no fallback is configured. Set to empty by the registry

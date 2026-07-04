@@ -141,7 +141,7 @@ func Bootstrap(ctx context.Context, sqlDB *sql.DB, dialect db.Dialect,
 	insertWallet := "INSERT INTO wallets (id, user_id, balance, currency, created_at, updated_at) VALUES (" +
 		dialect.Placeholder(1) + ", " + dialect.Placeholder(2) + ", 0, " + dialect.Placeholder(3) +
 		", CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
-	if _, err = tx.ExecContext(ctx, insertWallet, walletID.String(), userID.String(), "USD"); err != nil {
+	if _, err = tx.ExecContext(ctx, insertWallet, walletID.String(), userID.String(), "VND"); err != nil {
 		return nil, fmt.Errorf("bootstrap: insert wallet: %w", err)
 	}
 

@@ -52,20 +52,20 @@ type Deployment struct {
 	TPMLimit int
 	// DailyRequestLimit is the max requests per day sent to this channel. 0 = unlimited.
 	DailyRequestLimit int
-	// CostInputPer1M is this channel's cost price in USD per 1M input tokens.
+	// CostInputPer1M is this channel's cost price in VND per 1M input tokens.
 	// Nil falls back to the model-level input price.
 	CostInputPer1M *float64
-	// CostOutputPer1M is this channel's cost price in USD per 1M output tokens.
+	// CostOutputPer1M is this channel's cost price in VND per 1M output tokens.
 	CostOutputPer1M *float64
 	// UpstreamModel is the model name sent to the upstream endpoint. Empty
 	// means use the canonical model name. Non-empty enables cross-model
 	// routes: a product model can be served by a differently-named upstream
 	// model (e.g. product 'coding-pro' -> upstream 'deepseek-chat').
 	UpstreamModel string
-	// CostCachedInputPer1M is the cost price USD/1M for cache-hit prompt
+	// CostCachedInputPer1M is the cost price VND/1M for cache-hit prompt
 	// tokens. Nil falls back to CostInputPer1M.
 	CostCachedInputPer1M *float64
-	// CostCacheWritePer1M is the cost price USD/1M for cache-write tokens
+	// CostCacheWritePer1M is the cost price VND/1M for cache-write tokens
 	// (Anthropic-style prompt caching bills writes above the input rate).
 	CostCacheWritePer1M *float64
 }
@@ -106,9 +106,9 @@ type CreateDeploymentParams struct {
 	CostOutputPer1M *float64
 	// UpstreamModel is the model name sent upstream. Empty = canonical name.
 	UpstreamModel string
-	// CostCachedInputPer1M is the cost price USD/1M for cache-hit prompt tokens.
+	// CostCachedInputPer1M is the cost price VND/1M for cache-hit prompt tokens.
 	CostCachedInputPer1M *float64
-	// CostCacheWritePer1M is the cost price USD/1M for cache-write tokens.
+	// CostCacheWritePer1M is the cost price VND/1M for cache-write tokens.
 	CostCacheWritePer1M *float64
 }
 

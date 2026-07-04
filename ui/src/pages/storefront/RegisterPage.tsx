@@ -5,7 +5,6 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Input } from '../../components/ui/Input'
 import { Button } from '../../components/ui/Button'
 import { Banner } from '../../components/ui/Banner'
-import { CopyButton } from '../../components/ui/CopyButton'
 import { LOCAL_STORAGE_KEY } from '../../lib/constants'
 import type { MeResponse } from '../../hooks/useMe'
 import { useTranslation } from '../../lib/i18n'
@@ -13,7 +12,6 @@ import { useTranslation } from '../../lib/i18n'
 interface RegisterResponse {
   token: string
   expires_at: string
-  api_key: string
   user: MeResponse
 }
 
@@ -27,7 +25,6 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [apiKey, setApiKey] = useState<string | null>(null)
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -50,31 +47,12 @@ export default function RegisterPage() {
       const data = (await res.json()) as RegisterResponse
       localStorage.setItem(LOCAL_STORAGE_KEY, data.token)
       queryClient.setQueryData(['me'], data.user)
-      // Show the one-time API key before entering the app.
-      setApiKey(data.api_key)
+      navigate('/')
     } catch {
       setError('Unable to reach the server. Check your connection.')
     } finally {
       setLoading(false)
     }
-  }
-
-  if (apiKey !== null) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-bg-primary px-4">
-        <div className="w-full max-w-md bg-bg-secondary border border-white/5 rounded-xl p-8">
-          <h1 className="text-xl font-bold">{t('register.key_title')}</h1>
-          <p className="mt-2 text-sm text-text-tertiary">{t('register.key_subtitle')}</p>
-          <div className="mt-4 flex items-center gap-2 bg-bg-tertiary rounded-lg p-3">
-            <code className="text-xs break-all flex-1">{apiKey}</code>
-            <CopyButton text={apiKey} />
-          </div>
-          <Button className="mt-6" fullWidth size="lg" onClick={() => navigate('/')}>
-            {t('register.go_dashboard')}
-          </Button>
-        </div>
-      </div>
-    )
   }
 
   return (

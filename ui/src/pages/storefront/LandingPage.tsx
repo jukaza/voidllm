@@ -1,12 +1,7 @@
 import { Link } from 'react-router-dom'
-import { BrandIcon } from '../../components/ui/BrandIcon'
+import { PublicPricingTable } from '../../components/catalog/PublicPricingTable'
 import { usePublicCatalog } from '../../hooks/useProviders'
 import { useTranslation } from '../../lib/i18n'
-
-function formatPrice(v: number | null | undefined): string {
-  if (v === null || v === undefined) return '—'
-  return `$${v.toFixed(2)}`
-}
 
 export default function LandingPage() {
   const { data, isLoading } = usePublicCatalog()
@@ -87,50 +82,13 @@ export default function LandingPage() {
           {t('storefront.pricing_subtitle')}
         </p>
 
-        <div className="mt-8 overflow-x-auto rounded-xl border border-white/5">
-          <table className="w-full text-sm">
-            <thead className="bg-bg-secondary">
-              <tr className="text-left text-text-tertiary">
-                <th className="px-4 py-3 font-medium">{t('storefront.col_model')}</th>
-                <th className="px-4 py-3 font-medium">{t('storefront.col_type')}</th>
-                <th className="px-4 py-3 font-medium text-right">{t('storefront.col_input')}</th>
-                <th className="px-4 py-3 font-medium text-right">{t('storefront.col_output')}</th>
-                <th className="px-4 py-3 font-medium text-right">Per request</th>
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading && (
-                <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-text-tertiary">
-                    ...
-                  </td>
-                </tr>
-              )}
-              {!isLoading && models.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-text-tertiary">
-                    {t('storefront.no_models')}
-                  </td>
-                </tr>
-              )}
-              {models.map((m) => (
-                <tr key={m.name} className="border-t border-white/5">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2.5 font-mono">
-                      <BrandIcon logo={m.logo} modelName={m.name} size={18} />
-                      <span>{m.name}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-text-tertiary">{m.type}</td>
-                  <td className="px-4 py-3 text-right">{m.bill_per_token ? formatPrice(m.sell_input_per_1m) : '—'}</td>
-                  <td className="px-4 py-3 text-right">{m.bill_per_token ? formatPrice(m.sell_output_per_1m) : '—'}</td>
-                  <td className="px-4 py-3 text-right text-text-tertiary">
-                    {m.bill_per_request ? formatPrice(m.sell_per_request) : '—'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="mt-8">
+          <PublicPricingTable
+            models={models}
+            isLoading={isLoading}
+            emptyMessage={t('storefront.no_models')}
+            variant="storefront"
+          />
         </div>
         <p className="mt-3 text-xs text-text-tertiary text-center">
           {t('storefront.pricing_note')}

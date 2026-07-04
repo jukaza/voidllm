@@ -17,6 +17,7 @@ import {
 import type { TransactionItem, TopupRequestItem } from '../hooks/useWallet'
 import { useToast } from '../hooks/useToast'
 import { useTranslation } from '../lib/i18n'
+import { formatCost } from '../lib/utils'
 
 function IconWallet() {
   return (
@@ -95,7 +96,7 @@ export default function WalletPage() {
       render: (row) => (
         <span className={row.amount >= 0 ? 'text-success' : 'text-text-primary'}>
           {row.amount >= 0 ? '+' : ''}
-          {row.amount.toFixed(4)}
+          {formatCost(row.amount)}
         </span>
       ),
     },
@@ -103,7 +104,7 @@ export default function WalletPage() {
       key: 'balance_after',
       header: t('wallet.col_balance_after'),
       align: 'right',
-      render: (row) => <span className="text-text-secondary">{row.balance_after.toFixed(4)}</span>,
+      render: (row) => <span className="text-text-secondary">{formatCost(row.balance_after)}</span>,
     },
     {
       key: 'description',
@@ -122,7 +123,7 @@ export default function WalletPage() {
       key: 'amount',
       header: t('wallet.col_amount'),
       align: 'right',
-      render: (row) => <span>{row.amount.toFixed(2)}</span>,
+      render: (row) => <span>{formatCost(row.amount)}</span>,
     },
     {
       key: 'payment_ref',
@@ -158,7 +159,7 @@ export default function WalletPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <StatCard
           label={t('wallet.balance')}
-          value={walletLoading ? '...' : `$${(wallet?.balance ?? 0).toFixed(4)}`}
+          value={walletLoading ? '...' : formatCost(wallet?.balance ?? 0)}
           icon={<IconWallet />}
           iconColor="green"
         />
@@ -216,10 +217,12 @@ export default function WalletPage() {
             label={t('wallet.topup_amount')}
             type="number"
             min="0"
-            step="0.01"
+            step="1"
+            suffix="₫"
+            inputMode="numeric"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            placeholder="10.00"
+            placeholder="100000"
           />
           <Input
             label={t('wallet.topup_ref')}

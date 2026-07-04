@@ -64,7 +64,7 @@ type createModelRequest struct {
 	// IsPublic marks the model as visible on the public storefront price list.
 	IsPublic bool `json:"is_public,omitempty"`
 	// SellInputPer1M / SellOutputPer1M / SellCachedInputPer1M are the
-	// customer-facing prices in USD per 1M tokens. Omit to leave the model
+	// customer-facing prices in VND per 1M tokens. Omit to leave the model
 	// unbilled (requests do not debit wallets).
 	SellInputPer1M       *float64 `json:"sell_input_per_1m,omitempty"`
 	SellOutputPer1M      *float64 `json:"sell_output_per_1m,omitempty"`

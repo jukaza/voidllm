@@ -465,8 +465,6 @@ definitions:
     type: object
   admin.registerResponse:
     properties:
-      api_key:
-        type: string
       expires_at:
         type: string
       token:
@@ -714,8 +712,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: Creates a customer account with a prepaid wallet and first API
-        key.
+      description: Creates a customer account with a prepaid wallet and session.
       produces:
       - application/json
       responses:

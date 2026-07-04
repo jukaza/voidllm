@@ -85,7 +85,7 @@
         },
         "/auth/register": {
             "post": {
-                "description": "Creates a customer account with a prepaid wallet and first API key.",
+                "description": "Creates a customer account with a prepaid wallet and session.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1813,9 +1813,6 @@
         "admin.registerResponse": {
             "type": "object",
             "properties": {
-                "api_key": {
-                    "type": "string"
-                },
                 "expires_at": {
                     "type": "string"
                 },

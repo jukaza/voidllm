@@ -67,7 +67,7 @@ func TestCheck_ZeroBalance(t *testing.T) {
 	ctx := context.Background()
 	database := openTestDB(t, "TestWalletCheckZero")
 	userID := createTestUser(t, database, "zero@test.io")
-	if _, err := database.CreateWallet(ctx, userID, "USD"); err != nil {
+	if _, err := database.CreateWallet(ctx, userID, "VND"); err != nil {
 		t.Fatalf("create wallet: %v", err)
 	}
 	svc := newTestService(t, database)
@@ -82,7 +82,7 @@ func TestCreditThenCheckAndDebit(t *testing.T) {
 	ctx := context.Background()
 	database := openTestDB(t, "TestWalletCreditDebit")
 	userID := createTestUser(t, database, "cd@test.io")
-	if _, err := database.CreateWallet(ctx, userID, "USD"); err != nil {
+	if _, err := database.CreateWallet(ctx, userID, "VND"); err != nil {
 		t.Fatalf("create wallet: %v", err)
 	}
 	svc := newTestService(t, database)
@@ -131,7 +131,7 @@ func TestDebit_AllowsNegativeBalance(t *testing.T) {
 	ctx := context.Background()
 	database := openTestDB(t, "TestWalletNegative")
 	userID := createTestUser(t, database, "neg@test.io")
-	if _, err := database.CreateWallet(ctx, userID, "USD"); err != nil {
+	if _, err := database.CreateWallet(ctx, userID, "VND"); err != nil {
 		t.Fatalf("create wallet: %v", err)
 	}
 	svc := newTestService(t, database)
@@ -156,7 +156,7 @@ func TestSeedFromDB(t *testing.T) {
 	ctx := context.Background()
 	database := openTestDB(t, "TestWalletSeed")
 	userID := createTestUser(t, database, "seed@test.io")
-	if _, err := database.CreateWallet(ctx, userID, "USD"); err != nil {
+	if _, err := database.CreateWallet(ctx, userID, "VND"); err != nil {
 		t.Fatalf("create wallet: %v", err)
 	}
 	if _, err := database.ApplyTransaction(ctx, db.ApplyTransactionParams{

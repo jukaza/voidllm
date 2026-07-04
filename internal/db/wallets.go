@@ -58,7 +58,7 @@ func (d *DB) CreateWallet(ctx context.Context, userID, currency string) (*Wallet
 		return nil, fmt.Errorf("create wallet: generate id: %w", err)
 	}
 	if currency == "" {
-		currency = "USD"
+		currency = "VND"
 	}
 
 	p := d.dialect.Placeholder

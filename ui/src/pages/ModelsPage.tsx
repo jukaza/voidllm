@@ -16,6 +16,8 @@ import { billingModeFromModel, useModels, useDeleteModel, useToggleModel, useUpd
 import type { ModelResponse } from '../hooks/useModels'
 import { useToast } from '../hooks/useToast'
 import { useTranslation } from '../lib/i18n'
+import { formatCost } from '../lib/utils'
+import { PriceCell } from '../components/ui/PriceDisplay'
 
 const typeLabels: Record<string, string> = {
   chat: 'Chat',
@@ -86,24 +88,43 @@ function IconTrash() {
   )
 }
 
-function formatSellPrice(row: ModelResponse): string {
+function SellPriceCell({ row }: { row: ModelResponse }) {
   if (billingModeFromModel(row) === 'request') {
-    if (row.sell_per_request != null && row.sell_per_request > 0) {
-      return `$${row.sell_per_request}/req`
-    }
-    return '—'
+    return (
+      <div className="text-xs">
+        <PriceCell value={row.sell_per_request} />
+        {row.sell_per_request != null && row.sell_per_request > 0 && (
+          <span className="text-text-tertiary"> /req</span>
+        )}
+      </div>
+    )
   }
-  const parts: string[] = []
+
+  const lines: { label: string; value: number }[] = []
   if (row.sell_input_per_1m != null && row.sell_input_per_1m > 0) {
-    parts.push(`in $${row.sell_input_per_1m}`)
+    lines.push({ label: 'in', value: row.sell_input_per_1m })
   }
   if (row.sell_output_per_1m != null && row.sell_output_per_1m > 0) {
-    parts.push(`out $${row.sell_output_per_1m}`)
+    lines.push({ label: 'out', value: row.sell_output_per_1m })
   }
   if (row.bill_min_per_request && row.sell_min_per_request != null && row.sell_min_per_request > 0) {
-    parts.push(`min $${row.sell_min_per_request}/req`)
+    lines.push({ label: 'min', value: row.sell_min_per_request })
   }
-  return parts.length > 0 ? parts.join(' · ') : '—'
+
+  if (lines.length === 0) return <span className="text-text-tertiary">—</span>
+
+  return (
+    <div className="flex flex-col gap-0.5 text-xs tabular-nums">
+      {lines.map((line) => (
+        <div key={line.label} className="flex items-baseline gap-1.5">
+          <span className="text-[10px] uppercase tracking-wide text-text-tertiary w-8 shrink-0">
+            {line.label}
+          </span>
+          <span className="text-text-secondary">{formatCost(line.value)}</span>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 function MinPerRequestToggle({ model }: { model: ModelResponse }) {
@@ -146,7 +167,7 @@ function MinPerRequestToggle({ model }: { model: ModelResponse }) {
         }}
       />
       {hasPrice ? (
-        <span className="text-xs text-text-secondary tabular-nums">${model.sell_min_per_request}</span>
+        <span className="text-xs text-text-secondary tabular-nums">{formatCost(model.sell_min_per_request!)}</span>
       ) : null}
     </div>
   )
@@ -264,9 +285,7 @@ export default function ModelsPage() {
     {
       key: 'sell',
       header: t('models.col_sell_price'),
-      render: (row) => (
-        <span className="text-xs text-text-secondary tabular-nums">{formatSellPrice(row)}</span>
-      ),
+      render: (row) => <SellPriceCell row={row} />,
     },
     {
       key: 'min_per_request',
