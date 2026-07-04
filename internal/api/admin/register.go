@@ -350,6 +350,7 @@ type catalogModelItem struct {
 	SellInputPer1M       *float64 `json:"sell_input_per_1m,omitempty"`
 	SellOutputPer1M      *float64 `json:"sell_output_per_1m,omitempty"`
 	SellCachedInputPer1M *float64 `json:"sell_cached_input_per_1m,omitempty"`
+	SellCacheWritePer1M  *float64 `json:"sell_cache_write_per_1m,omitempty"`
 	SellPerRequest       *float64 `json:"sell_per_request,omitempty"`
 }
 
@@ -368,6 +369,7 @@ func modelToCatalogItem(m db.Model) catalogModelItem {
 		SellInputPer1M:       m.SellInputPer1M,
 		SellOutputPer1M:      m.SellOutputPer1M,
 		SellCachedInputPer1M: m.SellCachedInputPer1M,
+		SellCacheWritePer1M:  m.SellCacheWritePer1M,
 		SellPerRequest:       m.SellPerRequest,
 	}
 }

@@ -46,6 +46,9 @@ export function EditProductDialog({ model, onClose }: EditProductDialogProps) {
   const [sellCachedInputPer1m, setSellCachedInputPer1m] = useState(
     model.sell_cached_input_per_1m != null ? String(model.sell_cached_input_per_1m) : '',
   )
+  const [sellCacheWritePer1m, setSellCacheWritePer1m] = useState(
+    model.sell_cache_write_per_1m != null ? String(model.sell_cache_write_per_1m) : '',
+  )
   const [sellPerRequest, setSellPerRequest] = useState(
     model.sell_per_request != null ? String(model.sell_per_request) : '',
   )
@@ -107,6 +110,10 @@ export function EditProductDialog({ model, onClose }: EditProductDialogProps) {
     if (sellCachedInputPer1m.trim()) {
       const parsed = parseFloat(sellCachedInputPer1m)
       if (!isNaN(parsed) && parsed !== model.sell_cached_input_per_1m) params.sell_cached_input_per_1m = parsed
+    }
+    if (sellCacheWritePer1m.trim()) {
+      const parsed = parseFloat(sellCacheWritePer1m)
+      if (!isNaN(parsed) && parsed !== model.sell_cache_write_per_1m) params.sell_cache_write_per_1m = parsed
     }
     if (sellPerRequest.trim()) {
       const parsed = parseFloat(sellPerRequest)
@@ -219,7 +226,7 @@ export function EditProductDialog({ model, onClose }: EditProductDialogProps) {
           </div>
           {billingMode === 'token' ? (
             <>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <Input
                   label={t('models.sell_input')}
                   type="number"
@@ -239,6 +246,13 @@ export function EditProductDialog({ model, onClose }: EditProductDialogProps) {
                   type="number"
                   value={sellCachedInputPer1m}
                   onChange={(e) => setSellCachedInputPer1m(e.target.value)}
+                  disabled={isPending || isYaml}
+                />
+                <Input
+                  label={t('models.sell_cache_write')}
+                  type="number"
+                  value={sellCacheWritePer1m}
+                  onChange={(e) => setSellCacheWritePer1m(e.target.value)}
                   disabled={isPending || isYaml}
                 />
               </div>

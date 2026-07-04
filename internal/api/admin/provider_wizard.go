@@ -422,13 +422,11 @@ func (h *Handler) ImportProvider(c fiber.Ctx) error {
 				cost = &cc
 			}
 		}
-		var inCost, outCost *float64
-		if cost != nil {
-			inCost, outCost = &cost.In, &cost.Out
-		}
+		inCost, outCost, cachedInCost, cacheWriteCost := provider.OptionalCostFields(cost)
 		m, upsertErr := h.DB.UpsertProviderUpstreamModel(ctx, db.UpsertProviderUpstreamModelParams{
 			ProviderID: prov.ID, UpstreamID: spec.UpstreamID,
 			IsEnabled: true, CostInputPer1M: inCost, CostOutputPer1M: outCost,
+			CostCachedInputPer1M: cachedInCost, CostCacheWritePer1M: cacheWriteCost,
 		})
 		if upsertErr != nil {
 			res.Error = "failed to import upstream model"

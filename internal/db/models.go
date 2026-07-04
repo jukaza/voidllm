@@ -24,7 +24,7 @@ const modelSelectColumns = "id, name, provider, model_type, base_url, api_key_en
 	"azure_deployment, azure_api_version, gcp_project, gcp_location, " +
 	"is_active, source, created_by, created_at, updated_at, deleted_at, aliases, timeout, " +
 	"strategy, max_retries, fallback_model_id, pii_filter, " +
-	"is_public, sell_input_per_1m, sell_output_per_1m, sell_cached_input_per_1m, logo, " +
+	"is_public, sell_input_per_1m, sell_output_per_1m, sell_cached_input_per_1m, sell_cache_write_per_1m, logo, " +
 	"bill_per_token, bill_per_request, sell_per_request, bill_min_per_request, sell_min_per_request, " +
 	"routing_strategy, sticky_round_robin_limit, rpm_limit"
 
@@ -83,6 +83,9 @@ type Model struct {
 	// SellCachedInputPer1M is the customer-facing price in USD per 1M cached
 	// input tokens. Nil falls back to SellInputPer1M.
 	SellCachedInputPer1M *float64
+	// SellCacheWritePer1M is the customer-facing price in USD per 1M cache-write
+	// tokens (Anthropic). Nil falls back to SellInputPer1M.
+	SellCacheWritePer1M *float64
 	// Logo is the customer-facing logo URL or asset path. Empty = FE falls
 	// back to the logo of the provider on the first active route.
 	Logo string
@@ -148,6 +151,8 @@ type CreateModelParams struct {
 	SellOutputPer1M *float64
 	// SellCachedInputPer1M is the customer-facing price in USD per 1M cached input tokens.
 	SellCachedInputPer1M *float64
+	// SellCacheWritePer1M is the customer-facing price in USD per 1M cache-write tokens.
+	SellCacheWritePer1M *float64
 	// Logo is the customer-facing logo URL or asset path.
 	Logo string
 	// BillPerToken enables per-token wallet billing. Defaults to true.
@@ -212,6 +217,8 @@ type UpdateModelParams struct {
 	SellOutputPer1M *float64
 	// SellCachedInputPer1M, when non-nil, replaces the customer-facing cached input price.
 	SellCachedInputPer1M *float64
+	// SellCacheWritePer1M, when non-nil, replaces the customer-facing cache-write price.
+	SellCacheWritePer1M *float64
 	// Logo, when non-nil, replaces the customer-facing logo.
 	Logo *string
 	// BillPerToken, when non-nil, replaces the per-token billing flag.
@@ -270,7 +277,7 @@ func (d *DB) CreateModel(ctx context.Context, params CreateModelParams) (*Model,
 		"max_context_tokens, input_price_per_1m, output_price_per_1m, " +
 		"azure_deployment, azure_api_version, gcp_project, gcp_location, " +
 		"is_active, source, created_by, aliases, timeout, strategy, max_retries, " +
-		"fallback_model_id, pii_filter, is_public, sell_input_per_1m, sell_output_per_1m, sell_cached_input_per_1m, logo, " +
+		"fallback_model_id, pii_filter, is_public, sell_input_per_1m, sell_output_per_1m, sell_cached_input_per_1m, sell_cache_write_per_1m, logo, " +
 		"bill_per_token, bill_per_request, sell_per_request, bill_min_per_request, sell_min_per_request, " +
 		"created_at, updated_at) " +
 		"VALUES (" +
@@ -278,8 +285,8 @@ func (d *DB) CreateModel(ctx context.Context, params CreateModelParams) (*Model,
 		p(7) + ", " + p(8) + ", " + p(9) + ", " +
 		p(10) + ", " + p(11) + ", " + p(12) + ", " + p(13) + ", " +
 		"1, " + p(14) + ", " + p(15) + ", " + p(16) + ", " + p(17) + ", " + p(18) + ", " + p(19) + ", " +
-		p(20) + ", " + p(21) + ", " + p(22) + ", " + p(23) + ", " + p(24) + ", " + p(25) + ", " + p(26) + ", " +
-		p(27) + ", " + p(28) + ", " + p(29) + ", " + p(30) + ", " + p(31) + ", " +
+		p(20) + ", " + p(21) + ", " + p(22) + ", " + p(23) + ", " + p(24) + ", " + p(25) + ", " + p(26) + ", " + p(27) + ", " +
+		p(28) + ", " + p(29) + ", " + p(30) + ", " + p(31) + ", " + p(32) + ", " +
 		"CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
 
 	selectQuery := "SELECT " + modelSelectColumns +
@@ -320,6 +327,7 @@ func (d *DB) CreateModel(ctx context.Context, params CreateModelParams) (*Model,
 			params.SellInputPer1M,
 			params.SellOutputPer1M,
 			params.SellCachedInputPer1M,
+			params.SellCacheWritePer1M,
 			params.Logo,
 			boolToInt(billPerToken),
 			boolToInt(billPerRequest),
@@ -543,6 +551,11 @@ func (d *DB) UpdateModel(ctx context.Context, id string, params UpdateModelParam
 	if params.SellCachedInputPer1M != nil {
 		setClauses = append(setClauses, "sell_cached_input_per_1m = "+p(argN))
 		args = append(args, *params.SellCachedInputPer1M)
+		argN++
+	}
+	if params.SellCacheWritePer1M != nil {
+		setClauses = append(setClauses, "sell_cache_write_per_1m = "+p(argN))
+		args = append(args, *params.SellCacheWritePer1M)
 		argN++
 	}
 	if params.Logo != nil {
@@ -824,7 +837,7 @@ func scanModel(scanner interface{ Scan(...any) error }) (*Model, error) {
 		&m.CreatedAt, &m.UpdatedAt, &m.DeletedAt, &m.Aliases, &m.Timeout,
 		&m.Strategy, &m.MaxRetries, &m.FallbackModelID,
 		&piiFilterInt,
-		&isPublicInt, &m.SellInputPer1M, &m.SellOutputPer1M, &m.SellCachedInputPer1M, &m.Logo,
+		&isPublicInt, &m.SellInputPer1M, &m.SellOutputPer1M, &m.SellCachedInputPer1M, &m.SellCacheWritePer1M, &m.Logo,
 		&billPerTokenInt, &billPerRequestInt, &m.SellPerRequest,
 		&billMinPerRequestInt, &m.SellMinPerRequest,
 		&m.RoutingStrategy, &m.StickyRoundRobinLimit, &m.RPMLimit,
@@ -1153,7 +1166,7 @@ func deploymentAAD(id string) []byte {
 // catalogWhereClause filters models eligible for the public price catalog:
 // active, priced (token and/or per-request billing configured).
 const catalogWhereClause = "is_active = 1 AND deleted_at IS NULL AND (" +
-	"(bill_per_token = 1 AND (sell_input_per_1m > 0 OR sell_output_per_1m > 0 OR sell_cached_input_per_1m > 0)) " +
+	"(bill_per_token = 1 AND (sell_input_per_1m > 0 OR sell_output_per_1m > 0 OR sell_cached_input_per_1m > 0 OR sell_cache_write_per_1m > 0)) " +
 	"OR (bill_per_request = 1 AND sell_per_request > 0))"
 
 // ListCatalogModels returns active models with at least one configured sell

@@ -220,11 +220,15 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 			idToName[m.ID] = m.Name
 		}
 
-		upstreamCostByKey := make(map[string]struct{ in, out *float64 })
+		upstreamCostByKey := make(map[string]struct {
+			in, out, cachedIn, cacheWrite *float64
+		})
 		if allUpstream, uerr := database.ListAllProviderUpstreamModels(loadCtx, false); uerr == nil {
 			for _, um := range allUpstream {
 				key := um.ProviderID + ":" + um.UpstreamID
-				upstreamCostByKey[key] = struct{ in, out *float64 }{um.CostInputPer1M, um.CostOutputPer1M}
+				upstreamCostByKey[key] = struct {
+					in, out, cachedIn, cacheWrite *float64
+				}{um.CostInputPer1M, um.CostOutputPer1M, um.CostCachedInputPer1M, um.CostCacheWritePer1M}
 			}
 		}
 
@@ -396,7 +400,10 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 						ConnStrategy: connStrategy, ConnSticky: sticky,
 						ProviderDefaultKey: providerKeys[prov.ID],
 						ProviderRPMLimit:   prov.RPMLimit,
-						CostInputPer1M: costs.in, CostOutputPer1M: costs.out,
+						CostInputPer1M:       costs.in,
+						CostOutputPer1M:      costs.out,
+						CostCachedInputPer1M: costs.cachedIn,
+						CostCacheWritePer1M:  costs.cacheWrite,
 					})
 				}
 			}
@@ -432,6 +439,7 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 				SellInputPer1M:       m.SellInputPer1M,
 				SellOutputPer1M:      m.SellOutputPer1M,
 				SellCachedInputPer1M: m.SellCachedInputPer1M,
+				SellCacheWritePer1M:  m.SellCacheWritePer1M,
 				BillPerToken:         m.BillPerToken,
 				BillPerRequest:       m.BillPerRequest,
 				SellPerRequest:       m.SellPerRequest,

@@ -8,6 +8,8 @@ export interface UsageDataPoint {
   prompt_tokens: number
   completion_tokens: number
   total_tokens: number
+  cached_tokens: number
+  revenue: number
   cost_estimate: number
   avg_duration_ms: number
 }

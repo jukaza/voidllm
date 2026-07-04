@@ -123,8 +123,10 @@ func (p *ProxyHandler) tryComboModel(
 				ConnectionID:    conn.ID,
 				UpstreamModel:   step.UpstreamModel,
 				ProviderRPMLimit: step.ProviderRPMLimit,
-				CostInputPer1M:  step.CostInputPer1M,
-				CostOutputPer1M: step.CostOutputPer1M,
+				CostInputPer1M:       step.CostInputPer1M,
+				CostOutputPer1M:      step.CostOutputPer1M,
+				CostCachedInputPer1M: step.CostCachedInputPer1M,
+				CostCacheWritePer1M:  step.CostCacheWritePer1M,
 				Weight:          1,
 				destPrivate:     classifyDestPrivate(step.BaseURL),
 			}

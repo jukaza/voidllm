@@ -69,6 +69,7 @@ type createModelRequest struct {
 	SellInputPer1M       *float64 `json:"sell_input_per_1m,omitempty"`
 	SellOutputPer1M      *float64 `json:"sell_output_per_1m,omitempty"`
 	SellCachedInputPer1M *float64 `json:"sell_cached_input_per_1m,omitempty"`
+	SellCacheWritePer1M  *float64 `json:"sell_cache_write_per_1m,omitempty"`
 	// Logo is the customer-facing logo URL or asset path.
 	Logo string `json:"logo,omitempty"`
 	BillPerToken        *bool    `json:"bill_per_token"`
@@ -123,6 +124,7 @@ type updateModelRequest struct {
 	SellInputPer1M       *float64 `json:"sell_input_per_1m"`
 	SellOutputPer1M      *float64 `json:"sell_output_per_1m"`
 	SellCachedInputPer1M *float64 `json:"sell_cached_input_per_1m"`
+	SellCacheWritePer1M  *float64 `json:"sell_cache_write_per_1m"`
 	// Logo, when non-nil, replaces the customer-facing logo. Pass "" to clear.
 	Logo *string `json:"logo"`
 	BillPerToken        *bool    `json:"bill_per_token"`
@@ -137,7 +139,7 @@ type updateModelRequest struct {
 
 func validateBillingModes(
 	billToken, billRequest bool,
-	sellIn, sellOut, sellCached, sellPerReq *float64,
+	sellIn, sellOut, sellCached, sellCacheWrite, sellPerReq *float64,
 	billMinPerReq bool,
 	sellMinPerReq *float64,
 ) string {
@@ -153,7 +155,8 @@ func validateBillingModes(
 	if billToken {
 		hasTokenPrice := (sellIn != nil && *sellIn > 0) ||
 			(sellOut != nil && *sellOut > 0) ||
-			(sellCached != nil && *sellCached > 0)
+			(sellCached != nil && *sellCached > 0) ||
+			(sellCacheWrite != nil && *sellCacheWrite > 0)
 		if !hasTokenPrice {
 			return "bill_per_token requires at least one sell token price > 0"
 		}
@@ -234,6 +237,7 @@ type modelResponse struct {
 	SellInputPer1M       *float64 `json:"sell_input_per_1m,omitempty"`
 	SellOutputPer1M      *float64 `json:"sell_output_per_1m,omitempty"`
 	SellCachedInputPer1M *float64 `json:"sell_cached_input_per_1m,omitempty"`
+	SellCacheWritePer1M  *float64 `json:"sell_cache_write_per_1m,omitempty"`
 	// Logo is the customer-facing logo URL or asset path.
 	Logo string `json:"logo,omitempty"`
 	BillPerToken        bool     `json:"bill_per_token"`
@@ -317,6 +321,7 @@ func modelToResponse(m *db.Model, fallbackName string) modelResponse {
 		SellInputPer1M:       m.SellInputPer1M,
 		SellOutputPer1M:      m.SellOutputPer1M,
 		SellCachedInputPer1M: m.SellCachedInputPer1M,
+		SellCacheWritePer1M:  m.SellCacheWritePer1M,
 		Logo:                 m.Logo,
 		BillPerToken:         m.BillPerToken,
 		BillPerRequest:       m.BillPerRequest,
@@ -369,6 +374,7 @@ func dbModelToProxy(m *db.Model, apiKeyPlaintext string, fallbackName string) pr
 		SellInputPer1M:       m.SellInputPer1M,
 		SellOutputPer1M:      m.SellOutputPer1M,
 		SellCachedInputPer1M: m.SellCachedInputPer1M,
+		SellCacheWritePer1M:  m.SellCacheWritePer1M,
 		BillPerToken:         m.BillPerToken,
 		BillPerRequest:       m.BillPerRequest,
 		SellPerRequest:       m.SellPerRequest,
@@ -619,10 +625,11 @@ func (h *Handler) CreateModel(c fiber.Ctx) error {
 	}
 	if req.BillPerRequest != nil || req.BillPerToken != nil || req.SellPerRequest != nil ||
 		req.SellInputPer1M != nil || req.SellOutputPer1M != nil || req.SellCachedInputPer1M != nil ||
+		req.SellCacheWritePer1M != nil ||
 		req.BillMinPerRequest != nil || req.SellMinPerRequest != nil {
 		if msg := validateBillingModes(
 			billPerToken, billPerRequest,
-			req.SellInputPer1M, req.SellOutputPer1M, req.SellCachedInputPer1M, req.SellPerRequest,
+			req.SellInputPer1M, req.SellOutputPer1M, req.SellCachedInputPer1M, req.SellCacheWritePer1M, req.SellPerRequest,
 			billMinPerRequest, req.SellMinPerRequest,
 		); msg != "" {
 			return apierror.BadRequest(c, msg)
@@ -704,6 +711,7 @@ func (h *Handler) CreateModel(c fiber.Ctx) error {
 		SellInputPer1M:       req.SellInputPer1M,
 		SellOutputPer1M:      req.SellOutputPer1M,
 		SellCachedInputPer1M: req.SellCachedInputPer1M,
+		SellCacheWritePer1M:  req.SellCacheWritePer1M,
 		Logo:                 req.Logo,
 		BillPerToken:         billPerToken,
 		BillPerRequest:       billPerRequest,
@@ -990,6 +998,7 @@ func (h *Handler) UpdateModel(c fiber.Ctx) error {
 
 	if req.BillPerToken != nil || req.BillPerRequest != nil || req.SellPerRequest != nil ||
 		req.SellInputPer1M != nil || req.SellOutputPer1M != nil || req.SellCachedInputPer1M != nil ||
+		req.SellCacheWritePer1M != nil ||
 		req.BillMinPerRequest != nil || req.SellMinPerRequest != nil {
 		billToken := existing.BillPerToken
 		billRequest := existing.BillPerRequest
@@ -1018,6 +1027,10 @@ func (h *Handler) UpdateModel(c fiber.Ctx) error {
 		if req.SellCachedInputPer1M != nil {
 			sellCached = req.SellCachedInputPer1M
 		}
+		sellCacheWrite := existing.SellCacheWritePer1M
+		if req.SellCacheWritePer1M != nil {
+			sellCacheWrite = req.SellCacheWritePer1M
+		}
 		sellPerReq := existing.SellPerRequest
 		if req.SellPerRequest != nil {
 			sellPerReq = req.SellPerRequest
@@ -1028,7 +1041,7 @@ func (h *Handler) UpdateModel(c fiber.Ctx) error {
 		}
 		if msg := validateBillingModes(
 			billToken, billRequest,
-			sellIn, sellOut, sellCached, sellPerReq,
+			sellIn, sellOut, sellCached, sellCacheWrite, sellPerReq,
 			billMin, sellMinPerReq,
 		); msg != "" {
 			return apierror.BadRequest(c, msg)
@@ -1056,6 +1069,7 @@ func (h *Handler) UpdateModel(c fiber.Ctx) error {
 		SellInputPer1M:       req.SellInputPer1M,
 		SellOutputPer1M:      req.SellOutputPer1M,
 		SellCachedInputPer1M: req.SellCachedInputPer1M,
+		SellCacheWritePer1M:  req.SellCacheWritePer1M,
 		Logo:                 req.Logo,
 		BillPerToken:         req.BillPerToken,
 		BillPerRequest:       req.BillPerRequest,

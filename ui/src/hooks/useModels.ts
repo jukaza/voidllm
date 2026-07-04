@@ -45,7 +45,9 @@ export interface ModelResponse {
   sell_per_request?: number | null
   sell_input_per_1m?: number | null
   sell_output_per_1m?: number | null
-  sell_cached_input_per_1m?: number | null
+  sell_cached_input_per_1m?: number
+  sell_cache_write_per_1m?: number | null
+  sell_cache_write_per_1m?: number | null
   logo?: string
   deployments?: DeploymentResponse[]
   routing_strategy?: string
@@ -94,6 +96,7 @@ export interface CreateModelParams {
   sell_input_per_1m?: number
   sell_output_per_1m?: number
   sell_cached_input_per_1m?: number
+  sell_cache_write_per_1m?: number
   logo?: string
   routing_strategy?: string
   sticky_round_robin_limit?: number
@@ -150,6 +153,7 @@ export interface UpdateModelParams {
   sell_input_per_1m?: number
   sell_output_per_1m?: number
   sell_cached_input_per_1m?: number
+  sell_cache_write_per_1m?: number
   logo?: string
   routing_strategy?: string
   sticky_round_robin_limit?: number

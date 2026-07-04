@@ -27,6 +27,8 @@ type usageDataPoint struct {
 	PromptTokens     int64   `json:"prompt_tokens"`
 	CompletionTokens int64   `json:"completion_tokens"`
 	TotalTokens      int64   `json:"total_tokens"`
+	CachedTokens     int64   `json:"cached_tokens"`
+	Revenue          float64 `json:"revenue"`
 	CostEstimate     float64 `json:"cost_estimate"`
 	AvgDurationMS    float64 `json:"avg_duration_ms"`
 }
@@ -111,6 +113,8 @@ func aggregatesToDataPoints(aggs []db.UsageAggregate) []usageDataPoint {
 			PromptTokens:     a.PromptTokens,
 			CompletionTokens: a.CompletionTokens,
 			TotalTokens:      a.TotalTokens,
+			CachedTokens:     a.CachedTokens,
+			Revenue:          a.Revenue,
 			CostEstimate:     a.CostEstimate,
 			AvgDurationMS:    a.AvgDurationMS,
 		}

@@ -12,6 +12,8 @@ import { UpstreamModelSelectModal } from './UpstreamModelSelectModal'
 import type { RouteStepDraft } from './ComboRouteEditor'
 import type { ModelRouteStepInput } from '../../hooks/useModelRoutes'
 import { useCreateModel, useUpdateModel, type BillingMode, type CreateModelParams } from '../../hooks/useModels'
+import { useAllUpstreamModels } from '../../hooks/useUpstreamModels'
+import { deriveCacheSellPrices } from '../../lib/pricing-markup'
 import { useReplaceModelRoutes } from '../../hooks/useModelRoutes'
 import { useToast } from '../../hooks/useToast'
 import { useTranslation } from '../../lib/i18n'
@@ -49,6 +51,8 @@ export function CreateProductDialog({ open, onClose }: CreateProductDialogProps)
   const [sellInputPer1m, setSellInputPer1m] = useState('')
   const [sellOutputPer1m, setSellOutputPer1m] = useState('')
   const [sellCachedInputPer1m, setSellCachedInputPer1m] = useState('')
+  const [sellCacheWritePer1m, setSellCacheWritePer1m] = useState('')
+  const { data: upstreamInventory } = useAllUpstreamModels(true, open)
   const [sellPerRequest, setSellPerRequest] = useState('')
   const [sellMinPerRequest, setSellMinPerRequest] = useState('')
   const [isPublic, setIsPublic] = useState(false)
@@ -84,6 +88,7 @@ export function CreateProductDialog({ open, onClose }: CreateProductDialogProps)
     setSellInputPer1m('')
     setSellOutputPer1m('')
     setSellCachedInputPer1m('')
+    setSellCacheWritePer1m('')
     setSellPerRequest('')
     setSellMinPerRequest('')
     setIsPublic(false)
@@ -139,9 +144,22 @@ export function CreateProductDialog({ open, onClose }: CreateProductDialogProps)
 
     const hasSellInput = sellInputPer1m.trim() && !isNaN(parseFloat(sellInputPer1m))
     const hasSellOutput = sellOutputPer1m.trim() && !isNaN(parseFloat(sellOutputPer1m))
-    const hasSellCached = sellCachedInputPer1m.trim() && !isNaN(parseFloat(sellCachedInputPer1m))
+    let hasSellCached = sellCachedInputPer1m.trim() && !isNaN(parseFloat(sellCachedInputPer1m))
+    let hasSellCacheWrite = sellCacheWritePer1m.trim() && !isNaN(parseFloat(sellCacheWritePer1m))
     const hasSellPerReq = sellPerRequest.trim() && !isNaN(parseFloat(sellPerRequest))
-    const hasAnySellPrice = hasSellInput || hasSellOutput || hasSellCached || hasSellPerReq
+
+    if (hasSellInput || hasSellOutput) {
+      const derived = deriveCacheSellPrices(steps, upstreamInventory?.data ?? [])
+      if (!hasSellCached && derived.sellCached != null) {
+        hasSellCached = true
+      }
+      if (!hasSellCacheWrite && derived.sellCacheWrite != null) {
+        hasSellCacheWrite = true
+      }
+    }
+
+    const hasAnySellPrice =
+      hasSellInput || hasSellOutput || hasSellCached || hasSellCacheWrite || hasSellPerReq
 
     const params: CreateModelParams = {
       name: name.trim(),
@@ -159,7 +177,22 @@ export function CreateProductDialog({ open, onClose }: CreateProductDialogProps)
       params.bill_per_request = billingMode === 'request'
       if (hasSellInput) params.sell_input_per_1m = parseFloat(sellInputPer1m)
       if (hasSellOutput) params.sell_output_per_1m = parseFloat(sellOutputPer1m)
-      if (hasSellCached) params.sell_cached_input_per_1m = parseFloat(sellCachedInputPer1m)
+      if (hasSellCached) {
+        if (sellCachedInputPer1m.trim() && !isNaN(parseFloat(sellCachedInputPer1m))) {
+          params.sell_cached_input_per_1m = parseFloat(sellCachedInputPer1m)
+        } else {
+          const derived = deriveCacheSellPrices(steps, upstreamInventory?.data ?? [])
+          if (derived.sellCached != null) params.sell_cached_input_per_1m = derived.sellCached
+        }
+      }
+      if (hasSellCacheWrite) {
+        if (sellCacheWritePer1m.trim() && !isNaN(parseFloat(sellCacheWritePer1m))) {
+          params.sell_cache_write_per_1m = parseFloat(sellCacheWritePer1m)
+        } else {
+          const derived = deriveCacheSellPrices(steps, upstreamInventory?.data ?? [])
+          if (derived.sellCacheWrite != null) params.sell_cache_write_per_1m = derived.sellCacheWrite
+        }
+      }
       if (hasSellPerReq) params.sell_per_request = parseFloat(sellPerRequest)
       if (billingMode === 'token' && billMinPerRequest && sellMinPerRequest.trim()) {
         params.bill_min_per_request = true
@@ -321,10 +354,11 @@ export function CreateProductDialog({ open, onClose }: CreateProductDialogProps)
               />
               {billingMode === 'token' ? (
                 <>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     <Input label={t('models.sell_input')} type="number" value={sellInputPer1m} onChange={(e) => setSellInputPer1m(e.target.value)} placeholder="3" disabled={isPending} />
                     <Input label={t('models.sell_output')} type="number" value={sellOutputPer1m} onChange={(e) => setSellOutputPer1m(e.target.value)} placeholder="12" disabled={isPending} />
                     <Input label={t('models.sell_cached')} type="number" value={sellCachedInputPer1m} onChange={(e) => setSellCachedInputPer1m(e.target.value)} placeholder="1.5" disabled={isPending} />
+                    <Input label={t('models.sell_cache_write')} type="number" value={sellCacheWritePer1m} onChange={(e) => setSellCacheWritePer1m(e.target.value)} placeholder="4.5" disabled={isPending} />
                   </div>
                   <div className="rounded-lg border border-border/50 p-3 space-y-2">
                     <Toggle

@@ -9,6 +9,8 @@ export interface UpstreamModelItem {
   is_enabled: boolean
   cost_input_per_1m: number | null
   cost_output_per_1m: number | null
+  cost_cached_input_per_1m: number | null
+  cost_cache_write_per_1m: number | null
   metadata: string
   created_at: string
   updated_at: string
@@ -33,6 +35,8 @@ export interface UpdateUpstreamModelParams {
   is_enabled?: boolean
   cost_input_per_1m?: number
   cost_output_per_1m?: number
+  cost_cached_input_per_1m?: number
+  cost_cache_write_per_1m?: number
 }
 
 function providerModelsKey(providerId: string) {

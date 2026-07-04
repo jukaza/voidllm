@@ -533,6 +533,7 @@ func TestGeminiTransformResponse(t *testing.T) {
 		wantPrompt     int
 		wantCompletion int
 		wantTotal      int
+		wantCached     int
 		wantErr        bool
 	}{
 		{
@@ -596,6 +597,17 @@ func TestGeminiTransformResponse(t *testing.T) {
 			wantTotal:      55,
 		},
 		{
+			name: "cached content tokens mapped to prompt_tokens_details",
+			inputJSON: `{
+				"candidates":[{"content":{"role":"model","parts":[{"text":"x"}]},"finishReason":"STOP"}],
+				"usageMetadata":{"promptTokenCount":100,"candidatesTokenCount":10,"totalTokenCount":110,"cachedContentTokenCount":25}
+			}`,
+			wantPrompt:     100,
+			wantCompletion: 10,
+			wantTotal:      110,
+			wantCached:     25,
+		},
+		{
 			name:      "invalid JSON returns error",
 			inputJSON: "not-json",
 			wantErr:   true,
@@ -652,6 +664,14 @@ func TestGeminiTransformResponse(t *testing.T) {
 			}
 			if tc.wantTotal != 0 && resp.Usage.TotalTokens != tc.wantTotal {
 				t.Errorf("usage.total_tokens = %d, want %d", resp.Usage.TotalTokens, tc.wantTotal)
+			}
+			if tc.wantCached != 0 {
+				if resp.Usage.PromptTokensDetails == nil {
+					t.Fatal("usage.prompt_tokens_details is nil")
+				}
+				if resp.Usage.PromptTokensDetails.CachedTokens != tc.wantCached {
+					t.Errorf("cached_tokens = %d, want %d", resp.Usage.PromptTokensDetails.CachedTokens, tc.wantCached)
+				}
 			}
 		})
 	}

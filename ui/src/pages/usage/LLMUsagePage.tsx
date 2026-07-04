@@ -69,6 +69,23 @@ function buildColumns(groupBy: string): Column<UsageDataPoint>[] {
       ),
     },
     {
+      key: 'cached_tokens',
+      header: 'Cached',
+      align: 'right',
+      render: (row) => (
+        <span className="text-text-secondary">{formatTokens(row.cached_tokens ?? 0)}</span>
+      ),
+    },
+    {
+      key: 'fresh_tokens',
+      header: 'Fresh Prompt',
+      align: 'right',
+      render: (row) => {
+        const fresh = Math.max(0, row.prompt_tokens - (row.cached_tokens ?? 0))
+        return <span className="text-text-secondary">{formatTokens(fresh)}</span>
+      },
+    },
+    {
       key: 'prompt_tokens',
       header: 'Prompt Tokens',
       align: 'right',
@@ -93,8 +110,16 @@ function buildColumns(groupBy: string): Column<UsageDataPoint>[] {
       ),
     },
     {
+      key: 'revenue',
+      header: 'Revenue',
+      align: 'right',
+      render: (row) => (
+        <span className="text-text-secondary">{formatCost(row.revenue ?? 0)}</span>
+      ),
+    },
+    {
       key: 'cost_estimate',
-      header: 'Cost',
+      header: 'Upstream Cost',
       align: 'right',
       render: (row) => (
         <span className="text-text-secondary">{formatCost(row.cost_estimate)}</span>
@@ -115,7 +140,9 @@ const USAGE_EXPORT_HEADERS = [
   { key: 'group_key', label: 'Group' },
   { key: 'group_label', label: 'Name' },
   { key: 'total_requests', label: 'Requests' },
+  { key: 'cached_tokens', label: 'Cached Tokens' },
   { key: 'prompt_tokens', label: 'Prompt Tokens' },
+  { key: 'revenue', label: 'Revenue' },
   { key: 'completion_tokens', label: 'Completion Tokens' },
   { key: 'total_tokens', label: 'Total Tokens' },
   { key: 'cost_estimate', label: 'Cost' },
@@ -216,7 +243,10 @@ export default function LLMUsagePage() {
   const isDataLoading = isLoading && (systemWide ? isSystemAdmin : true)
 
   const totalPrompt = usage?.data?.reduce((s, d) => s + d.prompt_tokens, 0) ?? 0
+  const totalCached = usage?.data?.reduce((s, d) => s + (d.cached_tokens ?? 0), 0) ?? 0
+  const totalFresh = Math.max(0, totalPrompt - totalCached)
   const totalCompletion = usage?.data?.reduce((s, d) => s + d.completion_tokens, 0) ?? 0
+  const totalRevenue = usage?.data?.reduce((s, d) => s + (d.revenue ?? 0), 0) ?? 0
 
   const top5 = sortedData.slice(0, 5)
 
@@ -270,7 +300,7 @@ export default function LLMUsagePage() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard
           label="Total Requests"
           value={isDataLoading ? '...' : formatTokens(totals.requests)}
@@ -284,10 +314,16 @@ export default function LLMUsagePage() {
           iconColor="blue"
         />
         <StatCard
-          label="Est. Cost"
+          label="Upstream Cost"
           value={isDataLoading ? '...' : formatCost(totals.cost)}
           icon={<DollarIcon />}
           iconColor="green"
+        />
+        <StatCard
+          label="Revenue"
+          value={isDataLoading ? '...' : formatCost(totalRevenue)}
+          icon={<DollarIcon />}
+          iconColor="blue"
         />
       </div>
 
@@ -385,7 +421,8 @@ export default function LLMUsagePage() {
           <h3 className="text-sm font-semibold text-text-primary mb-4">Token Distribution</h3>
           <DonutChart
             segments={[
-              { label: 'Prompt', value: totalPrompt, color: '#8b5cf6' },
+              { label: 'Fresh prompt', value: totalFresh, color: '#8b5cf6' },
+              { label: 'Cached', value: totalCached, color: '#22c55e' },
               { label: 'Completion', value: totalCompletion, color: '#25252d' },
             ]}
             centerLabel="Total"

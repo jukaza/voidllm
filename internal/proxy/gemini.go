@@ -26,8 +26,9 @@ const maxGeminiToolBlocks = 64
 type GeminiAdapter struct {
 	streaming        bool   // set during TransformRequest when stream:true is detected
 	modelName        string // stored from TransformRequest for use in TransformResponse
-	promptTokens     int    // accumulated from usageMetadata during streaming
-	completionTokens int    // accumulated from usageMetadata during streaming
+	promptTokens     int // accumulated from usageMetadata during streaming
+	completionTokens int // accumulated from usageMetadata during streaming
+	cachedTokens     int // accumulated from usageMetadata.cachedContentTokenCount
 	// doneSent is true after a terminal chunk (finishReason present) has been
 	// written. The blank SSE delimiter that follows is then converted to
 	// data: [DONE] and this flag is cleared.
@@ -136,9 +137,10 @@ type geminiResponse struct {
 		FinishReason string `json:"finishReason"`
 	} `json:"candidates"`
 	UsageMetadata struct {
-		PromptTokenCount     int `json:"promptTokenCount"`
-		CandidatesTokenCount int `json:"candidatesTokenCount"`
-		TotalTokenCount      int `json:"totalTokenCount"`
+		PromptTokenCount          int `json:"promptTokenCount"`
+		CandidatesTokenCount      int `json:"candidatesTokenCount"`
+		TotalTokenCount           int `json:"totalTokenCount"`
+		CachedContentTokenCount   int `json:"cachedContentTokenCount"`
 	} `json:"usageMetadata"`
 }
 
@@ -699,11 +701,12 @@ func (a *GeminiAdapter) TransformResponse(body []byte) ([]byte, error) {
 				FinishReason: finishReason,
 			},
 		},
-		Usage: openAIUsage{
-			PromptTokens:     gr.UsageMetadata.PromptTokenCount,
-			CompletionTokens: gr.UsageMetadata.CandidatesTokenCount,
-			TotalTokens:      gr.UsageMetadata.TotalTokenCount,
-		},
+		Usage: geminiUsageFromCounts(
+			gr.UsageMetadata.PromptTokenCount,
+			gr.UsageMetadata.CandidatesTokenCount,
+			gr.UsageMetadata.TotalTokenCount,
+			gr.UsageMetadata.CachedContentTokenCount,
+		),
 	}
 
 	out, err := jsonx.Marshal(resp)
@@ -818,6 +821,9 @@ func (a *GeminiAdapter) TransformStreamLine(line []byte) ([][]byte, error) {
 	}
 	if gr.UsageMetadata.CandidatesTokenCount > 0 || hasFinish {
 		a.completionTokens = gr.UsageMetadata.CandidatesTokenCount
+	}
+	if gr.UsageMetadata.CachedContentTokenCount > 0 || hasFinish {
+		a.cachedTokens = gr.UsageMetadata.CachedContentTokenCount
 	}
 
 	// Drop content-free intermediate chunks that carry no delta text, no tool
@@ -974,7 +980,21 @@ func (a *GeminiAdapter) StreamUsage() UsageInfo {
 		PromptTokens:     a.promptTokens,
 		CompletionTokens: a.completionTokens,
 		TotalTokens:      a.promptTokens + a.completionTokens,
+		CachedTokens:     a.cachedTokens,
 	}
+}
+
+// geminiUsageFromCounts maps Gemini usage counts to OpenAI-format usage for billing.
+func geminiUsageFromCounts(prompt, completion, total, cached int) openAIUsage {
+	usage := openAIUsage{
+		PromptTokens:     prompt,
+		CompletionTokens: completion,
+		TotalTokens:      total,
+	}
+	if cached > 0 {
+		usage.PromptTokensDetails = &openAIPromptTokensDetails{CachedTokens: cached}
+	}
+	return usage
 }
 
 // ── Helper functions ──────────────────────────────────────────────────────────

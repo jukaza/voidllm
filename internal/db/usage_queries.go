@@ -25,6 +25,8 @@ type UsageAggregate struct {
 	PromptTokens     int64
 	CompletionTokens int64
 	TotalTokens      int64
+	CachedTokens     int64
+	Revenue          float64
 	CostEstimate     float64
 	AvgDurationMS    float64
 }
@@ -108,16 +110,16 @@ func (d *DB) queryUsageAggregates(ctx context.Context, filter *UsageFilter, from
 		selectCol := coalesceSelectCol(groupCol)
 		query = "SELECT " + selectCol + ", COUNT(*), " +
 			"COALESCE(SUM(prompt_tokens), 0), COALESCE(SUM(completion_tokens), 0), " +
-			"COALESCE(SUM(total_tokens), 0), COALESCE(SUM(cost_estimate), 0), " +
-			"COALESCE(AVG(request_duration_ms), 0) " +
+			"COALESCE(SUM(total_tokens), 0), COALESCE(SUM(cached_tokens), 0), COALESCE(SUM(revenue), 0), " +
+			"COALESCE(SUM(cost_estimate), 0), COALESCE(AVG(request_duration_ms), 0) " +
 			"FROM usage_events " + where +
 			" GROUP BY " + groupCol +
 			" ORDER BY " + groupCol
 	} else {
 		query = "SELECT '' AS group_key, COUNT(*), " +
 			"COALESCE(SUM(prompt_tokens), 0), COALESCE(SUM(completion_tokens), 0), " +
-			"COALESCE(SUM(total_tokens), 0), COALESCE(SUM(cost_estimate), 0), " +
-			"COALESCE(AVG(request_duration_ms), 0) " +
+			"COALESCE(SUM(total_tokens), 0), COALESCE(SUM(cached_tokens), 0), COALESCE(SUM(revenue), 0), " +
+			"COALESCE(SUM(cost_estimate), 0), COALESCE(AVG(request_duration_ms), 0) " +
 			"FROM usage_events " + where
 	}
 
@@ -136,6 +138,8 @@ func (d *DB) queryUsageAggregates(ctx context.Context, filter *UsageFilter, from
 			&a.PromptTokens,
 			&a.CompletionTokens,
 			&a.TotalTokens,
+			&a.CachedTokens,
+			&a.Revenue,
 			&a.CostEstimate,
 			&a.AvgDurationMS,
 		); err != nil {

@@ -83,7 +83,12 @@ export function UpstreamModelsSection({ providerId }: UpstreamModelsSectionProps
         return {
           upstream_id: id,
           cost: dm?.known_cost
-            ? { in: dm.known_cost.in, out: dm.known_cost.out }
+            ? {
+                in: dm.known_cost.in,
+                out: dm.known_cost.out,
+                cached_in: dm.known_cost.cached_in,
+                cache_write: dm.known_cost.cache_write,
+              }
             : undefined,
         }
       }),

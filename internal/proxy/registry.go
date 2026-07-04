@@ -96,8 +96,10 @@ type RouteStep struct {
 	ProviderDefaultKey string
 	// ProviderRPMLimit is the provider pool RPM cap (0 = unlimited).
 	ProviderRPMLimit int
-	CostInputPer1M  *float64
-	CostOutputPer1M *float64
+	CostInputPer1M       *float64
+	CostOutputPer1M      *float64
+	CostCachedInputPer1M *float64
+	CostCacheWritePer1M  *float64
 }
 
 // LogValue implements slog.LogValuer to prevent the upstream API key from
@@ -149,6 +151,7 @@ type Model struct {
 	SellInputPer1M       *float64
 	SellOutputPer1M      *float64
 	SellCachedInputPer1M *float64
+	SellCacheWritePer1M  *float64
 	// BillPerToken / BillPerRequest are mutually exclusive wallet billing modes.
 	BillPerToken   bool
 	BillPerRequest bool

@@ -23,8 +23,10 @@ type importUpstreamModelsRequest struct {
 type updateUpstreamModelRequest struct {
 	DisplayName     *string  `json:"display_name"`
 	IsEnabled       *bool    `json:"is_enabled"`
-	CostInputPer1M  *float64 `json:"cost_input_per_1m"`
-	CostOutputPer1M *float64 `json:"cost_output_per_1m"`
+	CostInputPer1M       *float64 `json:"cost_input_per_1m"`
+	CostOutputPer1M      *float64 `json:"cost_output_per_1m"`
+	CostCachedInputPer1M *float64 `json:"cost_cached_input_per_1m"`
+	CostCacheWritePer1M  *float64 `json:"cost_cache_write_per_1m"`
 }
 
 func upstreamModelToJSON(m *db.ProviderUpstreamModel) fiber.Map {
@@ -34,8 +36,10 @@ func upstreamModelToJSON(m *db.ProviderUpstreamModel) fiber.Map {
 		"upstream_id":       m.UpstreamID,
 		"display_name":      m.DisplayName,
 		"is_enabled":        m.IsEnabled,
-		"cost_input_per_1m": m.CostInputPer1M,
-		"cost_output_per_1m": m.CostOutputPer1M,
+		"cost_input_per_1m":        m.CostInputPer1M,
+		"cost_output_per_1m":       m.CostOutputPer1M,
+		"cost_cached_input_per_1m": m.CostCachedInputPer1M,
+		"cost_cache_write_per_1m":  m.CostCacheWritePer1M,
 		"metadata":          m.Metadata,
 		"created_at":        m.CreatedAt,
 		"updated_at":        m.UpdatedAt,
@@ -96,13 +100,14 @@ func (h *Handler) ImportProviderUpstreamModels(c fiber.Ctx) error {
 			results = append(results, res)
 			continue
 		}
-		var inCost, outCost *float64
+		var inCost, outCost, cachedInCost, cacheWriteCost *float64
 		if spec.Cost != nil {
-			inCost, outCost = &spec.Cost.In, &spec.Cost.Out
+			inCost, outCost, cachedInCost, cacheWriteCost = provider.OptionalCostFields(spec.Cost)
 		}
 		m, err := h.DB.UpsertProviderUpstreamModel(ctx, db.UpsertProviderUpstreamModelParams{
 			ProviderID: providerID, UpstreamID: spec.UpstreamID,
 			IsEnabled: true, CostInputPer1M: inCost, CostOutputPer1M: outCost,
+			CostCachedInputPer1M: cachedInCost, CostCacheWritePer1M: cacheWriteCost,
 		})
 		if err != nil {
 			res.Error = "import failed"
@@ -137,8 +142,12 @@ func (h *Handler) UpdateProviderUpstreamModel(c fiber.Ctx) error {
 		return apierror.BadRequest(c, "invalid request body")
 	}
 	updated, err := h.DB.UpdateProviderUpstreamModel(ctx, modelID, db.UpdateProviderUpstreamModelParams{
-		DisplayName: req.DisplayName, IsEnabled: req.IsEnabled,
-		CostInputPer1M: req.CostInputPer1M, CostOutputPer1M: req.CostOutputPer1M,
+		DisplayName:          req.DisplayName,
+		IsEnabled:            req.IsEnabled,
+		CostInputPer1M:       req.CostInputPer1M,
+		CostOutputPer1M:      req.CostOutputPer1M,
+		CostCachedInputPer1M: req.CostCachedInputPer1M,
+		CostCacheWritePer1M:  req.CostCacheWritePer1M,
 	})
 	if err != nil {
 		return apierror.InternalError(c, "failed to update upstream model")

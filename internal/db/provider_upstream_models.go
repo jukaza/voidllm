@@ -10,7 +10,8 @@ import (
 )
 
 const providerUpstreamModelSelectColumns = "id, provider_id, upstream_id, display_name, is_enabled, " +
-	"cost_input_per_1m, cost_output_per_1m, metadata, created_at, updated_at"
+	"cost_input_per_1m, cost_output_per_1m, cost_cached_input_per_1m, cost_cache_write_per_1m, " +
+	"metadata, created_at, updated_at"
 
 // ProviderUpstreamModel is one upstream model ID in a provider's inventory.
 type ProviderUpstreamModel struct {
@@ -19,11 +20,13 @@ type ProviderUpstreamModel struct {
 	UpstreamID      string
 	DisplayName     string
 	IsEnabled       bool
-	CostInputPer1M  *float64
-	CostOutputPer1M *float64
-	Metadata        string
-	CreatedAt       string
-	UpdatedAt       string
+	CostInputPer1M       *float64
+	CostOutputPer1M      *float64
+	CostCachedInputPer1M *float64
+	CostCacheWritePer1M  *float64
+	Metadata             string
+	CreatedAt            string
+	UpdatedAt            string
 }
 
 // UpsertProviderUpstreamModelParams holds input for create-or-update by (provider, upstream_id).
@@ -32,18 +35,22 @@ type UpsertProviderUpstreamModelParams struct {
 	UpstreamID      string
 	DisplayName     string
 	IsEnabled       bool
-	CostInputPer1M  *float64
-	CostOutputPer1M *float64
-	Metadata        string
+	CostInputPer1M       *float64
+	CostOutputPer1M      *float64
+	CostCachedInputPer1M *float64
+	CostCacheWritePer1M  *float64
+	Metadata             string
 }
 
 // UpdateProviderUpstreamModelParams holds optional update fields.
 type UpdateProviderUpstreamModelParams struct {
-	DisplayName     *string
-	IsEnabled       *bool
-	CostInputPer1M  *float64
-	CostOutputPer1M *float64
-	Metadata        *string
+	DisplayName          *string
+	IsEnabled            *bool
+	CostInputPer1M       *float64
+	CostOutputPer1M      *float64
+	CostCachedInputPer1M *float64
+	CostCacheWritePer1M  *float64
+	Metadata             *string
 }
 
 // UpsertProviderUpstreamModel inserts or updates an upstream model row.
@@ -62,10 +69,12 @@ func (d *DB) UpsertProviderUpstreamModel(ctx context.Context, params UpsertProvi
 			metadata = existing.Metadata
 		}
 		return d.UpdateProviderUpstreamModel(ctx, existing.ID, UpdateProviderUpstreamModelParams{
-			DisplayName:     &displayName,
-			CostInputPer1M:  params.CostInputPer1M,
-			CostOutputPer1M: params.CostOutputPer1M,
-			Metadata:        &metadata,
+			DisplayName:          &displayName,
+			CostInputPer1M:       params.CostInputPer1M,
+			CostOutputPer1M:      params.CostOutputPer1M,
+			CostCachedInputPer1M: params.CostCachedInputPer1M,
+			CostCacheWritePer1M:  params.CostCacheWritePer1M,
+			Metadata:             &metadata,
 		})
 	}
 
@@ -87,15 +96,18 @@ func (d *DB) UpsertProviderUpstreamModel(ctx context.Context, params UpsertProvi
 
 	p := d.dialect.Placeholder
 	insertQuery := "INSERT INTO provider_upstream_models " +
-		"(id, provider_id, upstream_id, display_name, is_enabled, cost_input_per_1m, cost_output_per_1m, metadata, created_at, updated_at) " +
-		"VALUES (" + p(1) + ", " + p(2) + ", " + p(3) + ", " + p(4) + ", " + p(5) + ", " + p(6) + ", " + p(7) + ", " + p(8) + ", CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+		"(id, provider_id, upstream_id, display_name, is_enabled, cost_input_per_1m, cost_output_per_1m, " +
+		"cost_cached_input_per_1m, cost_cache_write_per_1m, metadata, created_at, updated_at) " +
+		"VALUES (" + p(1) + ", " + p(2) + ", " + p(3) + ", " + p(4) + ", " + p(5) + ", " + p(6) + ", " + p(7) + ", " +
+		p(8) + ", " + p(9) + ", " + p(10) + ", CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
 	selectQuery := "SELECT " + providerUpstreamModelSelectColumns + " FROM provider_upstream_models WHERE id = " + p(1)
 
 	var row *ProviderUpstreamModel
 	err = d.WithTx(ctx, func(q Querier) error {
 		if _, execErr := q.ExecContext(ctx, insertQuery,
 			id.String(), params.ProviderID, params.UpstreamID, displayName, isEnabled,
-			params.CostInputPer1M, params.CostOutputPer1M, metadata,
+			params.CostInputPer1M, params.CostOutputPer1M,
+			params.CostCachedInputPer1M, params.CostCacheWritePer1M, metadata,
 		); execErr != nil {
 			return translateError(execErr)
 		}
@@ -172,7 +184,8 @@ func (d *DB) ListAllProviderUpstreamModels(ctx context.Context, enabledOnly bool
 	}
 	where := " WHERE " + strings.Join(conditions, " AND ")
 	query := "SELECT m.id, m.provider_id, m.upstream_id, m.display_name, m.is_enabled, " +
-		"m.cost_input_per_1m, m.cost_output_per_1m, m.metadata, m.created_at, m.updated_at" +
+		"m.cost_input_per_1m, m.cost_output_per_1m, m.cost_cached_input_per_1m, m.cost_cache_write_per_1m, " +
+		"m.metadata, m.created_at, m.updated_at" +
 		" FROM provider_upstream_models m" +
 		" INNER JOIN providers p ON p.id = m.provider_id" + where +
 		" ORDER BY m.provider_id ASC, m.upstream_id ASC"
@@ -222,6 +235,12 @@ func (d *DB) UpdateProviderUpstreamModel(ctx context.Context, id string, params 
 	}
 	if params.CostOutputPer1M != nil {
 		addSet("cost_output_per_1m", *params.CostOutputPer1M)
+	}
+	if params.CostCachedInputPer1M != nil {
+		addSet("cost_cached_input_per_1m", *params.CostCachedInputPer1M)
+	}
+	if params.CostCacheWritePer1M != nil {
+		addSet("cost_cache_write_per_1m", *params.CostCacheWritePer1M)
 	}
 	if params.Metadata != nil {
 		addSet("metadata", *params.Metadata)
@@ -273,7 +292,8 @@ func scanProviderUpstreamModel(scanner interface{ Scan(...any) error }) (*Provid
 	var isEnabled int
 	err := scanner.Scan(
 		&m.ID, &m.ProviderID, &m.UpstreamID, &m.DisplayName, &isEnabled,
-		&m.CostInputPer1M, &m.CostOutputPer1M, &m.Metadata, &m.CreatedAt, &m.UpdatedAt,
+		&m.CostInputPer1M, &m.CostOutputPer1M, &m.CostCachedInputPer1M, &m.CostCacheWritePer1M,
+		&m.Metadata, &m.CreatedAt, &m.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err

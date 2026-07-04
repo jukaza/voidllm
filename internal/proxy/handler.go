@@ -1691,14 +1691,16 @@ func (p *ProxyHandler) logUsageEvent(keyInfo *auth.KeyInfo, model Model, ui Usag
 	// Legacy registry entries may omit billing flags; infer token billing when
 	// sell prices are configured and no explicit mode is enabled.
 	if !billPerToken && !billPerRequest &&
-		(model.SellInputPer1M != nil || model.SellOutputPer1M != nil) {
+		(model.SellInputPer1M != nil || model.SellOutputPer1M != nil ||
+			model.SellCachedInputPer1M != nil || model.SellCacheWritePer1M != nil) {
 		billPerToken = true
 	}
 
 	if billPerRequest && model.SellPerRequest != nil && *model.SellPerRequest > 0 {
 		rev = *model.SellPerRequest
 		hasRevenue = true
-	} else if billPerToken && (model.SellInputPer1M != nil || model.SellOutputPer1M != nil) {
+	} else if billPerToken && (model.SellInputPer1M != nil || model.SellOutputPer1M != nil ||
+		model.SellCachedInputPer1M != nil || model.SellCacheWritePer1M != nil) {
 		sellIn, sellOut := 0.0, 0.0
 		if model.SellInputPer1M != nil {
 			sellIn = *model.SellInputPer1M
@@ -1714,9 +1716,16 @@ func (p *ProxyHandler) logUsageEvent(keyInfo *auth.KeyInfo, model Model, ui Usag
 		if freshPrompt < 0 {
 			freshPrompt = 0
 		}
+		cacheWriteRate := sellIn
+		if model.SellCacheWritePer1M != nil {
+			cacheWriteRate = *model.SellCacheWritePer1M
+		}
 		rev = float64(freshPrompt)/1_000_000*sellIn +
 			float64(ui.CachedTokens)/1_000_000*cachedRate +
 			float64(ui.CompletionTokens)/1_000_000*sellOut
+		if ui.CacheWriteTokens > 0 {
+			rev += float64(ui.CacheWriteTokens) / 1_000_000 * cacheWriteRate
+		}
 		if model.BillMinPerRequest && model.SellMinPerRequest != nil && *model.SellMinPerRequest > 0 {
 			if rev < *model.SellMinPerRequest {
 				rev = *model.SellMinPerRequest
