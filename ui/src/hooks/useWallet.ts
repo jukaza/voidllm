@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import apiClient from '../api/client'
+import { useMe } from './useMe'
 
 export interface WalletResponse {
   balance: number
@@ -81,12 +82,16 @@ export function useCreateTopup() {
 // ---------------------------------------------------------------------------
 
 export function useAdminTopups(status: string, cursor: string, limit = 25) {
+  const { data: me } = useMe()
+  const isAdmin = me?.is_system_admin ?? false
+
   return useQuery({
     queryKey: ['admin-topups', status, cursor, limit],
     queryFn: () =>
       apiClient<Paginated<TopupRequestItem>>(
         `/topups?limit=${limit}${status ? `&status=${status}` : ''}${cursor ? `&cursor=${cursor}` : ''}`,
       ),
+    enabled: isAdmin,
   })
 }
 

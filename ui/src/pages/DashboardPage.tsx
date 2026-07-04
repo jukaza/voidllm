@@ -1,43 +1,21 @@
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { PageHeader } from '../components/ui/PageHeader'
-import { StatCard } from '../components/ui/StatCard'
 import { Banner } from '../components/ui/Banner'
 import { Dialog } from '../components/ui/Dialog'
 import { Button } from '../components/ui/Button'
 import { Markdown } from '../components/ui/Markdown'
-import { AreaChart } from '../components/ui/charts/AreaChart'
-import { DonutChart } from '../components/ui/charts/DonutChart'
-import { HorizontalBar } from '../components/ui/charts/HorizontalBar'
-import { MiniTable } from '../components/ui/charts/MiniTable'
-import type { MiniTableColumn } from '../components/ui/charts/MiniTable'
 import { useDashboardStats } from '../hooks/useDashboardStats'
 import type { BudgetWarning } from '../hooks/useDashboardStats'
-import { useTopModels } from '../hooks/useTopModels'
-import type { UsageDataPoint } from '../hooks/useUsage'
-import { useMyUsage } from '../hooks/useUsage'
-import { useModelHealth } from '../hooks/useModelHealth'
-import type { ModelHealthInfo } from '../hooks/useModelHealth'
 import { useUpdateCheck } from '../hooks/useUpdateCheck'
-import { formatTokens, formatNumber } from '../lib/utils'
+import { useMe } from '../hooks/useMe'
+import { useMyWallet, useAdminTopups } from '../hooks/useWallet'
+import { useUsageLive } from '../hooks/useUsageLive'
+import { formatNumber, formatCost, formatTokens } from '../lib/utils'
 import { useTranslation } from '../lib/i18n'
 
 // ---------------------------------------------------------------------------
-// Time range helpers
-// ---------------------------------------------------------------------------
-
-type TimeRange = '24h' | '7d' | '30d'
-
-function getTimeRange(range: TimeRange): { from: string; to: string } {
-  const to = new Date()
-  const from = new Date()
-  if (range === '24h') from.setHours(from.getHours() - 24)
-  else if (range === '7d') from.setDate(from.getDate() - 7)
-  else from.setDate(from.getDate() - 30)
-  return { from: from.toISOString(), to: to.toISOString() }
-}
-
-// ---------------------------------------------------------------------------
-// BudgetWarningBanners
+// Helpers
 // ---------------------------------------------------------------------------
 
 function BudgetWarningBanners({ warnings }: { warnings: BudgetWarning[] }) {
@@ -56,130 +34,23 @@ function BudgetWarningBanners({ warnings }: { warnings: BudgetWarning[] }) {
 }
 
 // ---------------------------------------------------------------------------
-// TimeRangePills
+// Icons
 // ---------------------------------------------------------------------------
 
-function TimeRangePills({
-  value,
-  onChange,
-}: {
-  value: TimeRange
-  onChange: (r: TimeRange) => void
-}) {
-  const ranges: TimeRange[] = ['24h', '7d', '30d']
-  return (
-    <div className="flex items-center gap-1">
-      {ranges.map((r) => (
-        <button
-          key={r}
-          type="button"
-          onClick={() => onChange(r)}
-          className={
-            value === r
-              ? 'px-3 py-1 rounded-md text-xs font-medium bg-accent/20 text-accent border border-accent/30'
-              : 'px-3 py-1 rounded-md text-xs font-medium text-text-tertiary hover:text-text-secondary hover:bg-bg-tertiary border border-transparent transition-colors'
-          }
-        >
-          {r}
-        </button>
-      ))}
-    </div>
-  )
+const iconProps = {
+  width: 16,
+  height: 16,
+  viewBox: '0 0 24 24',
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 2,
+  strokeLinecap: 'round' as const,
+  strokeLinejoin: 'round' as const,
 }
-
-// ---------------------------------------------------------------------------
-// Performance badge
-// ---------------------------------------------------------------------------
-
-function PerfBadge({ ms }: { ms: number }) {
-  if (ms <= 0) return null
-  if (ms < 100) {
-    return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-success/10 text-success">
-        Fast
-      </span>
-    )
-  }
-  if (ms < 500) {
-    return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-warning/10 text-warning">
-        Normal
-      </span>
-    )
-  }
-  return (
-    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-error/10 text-error">
-      Slow
-    </span>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// MiniTable column definitions — uses health check latency (server ping)
-// instead of avg request duration which is misleading for streaming.
-// ---------------------------------------------------------------------------
-
-interface PerfRow {
-  group_key: string
-  health_latency_ms: number
-  tps: number
-}
-
-function buildPerfRows(topModels: UsageDataPoint[], healthData: ModelHealthInfo[]): PerfRow[] {
-  const healthMap = new Map(healthData.map((h) => [h.name, h]))
-  return topModels.map((m) => {
-    const h = healthMap.get(m.group_key)
-    const tps = m.total_requests > 0 && m.avg_duration_ms > 0
-      ? Math.round((m.total_tokens / m.total_requests) / (m.avg_duration_ms / 1000))
-      : 0
-    return {
-      group_key: m.group_key,
-      health_latency_ms: h?.latency_ms ?? 0,
-      tps,
-    }
-  })
-}
-
-const performanceColumns: MiniTableColumn<PerfRow>[] = [
-  {
-    key: 'model',
-    header: 'Model',
-    render: (row) => (
-      <span className="font-mono text-text-primary text-xs">{row.group_key}</span>
-    ),
-  },
-  {
-    key: 'latency',
-    header: 'Latency',
-    align: 'right',
-    render: (row) => (
-      <div className="flex items-center justify-end gap-2">
-        <span className="text-text-secondary tabular-nums">
-          {row.health_latency_ms > 0 ? `${row.health_latency_ms}ms` : '—'}
-        </span>
-        <PerfBadge ms={row.health_latency_ms} />
-      </div>
-    ),
-  },
-  {
-    key: 'tps',
-    header: 'Throughput',
-    align: 'right',
-    render: (row) => (
-      <span className="text-text-secondary tabular-nums">
-        {row.tps > 0 ? `${formatNumber(row.tps)} tok/s` : '—'}
-      </span>
-    ),
-  },
-]
-
-// ---------------------------------------------------------------------------
-// Icons (inline SVGs to avoid a dependency)
-// ---------------------------------------------------------------------------
 
 function IconActivity() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg {...iconProps}>
       <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
     </svg>
   )
@@ -187,7 +58,7 @@ function IconActivity() {
 
 function IconZap() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg {...iconProps}>
       <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
     </svg>
   )
@@ -195,7 +66,7 @@ function IconZap() {
 
 function IconKey() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg {...iconProps}>
       <circle cx="7.5" cy="15.5" r="5.5" />
       <path d="M21 2l-9.6 9.6" />
       <path d="M15.5 7.5l3 3L22 7l-3-3" />
@@ -203,32 +74,54 @@ function IconKey() {
   )
 }
 
-function IconHeartPulse() {
+// ---------------------------------------------------------------------------
+// Sub-components
+// ---------------------------------------------------------------------------
+
+function MetricPill({
+  icon,
+  label,
+  value,
+  loading,
+}: {
+  icon: React.ReactNode
+  label: string
+  value: string
+  loading?: boolean
+}) {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
-      <path d="M3.22 12H9.5l1.5-3 2 4.5 1.5-3h5.27" />
-    </svg>
+    <div className="flex items-center gap-3 rounded-xl border border-white/5 bg-bg-primary/60 px-4 py-3">
+      <span className="rounded-lg bg-accent/10 p-2 text-accent">{icon}</span>
+      <div className="min-w-0">
+        <div className="text-lg font-semibold tabular-nums text-text-primary">
+          {loading ? '...' : value}
+        </div>
+        <div className="truncate text-xs text-text-tertiary">{label}</div>
+      </div>
+    </div>
   )
 }
 
-function IconAlertTriangle() {
+function HeroLinkButton({
+  to,
+  children,
+  primary,
+}: {
+  to: string
+  children: React.ReactNode
+  primary?: boolean
+}) {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
-      <line x1="12" y1="9" x2="12" y2="13" />
-      <line x1="12" y1="17" x2="12.01" y2="17" />
-    </svg>
-  )
-}
-
-function IconXCircle() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10" />
-      <line x1="15" y1="9" x2="9" y2="15" />
-      <line x1="9" y1="9" x2="15" y2="15" />
-    </svg>
+    <Link
+      to={to}
+      className={
+        primary
+          ? 'inline-flex items-center justify-center rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white no-underline transition-all duration-200 hover:bg-accent/90 hover:shadow-[0_0_20px_var(--accent-glow)]'
+          : 'inline-flex items-center justify-center rounded-lg border border-border bg-bg-primary/80 px-4 py-2 text-sm font-medium text-text-secondary no-underline transition-colors hover:border-accent/30 hover:text-text-primary'
+      }
+    >
+      {children}
+    </Link>
   )
 }
 
@@ -237,16 +130,22 @@ function IconXCircle() {
 // ---------------------------------------------------------------------------
 
 export default function DashboardPage() {
+  const { data: me } = useMe()
   const { data: stats, isLoading: statsLoading } = useDashboardStats()
+  const { data: wallet, isLoading: walletLoading } = useMyWallet()
   const { data: updateInfo } = useUpdateCheck()
   const { t } = useTranslation()
-  const [timeRange, setTimeRange] = useState<TimeRange>('7d')
   const [showUpdateDialog, setShowUpdateDialog] = useState(false)
+
+  const isAdmin = me?.is_system_admin ?? false
+  const { live, connected } = useUsageLive()
+  const { data: pendingTopups } = useAdminTopups('pending', '', 5)
 
   const availableVersion = updateInfo?.available_version
   const [manualDismiss, setManualDismiss] = useState(false)
-
-  const updateDismissed = manualDismiss || !availableVersion ||
+  const updateDismissed =
+    manualDismiss ||
+    !availableVersion ||
     localStorage.getItem(`update_dismissed_${availableVersion}`) === 'true'
 
   function dismissUpdate() {
@@ -257,66 +156,39 @@ export default function DashboardPage() {
     setShowUpdateDialog(false)
   }
 
-  const { data: topModels, isLoading: modelsLoading } = useTopModels(true)
-  const { data: modelHealth } = useModelHealth()
-
-  // Performance rows combining usage data with health check latency
-  const perfRows = useMemo(
-    () => buildPerfRows(topModels ?? [], modelHealth?.models ?? []),
-    [topModels, modelHealth?.models],
-  )
-
-  // Time-series data for the area chart
-  const { from, to } = useMemo(() => getTimeRange(timeRange), [timeRange])
-
-  const { data: usageSeries, isLoading: seriesLoading } = useMyUsage(from, to, 'day')
-
-  const description = t('dashboard.overview_desc')
-
-  // Build area chart data from usage series
-  const areaData = useMemo(() => {
-    if (!usageSeries?.data) return []
-    return usageSeries.data.map((d) => ({
-      label: d.group_key,
-      value: d.total_requests,
-    }))
-  }, [usageSeries])
-
-  // Build horizontal bar data for top models
-  const topModelsBars = useMemo(() => {
-    if (!topModels) return []
-    return topModels.slice(0, 6).map((m) => ({
-      label: m.group_key,
-      value: m.total_tokens,
-      detail: `${formatTokens(m.total_tokens)} Tokens`,
-    }))
-  }, [topModels])
-
-  // Build donut segments from prompt/completion token split
-  const donutSegments = useMemo(() => {
-    if (!topModels || topModels.length === 0) return []
-    const totalPrompt = topModels.reduce((acc, m) => acc + m.prompt_tokens, 0)
-    const totalCompletion = topModels.reduce((acc, m) => acc + m.completion_tokens, 0)
-    if (totalPrompt + totalCompletion === 0) return []
-    return [
-      { label: 'Prompt', value: totalPrompt, color: '#8b5cf6' },
-      { label: 'Completion', value: totalCompletion, color: '#25252d' },
-    ]
-  }, [topModels])
-
-  const skeletonValue = '...'
+  const showGettingStarted =
+    !statsLoading && ((stats?.active_keys ?? 0) === 0 || (stats?.requests_24h ?? 0) === 0)
+  const lowBalance = wallet != null && wallet.balance <= 0
+  const pendingTopupCount = pendingTopups?.data?.length ?? 0
+  const displayName = me?.display_name || me?.email?.split('@')[0] || ''
 
   return (
     <>
-      <PageHeader title={t('sidebar.dashboard')} description={description} />
+      <PageHeader
+        title={displayName ? t('dashboard.welcome', { name: displayName }) : t('sidebar.dashboard')}
+        description={t('dashboard.overview_desc')}
+      />
 
       <div className="space-y-6">
-        {/* Budget warnings */}
         {(stats?.budget_warnings?.length ?? 0) > 0 && (
           <BudgetWarningBanners warnings={stats?.budget_warnings ?? []} />
         )}
 
-        {/* Update notification */}
+        {lowBalance && (
+          <Link to="/wallet" className="block no-underline">
+            <Banner variant="warning" title={t('dashboard.low_balance')} />
+          </Link>
+        )}
+
+        {isAdmin && pendingTopupCount > 0 && (
+          <Link to="/marketplace" className="block no-underline">
+            <Banner
+              variant="info"
+              title={t('dashboard.pending_topups', { count: pendingTopupCount })}
+            />
+          </Link>
+        )}
+
         {updateInfo?.needs_update && !updateDismissed && (
           <div onClick={() => setShowUpdateDialog(true)} className="cursor-pointer">
             <Banner
@@ -330,154 +202,104 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Stat cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          <StatCard
-            label={t('dashboard.requests') + " (24h)"}
-            value={statsLoading ? skeletonValue : formatNumber(stats?.requests_24h ?? 0)}
-            icon={<IconActivity />}
-            iconColor="purple"
+        {/* Hero + metrics */}
+        <div className="relative overflow-hidden rounded-2xl border border-accent/15 bg-bg-secondary">
+          <div
+            className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full opacity-40"
+            style={{ background: 'radial-gradient(circle, rgba(139,92,246,0.25) 0%, transparent 70%)' }}
+            aria-hidden="true"
           />
-          <StatCard
-            label={t('dashboard.tokens') + " (24h)"}
-            value={statsLoading ? skeletonValue : formatTokens(stats?.tokens_24h ?? 0)}
-            icon={<IconZap />}
-            iconColor="blue"
-          />
-          <StatCard
-            label={t('dashboard.keys')}
-            value={statsLoading ? skeletonValue : formatNumber(stats?.active_keys ?? 0)}
-            icon={<IconKey />}
-            iconColor="pink"
-          />
+
+          <div className="relative p-6 lg:p-8">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider text-accent">
+                  {t('dashboard.period_24h')}
+                </p>
+                <p className="mt-3 text-4xl font-bold tabular-nums tracking-tight text-text-primary lg:text-5xl">
+                  {walletLoading ? '...' : formatCost(wallet?.balance ?? 0)}
+                </p>
+                <p className="mt-1 text-sm text-text-tertiary">{t('dashboard.balance')}</p>
+              </div>
+
+              <div className="flex flex-wrap gap-2 lg:justify-end">
+                <HeroLinkButton to="/playground" primary>
+                  {t('dashboard.action_playground')}
+                </HeroLinkButton>
+                <HeroLinkButton to="/keys">
+                  {t('dashboard.action_keys')}
+                </HeroLinkButton>
+                {lowBalance && (
+                  <HeroLinkButton to="/wallet">
+                    {t('dashboard.hero_cta_topup')}
+                  </HeroLinkButton>
+                )}
+              </div>
+            </div>
+
+            {isAdmin && connected && live && (
+              <Link
+                to="/analytics"
+                className="mt-5 inline-flex flex-wrap items-center gap-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-xs no-underline transition-colors hover:border-emerald-500/35"
+              >
+                <span className="inline-flex items-center gap-1.5 font-medium text-emerald-400">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+                  {t('dashboard.live_status')}
+                </span>
+                <span className="text-text-secondary">{t('analytics.rpm')}: {formatNumber(live.rpm)}</span>
+                <span className="text-text-secondary">{t('analytics.tpm')}: {formatNumber(live.tpm)}</span>
+                <span className="text-text-secondary">{t('analytics.active')}: {formatNumber(live.active_count)}</span>
+              </Link>
+            )}
+
+            <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <MetricPill
+                icon={<IconKey />}
+                label={t('dashboard.keys')}
+                value={formatNumber(stats?.active_keys ?? 0)}
+                loading={statsLoading}
+              />
+              <MetricPill
+                icon={<IconActivity />}
+                label={t('dashboard.requests')}
+                value={formatNumber(stats?.requests_24h ?? 0)}
+                loading={statsLoading}
+              />
+              <MetricPill
+                icon={<IconZap />}
+                label={t('dashboard.tokens')}
+                value={formatTokens(stats?.tokens_24h ?? 0)}
+                loading={statsLoading}
+              />
+            </div>
+          </div>
         </div>
 
-        {/* Model Health summary — only shown when at least one model has health data */}
-        {!statsLoading &&
-          (stats?.models_healthy ?? 0) + (stats?.models_degraded ?? 0) + (stats?.models_unhealthy ?? 0) > 0 && (
-            <div>
-              <h2 className="text-sm font-medium text-text-tertiary uppercase tracking-wider mb-3">
-                Sức khỏe Mô hình
-              </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <StatCard
-                  label="Tốt (Healthy)"
-                  value={stats?.models_healthy ?? 0}
-                  icon={<IconHeartPulse />}
-                  iconColor="green"
-                />
-                <StatCard
-                  label="Suy giảm (Degraded)"
-                  value={stats?.models_degraded ?? 0}
-                  icon={<IconAlertTriangle />}
-                  iconColor="yellow"
-                />
-                <StatCard
-                  label="Lỗi (Unhealthy)"
-                  value={stats?.models_unhealthy ?? 0}
-                  icon={<IconXCircle />}
-                  iconColor="red"
-                />
-              </div>
-            </div>
-          )}
-
-        {/* Requests over time */}
-        <div className="bg-bg-secondary rounded-xl border border-border p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-text-primary">{t('dashboard.throughput')}</h2>
-              <TimeRangePills value={timeRange} onChange={setTimeRange} />
-            </div>
-            {seriesLoading ? (
-              <div
-                className="rounded-lg bg-bg-tertiary animate-pulse"
-                style={{ height: 220 }}
-                aria-label="Loading chart"
-              />
-            ) : areaData.length > 0 ? (
-              <AreaChart
-                data={areaData}
-                height={220}
-                color="#8b5cf6"
-                formatValue={formatNumber}
-              />
-            ) : (
-              <div
-                className="flex items-center justify-center text-text-tertiary text-sm"
-                style={{ height: 220 }}
-              >
-                {t('keys.limit.none')}
-              </div>
-            )}
-          </div>
-
-        {/* Top models + token distribution */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Top Models */}
-            <div className="bg-bg-secondary rounded-xl border border-border p-6">
-              <h2 className="text-lg font-semibold text-text-primary mb-6">Mô hình hàng đầu</h2>
-              {modelsLoading ? (
-                <div className="space-y-5">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="space-y-1.5">
-                      <div className="h-3 w-32 bg-bg-tertiary rounded animate-pulse" />
-                      <div className="h-2.5 bg-bg-tertiary rounded-full animate-pulse" />
-                    </div>
-                  ))}
-                </div>
-              ) : topModelsBars.length > 0 ? (
-                <HorizontalBar items={topModelsBars} />
-              ) : (
-                <p className="text-sm text-text-tertiary">Không có dữ liệu sử dụng mô hình trong 24 giờ qua</p>
-              )}
-            </div>
-
-            {/* Token Distribution */}
-            <div className="bg-bg-secondary rounded-xl border border-border p-6">
-              <h2 className="text-lg font-semibold text-text-primary mb-6">{t('dashboard.token_count')}</h2>
-              {modelsLoading ? (
-                <div className="flex justify-center">
-                  <div className="w-48 h-48 rounded-full bg-bg-tertiary animate-pulse" />
-                </div>
-              ) : donutSegments.length > 0 ? (
-                <div className="flex justify-center">
-                  <DonutChart
-                    segments={donutSegments}
-                    centerLabel="Tổng tokens"
-                    centerValue={formatTokens(
-                      donutSegments.reduce((acc, s) => acc + s.value, 0),
-                    )}
-                    size={192}
-                    strokeWidth={20}
-                  />
-                </div>
-              ) : (
-                <p className="text-sm text-text-tertiary">Không có dữ liệu token</p>
-              )}
-            </div>
-          </div>
-
-        {/* Model performance */}
-        <div className="bg-bg-secondary rounded-xl border border-border p-6">
-          <h2 className="text-lg font-semibold text-text-primary mb-6">Hiệu năng Mô hình</h2>
-          {modelsLoading ? (
-            <div className="space-y-3">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="h-8 bg-bg-tertiary rounded animate-pulse" />
+        {showGettingStarted && (
+          <div className="rounded-2xl border border-accent/20 bg-accent/5 p-5">
+            <h2 className="text-sm font-semibold text-text-primary">{t('dashboard.getting_started')}</h2>
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              {[
+                { step: 1, label: t('dashboard.step_create_key'), path: '/keys' },
+                { step: 2, label: t('dashboard.step_test_playground'), path: '/playground' },
+                { step: 3, label: t('dashboard.step_view_analytics'), path: '/analytics' },
+              ].map((item) => (
+                <Link
+                  key={item.step}
+                  to={item.path}
+                  className="flex items-center gap-3 rounded-lg border border-border/60 bg-bg-secondary/80 px-3 py-2.5 no-underline transition-colors hover:border-accent/30"
+                >
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent/15 text-[11px] font-bold text-accent">
+                    {item.step}
+                  </span>
+                  <span className="text-sm text-text-primary">{item.label}</span>
+                </Link>
               ))}
             </div>
-          ) : perfRows.length > 0 ? (
-            <MiniTable<PerfRow>
-              columns={performanceColumns}
-              data={perfRows}
-            />
-          ) : (
-            <p className="text-sm text-text-tertiary">Không có dữ liệu hiệu năng</p>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
-      {/* Update detail dialog */}
       {updateInfo != null && (
         <Dialog
           open={showUpdateDialog}
@@ -490,24 +312,21 @@ export default function DashboardPage() {
                   href={updateInfo.release_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 text-sm font-bold bg-accent hover:bg-accent/90 text-white px-4 py-2 rounded-lg transition-all duration-200"
+                  className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-bold text-white transition-all duration-200 hover:bg-accent/90"
                 >
                   View on GitHub
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                   </svg>
                 </a>
               )}
-              <Button
-                variant="secondary"
-                onClick={dismissUpdate}
-              >
+              <Button variant="secondary" onClick={dismissUpdate}>
                 Dismiss
               </Button>
             </div>
           }
         >
-          <p className="text-xs text-text-tertiary mb-4">
+          <p className="mb-4 text-xs text-text-tertiary">
             You are running {updateInfo.current_version}
           </p>
           {updateInfo.release_notes != null && (
