@@ -48,9 +48,6 @@ type discoverModelsRequest struct {
 // discoveredModel is one row in the discover response checklist.
 type discoveredModel struct {
 	ID string `json:"id"`
-	// KnownCost is the preset reference cost, when the model appears in the
-	// preset's DefaultCost table.
-	KnownCost *provider.CostRef `json:"known_cost,omitempty"`
 	// Exists is true when a product model with this name already exists —
 	// import will attach a route to it instead of creating a new model.
 	Exists bool `json:"exists"`
@@ -211,14 +208,7 @@ func (h *Handler) DiscoverProviderModels(c fiber.Ctx) error {
 
 	out := make([]discoveredModel, 0, len(ids))
 	for _, id := range ids {
-		dm := discoveredModel{ID: id, Exists: existing[id]}
-		if preset != nil {
-			if cost, ok := preset.DefaultCost[id]; ok {
-				cc := cost
-				dm.KnownCost = &cc
-			}
-		}
-		out = append(out, dm)
+		out = append(out, discoveredModel{ID: id, Exists: existing[id]})
 	}
 	return c.JSON(fiber.Map{"success": true, "message": "", "data": out})
 }
@@ -287,8 +277,6 @@ type importModelSpec struct {
 	UpstreamID string `json:"upstream_id"`
 	// ProductName is the customer-facing model name. Empty = UpstreamID.
 	ProductName string `json:"product_name"`
-	// Cost overrides the preset reference cost for the route.
-	Cost *provider.CostRef `json:"cost"`
 }
 
 // DefaultMarkup is the sell price multiplier applied when the import request
@@ -413,20 +401,9 @@ func (h *Handler) ImportProvider(c fiber.Ctx) error {
 			results = append(results, res)
 			continue
 		}
-		var cost *provider.CostRef
-		if spec.Cost != nil {
-			cost = spec.Cost
-		} else if preset != nil {
-			if cRef, ok := preset.DefaultCost[spec.UpstreamID]; ok {
-				cc := cRef
-				cost = &cc
-			}
-		}
-		inCost, outCost, cachedInCost, cacheWriteCost := provider.OptionalCostFields(cost)
 		m, upsertErr := h.DB.UpsertProviderUpstreamModel(ctx, db.UpsertProviderUpstreamModelParams{
 			ProviderID: prov.ID, UpstreamID: spec.UpstreamID,
-			IsEnabled: true, CostInputPer1M: inCost, CostOutputPer1M: outCost,
-			CostCachedInputPer1M: cachedInCost, CostCacheWritePer1M: cacheWriteCost,
+			IsEnabled: true,
 		})
 		if upsertErr != nil {
 			res.Error = "failed to import upstream model"

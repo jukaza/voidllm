@@ -10,7 +10,6 @@ export interface UsageDataPoint {
   total_tokens: number
   cached_tokens: number
   revenue: number
-  cost_estimate: number
   avg_duration_ms: number
 }
 
@@ -21,13 +20,36 @@ export interface UsageResponse {
   data: UsageDataPoint[]
 }
 
-export function useMyUsage(from: string, to: string, groupBy: string) {
+export interface MyUsageFilters {
+  keyId?: string
+  model?: string
+}
+
+function buildMyUsageQuery(
+  from: string,
+  to: string,
+  groupBy: string,
+  filters?: MyUsageFilters,
+): string {
+  const q = new URLSearchParams({
+    from,
+    to,
+    group_by: groupBy,
+  })
+  if (filters?.keyId) q.set('key_id', filters.keyId)
+  if (filters?.model) q.set('model', filters.model)
+  return q.toString()
+}
+
+export function useMyUsage(
+  from: string,
+  to: string,
+  groupBy: string,
+  filters?: MyUsageFilters,
+) {
   return useQuery({
-    queryKey: ['usage-me', from, to, groupBy],
-    queryFn: () =>
-      apiClient<UsageResponse>(
-        `/usage/me?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&group_by=${groupBy}`,
-      ),
+    queryKey: ['usage-me', from, to, groupBy, filters],
+    queryFn: () => apiClient<UsageResponse>(`/usage/me?${buildMyUsageQuery(from, to, groupBy, filters)}`),
     enabled: !!from && !!to,
     staleTime: 60_000,
   })

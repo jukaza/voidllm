@@ -34,8 +34,14 @@ func (d *DB) ResolveGroupLabels(ctx context.Context, groupBy string, ids []strin
 	case "user":
 		table = "users"
 		labelExpr = "display_name"
+	case "deployment":
+		labels, _, _, err := d.ResolveDeploymentLabels(ctx, ids)
+		if err != nil {
+			return nil, err
+		}
+		return labels, nil
 	default:
-		// Non-resolvable dimension (model, day, hour, "").
+		// Non-resolvable dimension (model, day, hour, provider, "").
 		return map[string]string{}, nil
 	}
 

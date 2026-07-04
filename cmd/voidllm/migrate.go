@@ -33,6 +33,7 @@ var migrationOrder = []string{
 	"transactions",
 	"usage_events",
 	"usage_hourly",
+	"usage_daily",
 	"audit_logs",
 	"settings",
 }

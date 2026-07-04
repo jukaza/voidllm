@@ -2062,7 +2062,7 @@ const docTemplate = `{
     },
     "securityDefinitions": {
         "BearerAuth": {
-            "description": "API key (vl_uk_) or session key (vl_sk_)",
+            "description": "API key (sk-) or legacy vl_uk_ / vl_sk_",
             "type": "apiKey",
             "name": "Authorization",
             "in": "header"

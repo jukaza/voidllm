@@ -47,7 +47,6 @@ export interface ModelResponse {
   sell_output_per_1m?: number | null
   sell_cached_input_per_1m?: number
   sell_cache_write_per_1m?: number | null
-  sell_cache_write_per_1m?: number | null
   logo?: string
   deployments?: DeploymentResponse[]
   routing_strategy?: string

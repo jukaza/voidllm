@@ -72,6 +72,7 @@ type ProxyHandler struct {
 	Router            DeploymentPicker         // deployment selector; nil falls back to single-deployment behavior
 	HTTPClient        *http.Client
 	UsageLogger       *usage.Logger           // nil disables usage logging
+	LiveStats         *usage.LiveStats        // nil disables live SSE counters
 	RateLimiter       ratelimit.Checker       // nil disables rate limiting
 	TokenCounter      *ratelimit.TokenCounter // nil disables token budget enforcement
 	ShutdownState     *shutdown.State         // nil disables in-flight tracking and graceful drain
@@ -518,12 +519,12 @@ func (p *ProxyHandler) Handle(c fiber.Ctx) error {
 			breaker = p.CircuitBreakers.Get(deploymentKey(currentModel.Name, usedDep.Name))
 		}
 		return p.handleStreamingResponse(c, resp, cancelUpstream, currentModel,
-			keyInfo, adapter, startTime, requestID, requestedModelName, usedDep.ID, effectiveStreamDur, maxRespBody, trackDone, breaker, piiFilter)
+			keyInfo, adapter, startTime, requestID, requestedModelName, usedDep, effectiveStreamDur, maxRespBody, trackDone, breaker, piiFilter)
 	}
 
 	defer cancelUpstream()
 	return p.handleBufferedResponse(c, resp, currentModel, keyInfo, adapter,
-		startTime, requestID, requestedModelName, usedDep.ID, maxRespBody, piiFilter)
+		startTime, requestID, requestedModelName, usedDep, maxRespBody, piiFilter)
 }
 
 // tryModel attempts to forward the request to the given model using its
@@ -1091,7 +1092,10 @@ func writeStreamAbortEvent(w *bufio.Writer, code string) {
 // maxRespBody is the aggregate byte cap for the PII-buffered streaming path;
 // it is the same limit used for non-streaming responses.
 // filter may be nil when PII anonymization is disabled.
-func (p *ProxyHandler) handleStreamingResponse(c fiber.Ctx, resp *http.Response, cancelUpstream context.CancelFunc, model Model, keyInfo *auth.KeyInfo, adapter Adapter, startTime time.Time, requestID string, requestedModelName string, deploymentID string, maxStreamDuration time.Duration, maxRespBody int, trackDone func(), breaker *circuitbreaker.Breaker, filter *pii.Filter) error {
+func (p *ProxyHandler) handleStreamingResponse(c fiber.Ctx, resp *http.Response, cancelUpstream context.CancelFunc, model Model, keyInfo *auth.KeyInfo, adapter Adapter, startTime time.Time, requestID string, requestedModelName string, usedDep Deployment, maxStreamDuration time.Duration, maxRespBody int, trackDone func(), breaker *circuitbreaker.Breaker, filter *pii.Filter) error {
+	if p.LiveStats != nil && requestID != "" {
+		p.LiveStats.Begin(requestID, model.Name, model.Provider, deploymentLogID(usedDep))
+	}
 	copyResponseHeaders(c, resp)
 	c.Set("Content-Type", "text/event-stream")
 	c.Set("Cache-Control", "no-cache")
@@ -1534,7 +1538,7 @@ func (p *ProxyHandler) handleStreamingResponse(c fiber.Ctx, resp *http.Response,
 			if streamIncomplete {
 				eventStatusCode = http.StatusBadGateway
 			}
-			p.logUsageEvent(keyInfo, model, streamUI, durationMS, ttftMS, eventStatusCode, requestID, requestedModelName, deploymentID)
+			p.logUsageEvent(keyInfo, model, streamUI, durationMS, ttftMS, eventStatusCode, requestID, requestedModelName, usedDep, true)
 		}
 
 		metrics.ProxyDurationSeconds.WithLabelValues(model.Name, "true").Observe(time.Since(startTime).Seconds())
@@ -1547,7 +1551,10 @@ func (p *ProxyHandler) handleStreamingResponse(c fiber.Ctx, resp *http.Response,
 // requestedModelName is the canonical name the client originally asked for;
 // it may differ from model.Name when a fallback was activated.
 // filter may be nil when PII anonymization is disabled.
-func (p *ProxyHandler) handleBufferedResponse(c fiber.Ctx, resp *http.Response, model Model, keyInfo *auth.KeyInfo, adapter Adapter, startTime time.Time, requestID string, requestedModelName string, deploymentID string, maxResponseBody int, filter *pii.Filter) error {
+func (p *ProxyHandler) handleBufferedResponse(c fiber.Ctx, resp *http.Response, model Model, keyInfo *auth.KeyInfo, adapter Adapter, startTime time.Time, requestID string, requestedModelName string, usedDep Deployment, maxResponseBody int, filter *pii.Filter) error {
+	if p.LiveStats != nil && requestID != "" {
+		p.LiveStats.Begin(requestID, model.Name, model.Provider, deploymentLogID(usedDep))
+	}
 	// Content-Length pre-check: fast-reject optimization to avoid allocating
 	// memory for obviously oversized responses. Not the security boundary —
 	// io.LimitReader on the next line handles chunked/unknown-length responses.
@@ -1630,13 +1637,13 @@ func (p *ProxyHandler) handleBufferedResponse(c fiber.Ctx, resp *http.Response, 
 		return err
 	}
 
-	if p.UsageLogger != nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
+	if p.UsageLogger != nil {
 		ui := extractUsage(usageBody)
 		durationMS := int(time.Since(startTime).Milliseconds())
 		// For non-streaming responses TTFT equals total duration: the entire
 		// response body is the first (and only) "token delivery".
 		ttftMS := durationMS
-		p.logUsageEvent(keyInfo, model, ui, durationMS, &ttftMS, resp.StatusCode, requestID, requestedModelName, deploymentID)
+		p.logUsageEvent(keyInfo, model, ui, durationMS, &ttftMS, resp.StatusCode, requestID, requestedModelName, usedDep, false)
 	}
 
 	metrics.ProxyDurationSeconds.WithLabelValues(model.Name, "false").Observe(time.Since(startTime).Seconds())
@@ -1644,61 +1651,28 @@ func (p *ProxyHandler) handleBufferedResponse(c fiber.Ctx, resp *http.Response, 
 	return nil
 }
 
-// logUsageEvent builds and enqueues a usage.Event. It is a no-op when keyInfo
-// is nil (unauthenticated request, or auth middleware not wired).
-// ttftMS is the time-to-first-token in milliseconds; nil for non-streaming paths
-// where the whole response arrives at once.
-// requestID is the per-request trace ID from the request ID middleware; it must
-// be captured from the Fiber context before Handle returns because the context
-// is recycled by fasthttp after the handler exits.
-// requestedModelName is the canonical name the client originally asked for; equal
-// to model.Name when no fallback occurred.
-func (p *ProxyHandler) logUsageEvent(keyInfo *auth.KeyInfo, model Model, ui UsageInfo, durationMS int, ttftMS *int, statusCode int, requestID string, requestedModelName string, deploymentID string) {
-	if keyInfo == nil {
-		return
+func freshPromptTokens(ui UsageInfo) int {
+	fresh := ui.PromptTokens - ui.CachedTokens
+	if fresh < 0 {
+		return 0
 	}
+	return fresh
+}
 
-	var cost *float64
-	if model.Pricing.InputPer1M > 0 || model.Pricing.OutputPer1M > 0 {
-		// Cost is computed from the route that actually served the request:
-		// applyDeployment overlays per-deployment cost prices onto Pricing.
-		// Cache-hit prompt tokens are costed at the cached rate when set;
-		// cache-write tokens add the provider's write surcharge when set.
-		costCachedRate := model.Pricing.CachedInputPer1M
-		if costCachedRate == 0 {
-			costCachedRate = model.Pricing.InputPer1M
-		}
-		freshPrompt := ui.PromptTokens - ui.CachedTokens
-		if freshPrompt < 0 {
-			freshPrompt = 0
-		}
-		c := float64(freshPrompt)/1_000_000*model.Pricing.InputPer1M +
-			float64(ui.CachedTokens)/1_000_000*costCachedRate +
-			float64(ui.CompletionTokens)/1_000_000*model.Pricing.OutputPer1M
-		if model.Pricing.CacheWritePer1M > 0 && ui.CacheWriteTokens > 0 {
-			c += float64(ui.CacheWriteTokens) / 1_000_000 * model.Pricing.CacheWritePer1M
-		}
-		cost = &c
-	}
-
-	// Revenue: wallet charge uses exactly one billing mode per model.
-	var revenue *float64
-	var rev float64
-	hasRevenue := false
-
-	billPerToken := model.BillPerToken
-	billPerRequest := model.BillPerRequest
-	// Legacy registry entries may omit billing flags; infer token billing when
-	// sell prices are configured and no explicit mode is enabled.
+func computeRevenue(model Model, ui UsageInfo) (revenue *float64, sellBD *usage.TokenCostBreakdown, billPerToken, billPerRequest, hasRevenue bool) {
+	billPerToken = model.BillPerToken
+	billPerRequest = model.BillPerRequest
 	if !billPerToken && !billPerRequest &&
 		(model.SellInputPer1M != nil || model.SellOutputPer1M != nil ||
 			model.SellCachedInputPer1M != nil || model.SellCacheWritePer1M != nil) {
 		billPerToken = true
 	}
 
+	var rev float64
 	if billPerRequest && model.SellPerRequest != nil && *model.SellPerRequest > 0 {
 		rev = *model.SellPerRequest
 		hasRevenue = true
+		sellBD = &usage.TokenCostBreakdown{Flat: rev}
 	} else if billPerToken && (model.SellInputPer1M != nil || model.SellOutputPer1M != nil ||
 		model.SellCachedInputPer1M != nil || model.SellCacheWritePer1M != nil) {
 		sellIn, sellOut := 0.0, 0.0
@@ -1712,36 +1686,76 @@ func (p *ProxyHandler) logUsageEvent(keyInfo *auth.KeyInfo, model Model, ui Usag
 		if model.SellCachedInputPer1M != nil {
 			cachedRate = *model.SellCachedInputPer1M
 		}
-		freshPrompt := ui.PromptTokens - ui.CachedTokens
-		if freshPrompt < 0 {
-			freshPrompt = 0
-		}
 		cacheWriteRate := sellIn
 		if model.SellCacheWritePer1M != nil {
 			cacheWriteRate = *model.SellCacheWritePer1M
 		}
-		rev = float64(freshPrompt)/1_000_000*sellIn +
-			float64(ui.CachedTokens)/1_000_000*cachedRate +
-			float64(ui.CompletionTokens)/1_000_000*sellOut
+		fresh := freshPromptTokens(ui)
+		inRev := float64(fresh) / 1_000_000 * sellIn
+		cachedRev := float64(ui.CachedTokens) / 1_000_000 * cachedRate
+		outRev := float64(ui.CompletionTokens) / 1_000_000 * sellOut
+		cacheWriteRev := 0.0
 		if ui.CacheWriteTokens > 0 {
-			rev += float64(ui.CacheWriteTokens) / 1_000_000 * cacheWriteRate
+			cacheWriteRev = float64(ui.CacheWriteTokens) / 1_000_000 * cacheWriteRate
 		}
-		if model.BillMinPerRequest && model.SellMinPerRequest != nil && *model.SellMinPerRequest > 0 {
-			if rev < *model.SellMinPerRequest {
-				rev = *model.SellMinPerRequest
-			}
+		rev = inRev + cachedRev + outRev + cacheWriteRev
+		if model.BillMinPerRequest && model.SellMinPerRequest != nil && *model.SellMinPerRequest > 0 && rev < *model.SellMinPerRequest {
+			rev = *model.SellMinPerRequest
 		}
 		hasRevenue = true
+		sellBD = &usage.TokenCostBreakdown{
+			Input:      inRev,
+			Cached:     cachedRev,
+			CacheWrite: cacheWriteRev,
+			Output:     outRev,
+		}
 	}
-
 	if hasRevenue {
 		revenue = &rev
 	}
+	return revenue, sellBD, billPerToken, billPerRequest, hasRevenue
+}
+
+// logUsageEvent builds and enqueues a usage.Event. It is a no-op when keyInfo
+// is nil (unauthenticated request, or auth middleware not wired).
+// ttftMS is the time-to-first-token in milliseconds; nil for non-streaming paths
+// where the whole response arrives at once.
+// requestID is the per-request trace ID from the request ID middleware; it must
+// be captured from the Fiber context before Handle returns because the context
+// is recycled by fasthttp after the handler exits.
+// requestedModelName is the canonical name the client originally asked for; equal
+// to model.Name when no fallback occurred.
+func (p *ProxyHandler) logUsageEvent(keyInfo *auth.KeyInfo, model Model, ui UsageInfo, durationMS int, ttftMS *int, statusCode int, requestID string, requestedModelName string, usedDep Deployment, isStream bool) {
+	if keyInfo == nil {
+		return
+	}
+
+	deploymentID := deploymentLogID(usedDep)
+	revenue, sellBD, billPerToken, billPerRequest, hasRevenue := computeRevenue(model, ui)
 
 	var tps *float64
 	if durationMS > 0 && ui.CompletionTokens > 0 {
 		t := float64(ui.CompletionTokens) / (float64(durationMS) / 1000.0)
 		tps = &t
+	}
+
+	meta := usage.BuildEventMeta(
+		model.Provider,
+		usage.BillingModeFromFlags(billPerToken, billPerRequest, hasRevenue),
+		revenue, sellBD,
+	)
+
+	if p.LiveStats != nil && requestID != "" {
+		p.LiveStats.RecordComplete(usage.LiveEvent{
+			RequestID:        requestID,
+			ModelName:        model.Name,
+			Provider:         model.Provider,
+			DeploymentID:     deploymentID,
+			PromptTokens:     ui.PromptTokens,
+			CompletionTokens: ui.CompletionTokens,
+			StatusCode:       statusCode,
+			CompletedAt:      time.Now().UTC(),
+		})
 	}
 
 	p.UsageLogger.Log(usage.Event{
@@ -1753,15 +1767,18 @@ func (p *ProxyHandler) logUsageEvent(keyInfo *auth.KeyInfo, model Model, ui Usag
 		PromptTokens:       ui.PromptTokens,
 		CompletionTokens:   ui.CompletionTokens,
 		TotalTokens:        ui.TotalTokens,
-		CostEstimate:       cost,
 		DurationMS:         durationMS,
 		TTFT_MS:            ttftMS,
 		TokensPerSecond:    tps,
 		StatusCode:         statusCode,
 		RequestID:          requestID,
 		CachedTokens:       ui.CachedTokens,
+		CacheWriteTokens:   ui.CacheWriteTokens,
 		Revenue:            revenue,
 		DeploymentID:       deploymentID,
+		LogType:            usage.LogTypeFromStatus(statusCode),
+		IsStream:           isStream,
+		Meta:               meta,
 	})
 
 	if p.UpstreamLimiter != nil && deploymentID != "" && ui.TotalTokens > 0 {
@@ -1770,6 +1787,15 @@ func (p *ProxyHandler) logUsageEvent(keyInfo *auth.KeyInfo, model Model, ui Usag
 
 	metrics.TokensTotal.WithLabelValues(model.Name, "prompt").Add(float64(ui.PromptTokens))
 	metrics.TokensTotal.WithLabelValues(model.Name, "completion").Add(float64(ui.CompletionTokens))
+}
+
+// deploymentLogID returns the stable identifier stored on usage events for the
+// deployment or connection that served the request.
+func deploymentLogID(dep Deployment) string {
+	if dep.ID != "" {
+		return dep.ID
+	}
+	return dep.Name
 }
 
 // deploymentKey returns the circuit breaker / health-checker lookup key for a
@@ -1787,9 +1813,6 @@ func deploymentKey(modelName, deploymentName string) string {
 // its own backing arrays and no pointer aliasing with the registry's internal
 // state.
 //
-// Cost prices configured on the deployment overlay the model-level Pricing so
-// that downstream cost accounting (logUsageEvent) always reflects the route
-// that actually served the request.
 func applyDeployment(model *Model, dep Deployment) {
 	model.Provider = dep.Provider
 	model.BaseURL = dep.BaseURL
@@ -1799,18 +1822,6 @@ func applyDeployment(model *Model, dep Deployment) {
 	model.GCPProject = dep.GCPProject
 	model.GCPLocation = dep.GCPLocation
 	model.UpstreamModel = dep.UpstreamModel
-	if dep.CostInputPer1M != nil {
-		model.Pricing.InputPer1M = *dep.CostInputPer1M
-	}
-	if dep.CostOutputPer1M != nil {
-		model.Pricing.OutputPer1M = *dep.CostOutputPer1M
-	}
-	if dep.CostCachedInputPer1M != nil {
-		model.Pricing.CachedInputPer1M = *dep.CostCachedInputPer1M
-	}
-	if dep.CostCacheWritePer1M != nil {
-		model.Pricing.CacheWritePer1M = *dep.CostCacheWritePer1M
-	}
 }
 
 // isRetryable reports whether an HTTP status code from an upstream response

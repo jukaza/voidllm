@@ -12,10 +12,11 @@ import ProviderNewPage from './pages/ProviderNewPage'
 import ProviderWizardPage from './pages/ProviderWizardPage'
 import WalletPage from './pages/WalletPage'
 import ModelsLayout from './pages/ModelsLayout'
-import UsageLayout from './pages/usage/UsageLayout'
-import UsageOverviewPage from './pages/usage/UsageOverviewPage'
-import LLMUsagePage from './pages/usage/LLMUsagePage'
-import CostReportsPage from './pages/CostReportsPage'
+import AnalyticsLayout from './pages/analytics/AnalyticsLayout'
+import AnalyticsOverviewPage from './pages/analytics/AnalyticsOverviewPage'
+import RequestLogsPage from './pages/analytics/RequestLogsPage'
+import ProfitPage from './pages/analytics/ProfitPage'
+import ChannelsPage from './pages/analytics/ChannelsPage'
 import ProfilePage from './pages/ProfilePage'
 import PlaygroundPage from './pages/PlaygroundPage'
 import SystemUsersPage from './pages/SystemUsersPage'
@@ -81,11 +82,15 @@ export default function App() {
                 <Route path="marketplace" element={<MarketplacePage />} />
                 <Route path="wallet" element={<WalletPage />} />
                 <Route path="models" element={<ModelsLayout />} />
-                <Route path="usage" element={<UsageLayout />}>
-                  <Route index element={<UsageOverviewPage />} />
-                  <Route path="llm" element={<LLMUsagePage />} />
+                <Route path="analytics" element={<AnalyticsLayout />}>
+                  <Route index element={<AnalyticsOverviewPage />} />
+                  <Route path="logs" element={<RequestLogsPage />} />
+                  <Route path="channels" element={<ChannelsPage />} />
+                  <Route path="profit" element={<ProfitPage />} />
                 </Route>
-                <Route path="cost-reports" element={<CostReportsPage />} />
+                <Route path="usage" element={<Navigate to="/analytics" replace />} />
+                <Route path="usage/*" element={<Navigate to="/analytics" replace />} />
+                <Route path="cost-reports" element={<Navigate to="/analytics/profit" replace />} />
                 <Route path="profile" element={<ProfilePage />} />
                 <Route path="users" element={<SystemUsersPage />} />
                 <Route

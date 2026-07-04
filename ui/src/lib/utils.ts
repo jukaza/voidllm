@@ -35,3 +35,10 @@ export function shortenId(id: string): string {
   if (!id) return ''
   return id.length <= 12 ? id : `${id.slice(0, 8)}…`
 }
+
+/** Truncate a request ID for table display; full value stays in title/tooltip. */
+export function truncateRequestId(id: string, head = 10, tail = 6): string {
+  if (!id) return ''
+  if (id.length <= head + tail + 1) return id
+  return `${id.slice(0, head)}…${id.slice(-tail)}`
+}

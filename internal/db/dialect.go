@@ -22,6 +22,11 @@ type Dialect interface {
 	// Example (SQLite):   datetime(created_at) < datetime(?)
 	// Example (Postgres): created_at::timestamptz < ($1)::timestamptz
 	TimestampLessThan(column, placeholder string) string
+	// TimestampGTE / TimestampLTE compare instants for range filters on usage_events.
+	TimestampGTE(column, placeholder string) string
+	TimestampLTE(column, placeholder string) string
+	// MetaProviderSlug returns a SQL expression extracting provider_slug from usage_events.meta JSON.
+	MetaProviderSlug() string
 }
 
 // SQLiteDialect implements Dialect for SQLite.
@@ -47,6 +52,18 @@ func (SQLiteDialect) TimestampLessThan(column, placeholder string) string {
 	return "datetime(" + column + ") < datetime(" + placeholder + ")"
 }
 
+func (SQLiteDialect) TimestampGTE(column, placeholder string) string {
+	return "datetime(" + column + ") >= datetime(" + placeholder + ")"
+}
+
+func (SQLiteDialect) TimestampLTE(column, placeholder string) string {
+	return "datetime(" + column + ") <= datetime(" + placeholder + ")"
+}
+
+func (SQLiteDialect) MetaProviderSlug() string {
+	return "COALESCE(json_extract(meta, '$.provider_slug'), '')"
+}
+
 // PostgresDialect implements Dialect for PostgreSQL.
 type PostgresDialect struct{}
 
@@ -70,4 +87,16 @@ func (PostgresDialect) SupportsMigrationLock() bool { return true }
 // ISO-8601 variant and compares as absolute instants.
 func (PostgresDialect) TimestampLessThan(column, placeholder string) string {
 	return column + "::timestamptz < (" + placeholder + ")::timestamptz"
+}
+
+func (PostgresDialect) TimestampGTE(column, placeholder string) string {
+	return column + "::timestamptz >= (" + placeholder + ")::timestamptz"
+}
+
+func (PostgresDialect) TimestampLTE(column, placeholder string) string {
+	return column + "::timestamptz <= (" + placeholder + ")::timestamptz"
+}
+
+func (PostgresDialect) MetaProviderSlug() string {
+	return "COALESCE(meta::json->>'provider_slug', '')"
 }

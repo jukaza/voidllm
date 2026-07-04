@@ -8,7 +8,7 @@ package main
 // @securityDefinitions.apikey BearerAuth
 // @in              header
 // @name            Authorization
-// @description     API key (vl_uk_) or session key (vl_sk_)
+// @description     API key (sk-) or legacy vl_uk_ / vl_sk_
 
 // @tag.name        auth
 // @tag.description Authentication and user profile

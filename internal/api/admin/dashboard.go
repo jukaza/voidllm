@@ -14,10 +14,9 @@ import (
 type dashboardStatsResponse struct {
 	Scope           string  `json:"scope"`
 	ActiveKeys      int     `json:"active_keys"`
-	Requests24h     int64   `json:"requests_24h"`
-	Tokens24h       int64   `json:"tokens_24h"`
-	CostEstimate24h float64 `json:"cost_estimate_24h"`
-	ModelsHealthy   int     `json:"models_healthy"`
+	Requests24h     int64 `json:"requests_24h"`
+	Tokens24h       int64 `json:"tokens_24h"`
+	ModelsHealthy   int   `json:"models_healthy"`
 	ModelsUnhealthy int     `json:"models_unhealthy"`
 	ModelsDegraded  int     `json:"models_degraded"`
 }
@@ -72,7 +71,6 @@ func (h *Handler) DashboardStats(c fiber.Ctx) error {
 
 	resp.Requests24h = agg.TotalRequests
 	resp.Tokens24h = agg.TotalTokens
-	resp.CostEstimate24h = agg.CostEstimate
 
 	if h.HealthChecker != nil {
 		for _, mh := range h.HealthChecker.GetAllHealth() {

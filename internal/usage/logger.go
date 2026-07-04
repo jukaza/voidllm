@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/voidmind-io/voidllm/internal/config"
 	"github.com/voidmind-io/voidllm/internal/db"
+	"github.com/voidmind-io/voidllm/internal/metrics"
 	"github.com/voidmind-io/voidllm/internal/ratelimit"
 )
 
@@ -129,6 +130,7 @@ func (l *Logger) Log(event Event) {
 		select {
 		case l.events <- event:
 		default:
+			metrics.UsageEventsDroppedTotal.Inc()
 			l.log.LogAttrs(context.Background(), slog.LevelWarn,
 				"usage logger buffer full, dropping event",
 				slog.String("model", event.ModelName),
@@ -218,14 +220,18 @@ func (l *Logger) flush(events []Event) error {
 		"(id, key_id, key_type, user_id, " +
 		"model_name, prompt_tokens, completion_tokens, total_tokens, " +
 		"cost_estimate, request_duration_ms, ttft_ms, tokens_per_second, status_code, request_id, " +
-		"requested_model_name, cached_tokens, revenue, deployment_id) " +
+		"requested_model_name, cached_tokens, revenue, deployment_id, " +
+		"log_type, is_stream, cache_write_tokens, meta) " +
 		"VALUES (" +
 		p(1) + ", " + p(2) + ", " + p(3) + ", " + p(4) + ", " +
 		p(5) + ", " + p(6) + ", " + p(7) + ", " + p(8) + ", " +
 		p(9) + ", " + p(10) + ", " + p(11) + ", " + p(12) + ", " + p(13) + ", " + p(14) + ", " +
-		p(15) + ", " + p(16) + ", " + p(17) + ", " + p(18) + ")"
+		p(15) + ", " + p(16) + ", " + p(17) + ", " + p(18) + ", " +
+		p(19) + ", " + p(20) + ", " + p(21) + ", " + p(22) + ")"
 
 	ctx := context.Background()
+	bucketDay := time.Now().UTC().Format("2006-01-02")
+	dailyDeltas := make([]db.DailyRollupDelta, 0, len(events)*2)
 
 	if err := l.database.WithTx(ctx, func(q db.Querier) error {
 		for _, ev := range events {
@@ -235,6 +241,18 @@ func (l *Logger) flush(events []Event) error {
 			}
 
 			userID := nullableString(ev.UserID)
+			logType := ev.LogType
+			if logType == "" {
+				logType = LogTypeFromStatus(ev.StatusCode)
+			}
+			meta := ev.Meta
+			if len(meta) == 0 {
+				meta = []byte("{}")
+			}
+			isStream := 0
+			if ev.IsStream {
+				isStream = 1
+			}
 
 			_, err = q.ExecContext(ctx, query,
 				id.String(),
@@ -255,10 +273,41 @@ func (l *Logger) flush(events []Event) error {
 				ev.CachedTokens,
 				ev.Revenue,
 				ev.DeploymentID,
+				logType,
+				isStream,
+				ev.CacheWriteTokens,
+				string(meta),
 			)
 			if err != nil {
 				return fmt.Errorf("usage flush: insert event: %w", err)
 			}
+
+			var revenueSum float64
+			if ev.Revenue != nil {
+				revenueSum = *ev.Revenue
+			}
+			base := db.DailyRollupDelta{
+				Day:              bucketDay,
+				Requests:         1,
+				PromptTokens:     ev.PromptTokens,
+				CompletionTokens: ev.CompletionTokens,
+				CachedTokens:     ev.CachedTokens,
+				CostSum:          0,
+				RevenueSum:       revenueSum,
+				ModelName:        ev.ModelName,
+				DeploymentID:     ev.DeploymentID,
+			}
+			sys := base
+			sys.UserID = ""
+			dailyDeltas = append(dailyDeltas, sys)
+			if ev.UserID != "" {
+				user := base
+				user.UserID = ev.UserID
+				dailyDeltas = append(dailyDeltas, user)
+			}
+		}
+		if err := l.database.UpsertUsageDaily(ctx, q, dailyDeltas); err != nil {
+			return fmt.Errorf("usage flush: daily rollup: %w", err)
 		}
 		return nil
 	}); err != nil {
@@ -302,8 +351,9 @@ func (l *Logger) flush(events []Event) error {
 		r.PromptTokens += ev.PromptTokens
 		r.CompletionTokens += ev.CompletionTokens
 		r.TotalTokens += ev.TotalTokens
-		if ev.CostEstimate != nil {
-			r.CostSum += *ev.CostEstimate
+		r.CachedTokens += ev.CachedTokens
+		if ev.Revenue != nil {
+			r.RevenueSum += *ev.Revenue
 		}
 		r.DurationSumMS += float64(ev.DurationMS)
 		if ev.TTFT_MS != nil {

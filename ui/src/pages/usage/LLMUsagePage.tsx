@@ -118,14 +118,6 @@ function buildColumns(groupBy: string): Column<UsageDataPoint>[] {
       ),
     },
     {
-      key: 'cost_estimate',
-      header: 'Upstream Cost',
-      align: 'right',
-      render: (row) => (
-        <span className="text-text-secondary">{formatCost(row.cost_estimate)}</span>
-      ),
-    },
-    {
       key: 'avg_duration_ms',
       header: 'Avg Duration',
       align: 'right',
@@ -145,7 +137,6 @@ const USAGE_EXPORT_HEADERS = [
   { key: 'revenue', label: 'Revenue' },
   { key: 'completion_tokens', label: 'Completion Tokens' },
   { key: 'total_tokens', label: 'Total Tokens' },
-  { key: 'cost_estimate', label: 'Cost' },
   { key: 'avg_duration_ms', label: 'Avg Duration (ms)' },
 ]
 
@@ -222,14 +213,13 @@ export default function LLMUsagePage() {
   const groupByOptions = GROUP_BY_OPTIONS
 
   const totals = useMemo(() => {
-    if (!usage?.data) return { requests: 0, tokens: 0, cost: 0 }
+    if (!usage?.data) return { requests: 0, tokens: 0 }
     return usage.data.reduce(
       (acc, d) => ({
         requests: acc.requests + d.total_requests,
         tokens: acc.tokens + d.total_tokens,
-        cost: acc.cost + d.cost_estimate,
       }),
-      { requests: 0, tokens: 0, cost: 0 },
+      { requests: 0, tokens: 0 },
     )
   }, [usage])
 
@@ -300,7 +290,7 @@ export default function LLMUsagePage() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
         <StatCard
           label="Total Requests"
           value={isDataLoading ? '...' : formatTokens(totals.requests)}
@@ -312,12 +302,6 @@ export default function LLMUsagePage() {
           value={isDataLoading ? '...' : formatTokens(totals.tokens)}
           icon={<SparklesIcon />}
           iconColor="blue"
-        />
-        <StatCard
-          label="Upstream Cost"
-          value={isDataLoading ? '...' : formatCost(totals.cost)}
-          icon={<DollarIcon />}
-          iconColor="green"
         />
         <StatCard
           label="Revenue"

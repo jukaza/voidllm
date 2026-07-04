@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { PageHeader } from '../components/ui/PageHeader'
+import { StatCard } from '../components/ui/StatCard'
 import { Table } from '../components/ui/Table'
 import type { Column } from '../components/ui/Table'
 import { Badge } from '../components/ui/Badge'
@@ -8,23 +9,41 @@ import { Button } from '../components/ui/Button'
 import { ConfirmDialog } from '../components/ui/Dialog'
 import {
   useProviders,
+  useProviderUsage,
   useUpdateProvider,
   useDeleteProvider,
 } from '../hooks/useProviders'
-import type { ProviderItem } from '../hooks/useProviders'
+import type { ProviderItem, ProviderUsageEntry } from '../hooks/useProviders'
 import { useToast } from '../hooks/useToast'
 import { useTranslation } from '../lib/i18n'
+import { formatCost } from '../lib/utils'
 import { BrandIcon } from '../components/ui/BrandIcon'
+
+function revenueCell(entry: ProviderUsageEntry | undefined, loading: boolean) {
+  if (loading) return <span className="text-text-tertiary">…</span>
+  if (!entry || entry.revenue === 0) {
+    return <span className="text-text-tertiary tabular-nums">0đ</span>
+  }
+  return (
+    <span className="text-sm font-medium text-accent tabular-nums">
+      {formatCost(entry.revenue)}
+    </span>
+  )
+}
 
 export default function ProvidersPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const { toast } = useToast()
   const { data, isLoading } = useProviders()
+  const { data: usageData, isLoading: usageLoading } = useProviderUsage()
   const updateProvider = useUpdateProvider()
   const deleteProvider = useDeleteProvider()
 
   const [deleting, setDeleting] = useState<ProviderItem | null>(null)
+
+  const todayByProvider = usageData?.today.by_provider ?? {}
+  const allByProvider = usageData?.all_time.by_provider ?? {}
 
   function toggleStatus(p: ProviderItem) {
     updateProvider.mutate(
@@ -75,6 +94,18 @@ export default function ProvidersPage() {
         ),
       },
       {
+        key: 'revenue_today',
+        header: t('providers.revenue_today'),
+        align: 'right',
+        render: (row) => revenueCell(todayByProvider[row.id], usageLoading),
+      },
+      {
+        key: 'revenue_total',
+        header: t('providers.revenue_total'),
+        align: 'right',
+        render: (row) => revenueCell(allByProvider[row.id], usageLoading),
+      },
+      {
         key: 'status',
         header: t('wallet.col_status'),
         render: (row) => (
@@ -102,12 +133,23 @@ export default function ProvidersPage() {
         ),
       },
     ],
-    [t, navigate],
+    [t, navigate, todayByProvider, allByProvider, usageLoading],
   )
 
   return (
     <>
       <PageHeader title={t('providers.title')} description={t('providers.desc_new')} />
+      <div className="grid gap-4 grid-cols-2 mb-6">
+        <StatCard
+          label={t('providers.revenue_today')}
+          value={usageLoading ? '...' : formatCost(usageData?.today.totals.revenue ?? 0)}
+        />
+        <StatCard
+          label={t('providers.revenue_total')}
+          value={usageLoading ? '...' : formatCost(usageData?.all_time.totals.revenue ?? 0)}
+        />
+      </div>
+
       <div className="mb-4 flex justify-end gap-2">
         <Button variant="secondary" onClick={() => navigate('/providers/new?manual=1')}>
           {t('providers.manual_entry')}

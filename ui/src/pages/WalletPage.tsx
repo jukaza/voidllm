@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { PageHeader } from '../components/ui/PageHeader'
 import { StatCard } from '../components/ui/StatCard'
 import { Table } from '../components/ui/Table'
@@ -110,6 +111,21 @@ export default function WalletPage() {
       key: 'description',
       header: t('wallet.col_description'),
       render: (row) => <span className="text-text-tertiary text-xs">{row.description || '—'}</span>,
+    },
+    {
+      key: 'ref_id',
+      header: t('wallet.col_ref'),
+      render: (row) =>
+        row.type === 'usage' && row.ref_id ? (
+          <Link
+            to={`/analytics/logs?request_id=${encodeURIComponent(row.ref_id)}`}
+            className="text-xs text-accent hover:underline"
+          >
+            {row.ref_id.slice(0, 12)}…
+          </Link>
+        ) : (
+          <span className="text-text-tertiary text-xs">—</span>
+        ),
     },
   ]
 

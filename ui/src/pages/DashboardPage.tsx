@@ -18,7 +18,7 @@ import { useMyUsage } from '../hooks/useUsage'
 import { useModelHealth } from '../hooks/useModelHealth'
 import type { ModelHealthInfo } from '../hooks/useModelHealth'
 import { useUpdateCheck } from '../hooks/useUpdateCheck'
-import { formatTokens, formatCost, formatNumber } from '../lib/utils'
+import { formatTokens, formatNumber } from '../lib/utils'
 import { useTranslation } from '../lib/i18n'
 
 // ---------------------------------------------------------------------------
@@ -193,15 +193,6 @@ function IconZap() {
   )
 }
 
-function IconDollarSign() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="12" y1="1" x2="12" y2="23" />
-      <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-    </svg>
-  )
-}
-
 function IconKey() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -340,7 +331,7 @@ export default function DashboardPage() {
         )}
 
         {/* Stat cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           <StatCard
             label={t('dashboard.requests') + " (24h)"}
             value={statsLoading ? skeletonValue : formatNumber(stats?.requests_24h ?? 0)}
@@ -352,12 +343,6 @@ export default function DashboardPage() {
             value={statsLoading ? skeletonValue : formatTokens(stats?.tokens_24h ?? 0)}
             icon={<IconZap />}
             iconColor="blue"
-          />
-          <StatCard
-            label={t('dashboard.cost') + " (24h)"}
-            value={statsLoading ? skeletonValue : formatCost(stats?.cost_estimate_24h ?? 0)}
-            icon={<IconDollarSign />}
-            iconColor="green"
           />
           <StatCard
             label={t('dashboard.keys')}

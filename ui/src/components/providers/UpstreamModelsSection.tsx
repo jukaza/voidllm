@@ -18,8 +18,6 @@ import {
 } from '../../hooks/useProviders'
 import { useToast } from '../../hooks/useToast'
 import { useTranslation } from '../../lib/i18n'
-import { CostPairCell } from '../ui/PriceDisplay'
-
 interface UpstreamModelsSectionProps {
   providerId: string
 }
@@ -79,20 +77,7 @@ export function UpstreamModelsSection({ providerId }: UpstreamModelsSectionProps
   function runImport() {
     if (selected.size === 0) return
     importModels.mutate(
-      [...selected].map((id) => {
-        const dm = discovered.find((m) => m.id === id)
-        return {
-          upstream_id: id,
-          cost: dm?.known_cost
-            ? {
-                in: dm.known_cost.in,
-                out: dm.known_cost.out,
-                cached_in: dm.known_cost.cached_in,
-                cache_write: dm.known_cost.cache_write,
-              }
-            : undefined,
-        }
-      }),
+      [...selected].map((id) => ({ upstream_id: id })),
       {
         onSuccess: (res) => {
           const failed = res.results.filter((r) => r.error)
@@ -128,16 +113,6 @@ export function UpstreamModelsSection({ providerId }: UpstreamModelsSectionProps
       render: (row) => (
         <span className="font-mono text-xs text-text-primary">{row.upstream_id}</span>
       ),
-    },
-    {
-      key: 'ref_cost',
-      header: t('provider_detail.col_ref_cost'),
-      render: (row) =>
-        row.cost_input_per_1m != null && row.cost_output_per_1m != null ? (
-          <CostPairCell input={row.cost_input_per_1m} output={row.cost_output_per_1m} />
-        ) : (
-          <span className="text-text-tertiary text-xs">—</span>
-        ),
     },
     {
       key: 'enabled',
@@ -220,7 +195,6 @@ export function UpstreamModelsSection({ providerId }: UpstreamModelsSectionProps
                 <tr>
                   <th className="px-3 py-2 w-8" />
                   <th className="px-3 py-2">{t('wizard.col_upstream')}</th>
-                  <th className="px-3 py-2 hidden sm:table-cell">{t('provider_detail.col_ref_cost')}</th>
                   <th className="px-3 py-2">{t('common.status')}</th>
                 </tr>
               </thead>
@@ -238,13 +212,6 @@ export function UpstreamModelsSection({ providerId }: UpstreamModelsSectionProps
                         />
                       </td>
                       <td className="px-3 py-2 font-mono text-xs">{m.id}</td>
-                      <td className="px-3 py-2 text-xs tabular-nums text-text-tertiary hidden sm:table-cell">
-                        {m.known_cost ? (
-                          <CostPairCell input={m.known_cost.in} output={m.known_cost.out} />
-                        ) : (
-                          '—'
-                        )}
-                      </td>
                       <td className="px-3 py-2">
                         {inInventory ? (
                           <Badge variant="info">{t('provider_detail.badge_in_inventory')}</Badge>

@@ -308,9 +308,9 @@ settings:
 		found := false
 		for scanner.Scan() {
 			line := scanner.Text()
-			if !found && strings.Contains(line, "vl_uk_") {
+			if !found && (strings.Contains(line, "sk-") || strings.Contains(line, "vl_uk_")) {
 				for _, p := range strings.Fields(line) {
-					if strings.HasPrefix(p, "vl_uk_") {
+					if strings.HasPrefix(p, "sk-") || strings.HasPrefix(p, "vl_uk_") {
 						keyCh <- p
 						found = true
 						break

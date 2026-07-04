@@ -317,7 +317,7 @@ func NewRegistry(models []config.ModelConfig) (*Registry, error) {
 			}
 		}
 
-		m := &Model{
+		r.models[mc.Name] = buildRegistryEntry(Model{
 			Name:              mc.Name,
 			Provider:          mc.Provider,
 			Type:              modelType,
@@ -335,10 +335,8 @@ func NewRegistry(models []config.ModelConfig) (*Registry, error) {
 			MaxRetries:        mc.MaxRetries,
 			Deployments:       deployments,
 			FallbackModelName: mc.Fallback,
-			destPrivate:       classifyDestPrivate(mc.BaseURL),
 			PIIFilter:         mc.PIIFilter,
-		}
-		r.models[mc.Name] = m
+		})
 	}
 
 	// Pass 2: register all aliases now that every canonical name is known.
@@ -445,48 +443,10 @@ func (r *Registry) AddModel(m Model) {
 		}
 	}
 
-	aliases := make([]string, len(m.Aliases))
-	copy(aliases, m.Aliases)
-
-	// Re-derive destPrivate from each deployment's BaseURL so that models
-	// added via AddModel (e.g. from the Admin API) have the same classification
-	// as those loaded from config at startup. PIIFilter is carried over from
-	// the caller-supplied Deployment; the pointer is treated as immutable so
-	// shallow copying the pointer is safe.
-	deployments := make([]Deployment, len(m.Deployments))
-	for i, d := range m.Deployments {
-		d.destPrivate = classifyDestPrivate(d.BaseURL)
-		deployments[i] = d
-	}
-
-	entry := &Model{
-		Name:              m.Name,
-		Provider:          m.Provider,
-		Type:              m.Type,
-		BaseURL:           m.BaseURL,
-		APIKey:            m.APIKey,
-		Aliases:           aliases,
-		MaxContextTokens:  m.MaxContextTokens,
-		Pricing:           m.Pricing,
-		AzureDeployment:   m.AzureDeployment,
-		AzureAPIVersion:   m.AzureAPIVersion,
-		GCPProject:        m.GCPProject,
-		GCPLocation:       m.GCPLocation,
-		Timeout:           m.Timeout,
-		Strategy:          m.Strategy,
-		MaxRetries:        m.MaxRetries,
-		Deployments:       deployments,
-		FallbackModelName:     m.FallbackModelName,
-		destPrivate:           classifyDestPrivate(m.BaseURL),
-		PIIFilter:             m.PIIFilter,
-		RouteSteps:            copyRouteSteps(m.RouteSteps),
-		RoutingStrategy:       m.RoutingStrategy,
-		StickyRoundRobinLimit: m.StickyRoundRobinLimit,
-		RPMLimit:              m.RPMLimit,
-	}
+	entry := buildRegistryEntry(m)
 	r.models[m.Name] = entry
 
-	for _, alias := range aliases {
+	for _, alias := range entry.Aliases {
 		r.aliases[alias] = m.Name
 	}
 
@@ -599,6 +559,55 @@ func copyRouteSteps(steps []RouteStep) []RouteStep {
 	out := make([]RouteStep, len(steps))
 	copy(out, steps)
 	return out
+}
+
+// buildRegistryEntry constructs an immutable registry entry from m, copying
+// every Model field so callers cannot accidentally omit billing, routing, or
+// deployment metadata when adding models.
+func buildRegistryEntry(m Model) *Model {
+	aliases := make([]string, len(m.Aliases))
+	copy(aliases, m.Aliases)
+
+	deployments := make([]Deployment, len(m.Deployments))
+	for i, d := range m.Deployments {
+		d.destPrivate = classifyDestPrivate(d.BaseURL)
+		deployments[i] = d
+	}
+
+	return &Model{
+		Name:                  m.Name,
+		Provider:              m.Provider,
+		Type:                  m.Type,
+		BaseURL:               m.BaseURL,
+		APIKey:                m.APIKey,
+		Aliases:               aliases,
+		MaxContextTokens:      m.MaxContextTokens,
+		Pricing:               m.Pricing,
+		AzureDeployment:       m.AzureDeployment,
+		AzureAPIVersion:       m.AzureAPIVersion,
+		GCPProject:            m.GCPProject,
+		GCPLocation:           m.GCPLocation,
+		Timeout:               m.Timeout,
+		Strategy:              m.Strategy,
+		MaxRetries:            m.MaxRetries,
+		Deployments:           deployments,
+		FallbackModelName:     m.FallbackModelName,
+		destPrivate:           classifyDestPrivate(m.BaseURL),
+		PIIFilter:             m.PIIFilter,
+		SellInputPer1M:        m.SellInputPer1M,
+		SellOutputPer1M:       m.SellOutputPer1M,
+		SellCachedInputPer1M:  m.SellCachedInputPer1M,
+		SellCacheWritePer1M:   m.SellCacheWritePer1M,
+		BillPerToken:          m.BillPerToken,
+		BillPerRequest:        m.BillPerRequest,
+		SellPerRequest:        m.SellPerRequest,
+		BillMinPerRequest:     m.BillMinPerRequest,
+		SellMinPerRequest:     m.SellMinPerRequest,
+		RouteSteps:            copyRouteSteps(m.RouteSteps),
+		RoutingStrategy:       m.RoutingStrategy,
+		StickyRoundRobinLimit: m.StickyRoundRobinLimit,
+		RPMLimit:              m.RPMLimit,
+	}
 }
 
 // rebuildSorted rebuilds the pre-sorted slice of model pointers from the models map.

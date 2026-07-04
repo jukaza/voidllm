@@ -336,6 +336,75 @@ func TestAzureFields(t *testing.T) {
 	}
 }
 
+// TestAddModel_PreservesRoutingFields verifies combo routing metadata survives
+// AddModel → Resolve.
+func TestAddModel_PreservesRoutingFields(t *testing.T) {
+	r, err := NewRegistry(nil)
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+
+	costIn := 1200.0
+	r.AddModel(Model{
+		Name:             "combo-product",
+		Provider:         "openai",
+		BaseURL:          "https://api.example.com/v1",
+		APIKey:           "sk-test",
+		RoutingStrategy:  "round-robin",
+		StickyRoundRobinLimit: 5,
+		RPMLimit:         60,
+		RouteSteps: []RouteStep{{
+			ProviderID:    "prov-1",
+			UpstreamModel: "upstream-a",
+			CostInputPer1M: &costIn,
+		}},
+	})
+
+	m, err := r.Resolve("combo-product")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if m.RoutingStrategy != "round-robin" {
+		t.Errorf("RoutingStrategy = %q, want round-robin", m.RoutingStrategy)
+	}
+	if m.StickyRoundRobinLimit != 5 {
+		t.Errorf("StickyRoundRobinLimit = %d, want 5", m.StickyRoundRobinLimit)
+	}
+	if len(m.RouteSteps) != 1 || m.RouteSteps[0].CostInputPer1M == nil || *m.RouteSteps[0].CostInputPer1M != costIn {
+		t.Errorf("RouteSteps not preserved: %+v", m.RouteSteps)
+	}
+}
+
+// TestAddModel_PreservesBillingFields verifies that sell/bill pricing loaded
+// from the database survives AddModel → Resolve (the hot-path registry path).
+func TestAddModel_PreservesBillingFields(t *testing.T) {
+	r, err := NewRegistry(nil)
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+
+	sellPerRequest := 1500.0
+	r.AddModel(Model{
+		Name:           "deepseek-v4-flash",
+		Provider:       "openai",
+		BaseURL:        "https://api.example.com/v1",
+		APIKey:         "sk-test",
+		BillPerRequest: true,
+		SellPerRequest: &sellPerRequest,
+	})
+
+	m, err := r.Resolve("deepseek-v4-flash")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if !m.BillPerRequest {
+		t.Error("BillPerRequest = false, want true")
+	}
+	if m.SellPerRequest == nil || *m.SellPerRequest != sellPerRequest {
+		t.Errorf("SellPerRequest = %v, want %v", m.SellPerRequest, sellPerRequest)
+	}
+}
+
 // TestPricingField verifies that Pricing is copied from ModelConfig into the
 // resolved Model.
 func TestPricingField(t *testing.T) {

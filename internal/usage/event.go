@@ -1,6 +1,8 @@
 // Package usage provides async usage event logging for the proxy hot path.
 package usage
 
+import "encoding/json"
+
 // Event represents a single proxy request for usage tracking.
 type Event struct {
 	KeyID              string
@@ -18,6 +20,10 @@ type Event struct {
 	StatusCode         int
 	RequestID          string
 	CachedTokens       int
+	CacheWriteTokens   int
 	Revenue            *float64
 	DeploymentID       string
+	LogType            string // consume | error
+	IsStream           bool
+	Meta               json.RawMessage
 }

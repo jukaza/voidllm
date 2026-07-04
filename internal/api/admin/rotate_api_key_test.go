@@ -133,8 +133,8 @@ func TestRotateAPIKey_MemberRotatesOwnKey(t *testing.T) {
 	}
 
 	// The new key must start with the user_key prefix.
-	if !strings.HasPrefix(plaintextNew, keygen.PrefixUser) {
-		t.Errorf("new_key.key = %q, want prefix %q", plaintextNew, keygen.PrefixUser)
+	if !strings.HasPrefix(plaintextNew, keygen.PrefixAPI) {
+		t.Errorf("new_key.key = %q, want prefix %q", plaintextNew, keygen.PrefixAPI)
 	}
 }
 
@@ -626,7 +626,7 @@ func TestRotateAPIKey_KeyTypeVariants(t *testing.T) {
 				}
 				return apiKey.ID
 			},
-			wantPrefix: keygen.PrefixUser,
+			wantPrefix: keygen.PrefixAPI,
 		},
 	}
 

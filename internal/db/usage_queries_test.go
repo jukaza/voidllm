@@ -39,11 +39,17 @@ type usageEventParams struct {
 	compTokens   int64
 	totalTokens  int64
 	costEstimate *float64
+	revenue      *float64
 	durationMS   *int64
 	createdAt    time.Time
 }
 
 func insertUsageEvent(t *testing.T, d *DB, p usageEventParams) {
+	t.Helper()
+	insertUsageEventWithRevenue(t, d, p)
+}
+
+func insertUsageEventWithRevenue(t *testing.T, d *DB, p usageEventParams) {
 	t.Helper()
 
 	userVal := "NULL"
@@ -53,6 +59,10 @@ func insertUsageEvent(t *testing.T, d *DB, p usageEventParams) {
 	costVal := "NULL"
 	if p.costEstimate != nil {
 		costVal = fmt.Sprintf("%f", *p.costEstimate)
+	}
+	revenueVal := "NULL"
+	if p.revenue != nil {
+		revenueVal = fmt.Sprintf("%f", *p.revenue)
 	}
 	durVal := "NULL"
 	if p.durationMS != nil {
@@ -66,14 +76,14 @@ func insertUsageEvent(t *testing.T, d *DB, p usageEventParams) {
 		`INSERT INTO usage_events
 			(id, key_id, key_type, user_id, model_name,
 			 prompt_tokens, completion_tokens, total_tokens,
-			 cost_estimate, request_duration_ms, status_code, created_at)
+			 cost_estimate, revenue, request_duration_ms, status_code, created_at)
 		 VALUES
 			('%s', '%s', 'user_key', %s, '%s',
 			 %d, %d, %d,
-			 %s, %s, 200, '%s')`,
+			 %s, %s, %s, 200, '%s')`,
 		p.id, p.keyID, userVal, p.modelName,
 		p.promptTokens, p.compTokens, p.totalTokens,
-		costVal, durVal,
+		costVal, revenueVal, durVal,
 		p.createdAt.UTC().Format(time.RFC3339),
 	)
 	if _, err := d.sql.ExecContext(context.Background(), query); err != nil {
@@ -299,7 +309,7 @@ func TestGetSystemUsageAggregates_InvalidGroupBy_ReturnsError(t *testing.T) {
 	}
 }
 
-func TestGetSystemUsageAggregates_CostEstimate_NullTreatedAsZero(t *testing.T) {
+func TestGetSystemUsageAggregates_RevenueSummed(t *testing.T) {
 	t.Parallel()
 
 	d := openMigratedDB(t)
@@ -308,19 +318,19 @@ func TestGetSystemUsageAggregates_CostEstimate_NullTreatedAsZero(t *testing.T) {
 	from := now.Add(-2 * time.Hour)
 	to := now.Add(time.Minute)
 
-	insertUsageEvent(t, d, usageEventParams{
-		id: "agg-cost-1", keyID: "key-cost", userID: "user-cost",
-		totalTokens: 100, costEstimate: float64Ptr(0.005),
+	insertUsageEventWithRevenue(t, d, usageEventParams{
+		id: "agg-rev-1", keyID: "key-rev", userID: "user-rev",
+		totalTokens: 100, revenue: float64Ptr(0.005),
 		createdAt: now.Add(-90 * time.Minute),
 	})
-	insertUsageEvent(t, d, usageEventParams{
-		id: "agg-cost-2", keyID: "key-cost", userID: "user-cost",
-		totalTokens: 200, costEstimate: nil,
+	insertUsageEventWithRevenue(t, d, usageEventParams{
+		id: "agg-rev-2", keyID: "key-rev", userID: "user-rev",
+		totalTokens: 200, revenue: nil,
 		createdAt: now.Add(-60 * time.Minute),
 	})
-	insertUsageEvent(t, d, usageEventParams{
-		id: "agg-cost-3", keyID: "key-cost", userID: "user-cost",
-		totalTokens: 50, costEstimate: float64Ptr(0.002),
+	insertUsageEventWithRevenue(t, d, usageEventParams{
+		id: "agg-rev-3", keyID: "key-rev", userID: "user-rev",
+		totalTokens: 50, revenue: float64Ptr(0.002),
 		createdAt: now.Add(-30 * time.Minute),
 	})
 
@@ -331,8 +341,8 @@ func TestGetSystemUsageAggregates_CostEstimate_NullTreatedAsZero(t *testing.T) {
 	if len(rows) == 0 {
 		t.Fatal("GetSystemUsageAggregates() returned 0 rows, want 1")
 	}
-	const wantCost = 0.007
-	if math.Abs(rows[0].CostEstimate-wantCost) > 1e-9 {
-		t.Errorf("CostEstimate = %f, want %f", rows[0].CostEstimate, wantCost)
+	const wantRevenue = 0.007
+	if math.Abs(rows[0].Revenue-wantRevenue) > 1e-9 {
+		t.Errorf("Revenue = %f, want %f", rows[0].Revenue, wantRevenue)
 	}
 }

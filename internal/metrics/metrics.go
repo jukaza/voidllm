@@ -61,6 +61,13 @@ var UpstreamErrorsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 	Help: "Total upstream provider errors.",
 }, []string{"model", "provider"})
 
+// UsageEventsDroppedTotal counts usage events dropped because the async logger
+// buffer was full and drop_on_full is enabled.
+var UsageEventsDroppedTotal = promauto.NewCounter(prometheus.CounterOpts{
+	Name: "voidllm_usage_events_dropped_total",
+	Help: "Total usage events dropped due to a full async logger buffer.",
+})
+
 // RateLimitRejectionsTotal counts requests rejected before being proxied due
 // to rate or token budget limits, partitioned by scope: "request" for
 // requests-per-minute/day limits and "token" for daily/monthly token budgets.

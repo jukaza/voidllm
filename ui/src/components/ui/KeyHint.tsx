@@ -2,7 +2,7 @@ import React from 'react'
 import { cn } from '../../lib/utils'
 
 export interface KeyHintProps extends React.HTMLAttributes<HTMLSpanElement> {
-  /** The pre-formatted key hint from the backend (e.g. "vl_uk_...2ad6"). */
+  /** The pre-formatted key hint from the backend (e.g. "sk-a3f...2ad6"). */
   hint: string
 }
 

@@ -29,18 +29,19 @@ type usageDataPoint struct {
 	TotalTokens      int64   `json:"total_tokens"`
 	CachedTokens     int64   `json:"cached_tokens"`
 	Revenue          float64 `json:"revenue"`
-	CostEstimate     float64 `json:"cost_estimate"`
 	AvgDurationMS    float64 `json:"avg_duration_ms"`
 }
 
 // validGroupBy is the set of accepted group_by values for usage endpoints.
 var validGroupBy = map[string]bool{
-	"":      true,
-	"model": true,
-	"key":   true,
-	"user":  true,
-	"day":   true,
-	"hour":  true,
+	"":           true,
+	"model":      true,
+	"key":        true,
+	"user":       true,
+	"day":        true,
+	"hour":       true,
+	"deployment": true,
+	"provider":   true,
 }
 
 // maxUsageRangeDays is the maximum allowed time range for a usage query.
@@ -93,7 +94,7 @@ func parseUsageParams(c fiber.Ctx) (from, to time.Time, groupBy string, ok bool)
 
 	groupBy = c.Query("group_by", "")
 	if !validGroupBy[groupBy] {
-		_ = apierror.BadRequest(c, "group_by must be one of: model, key, user, day, hour")
+		_ = apierror.BadRequest(c, "group_by must be one of: model, key, user, day, hour, deployment, provider")
 		ok = false
 		return
 	}
@@ -115,11 +116,47 @@ func aggregatesToDataPoints(aggs []db.UsageAggregate) []usageDataPoint {
 			TotalTokens:      a.TotalTokens,
 			CachedTokens:     a.CachedTokens,
 			Revenue:          a.Revenue,
-			CostEstimate:     a.CostEstimate,
 			AvgDurationMS:    a.AvgDurationMS,
 		}
 	}
 	return data
+}
+
+// parseMyUsageFilter builds the scoped usage filter for GET /usage/me.
+// Optional query params key_id and model narrow results within the caller's scope.
+func (h *Handler) parseMyUsageFilter(c fiber.Ctx, keyInfo *auth.KeyInfo) (db.UsageFilter, bool) {
+	filter := db.UsageFilter{}
+	if keyInfo.UserID != "" {
+		filter.UserID = keyInfo.UserID
+	} else {
+		filter.KeyID = keyInfo.ID
+	}
+
+	if keyID := c.Query("key_id"); keyID != "" {
+		key, err := h.DB.GetAPIKey(c.Context(), keyID)
+		if err != nil {
+			if err == db.ErrNotFound {
+				_ = apierror.NotFound(c, "api key not found")
+				return filter, false
+			}
+			h.Log.ErrorContext(c.Context(), "my usage: get api key", slog.String("error", err.Error()))
+			_ = apierror.InternalError(c, "failed to validate api key")
+			return filter, false
+		}
+		if keyInfo.UserID != "" {
+			if key.UserID == nil || *key.UserID != keyInfo.UserID {
+				_ = apierror.Send(c, fiber.StatusForbidden, "forbidden", "api key does not belong to you")
+				return filter, false
+			}
+			filter.KeyID = keyID
+		} else if keyID != keyInfo.ID {
+			_ = apierror.Send(c, fiber.StatusForbidden, "forbidden", "api key does not belong to you")
+			return filter, false
+		}
+	}
+
+	filter.Model = c.Query("model")
+	return filter, true
 }
 
 // enrichGroupLabels resolves entity IDs in the aggregates to human-readable labels.
@@ -187,11 +224,9 @@ func (h *Handler) MyUsage(c fiber.Ctx) error {
 		return nil
 	}
 
-	filter := db.UsageFilter{}
-	if keyInfo.UserID != "" {
-		filter.UserID = keyInfo.UserID
-	} else {
-		filter.KeyID = keyInfo.ID
+	filter, ok := h.parseMyUsageFilter(c, keyInfo)
+	if !ok {
+		return nil
 	}
 
 	aggregates, err := h.DB.GetScopedUsageAggregates(c.Context(), filter, from, to, groupBy)

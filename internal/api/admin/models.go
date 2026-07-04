@@ -356,31 +356,35 @@ func dbModelToProxy(m *db.Model, apiKeyPlaintext string, fallbackName string) pr
 		modelType = "chat"
 	}
 	return proxy.Model{
-		Name:                 m.Name,
-		Provider:             m.Provider,
-		Type:                 modelType,
-		BaseURL:              m.BaseURL,
-		APIKey:               apiKeyPlaintext,
-		Aliases:              aliases,
-		MaxContextTokens:     m.MaxContextTokens,
-		Pricing:              config.PricingConfig{InputPer1M: m.InputPricePer1M, OutputPer1M: m.OutputPricePer1M},
-		AzureDeployment:      m.AzureDeployment,
-		AzureAPIVersion:      m.AzureAPIVersion,
-		GCPProject:           m.GCPProject,
-		GCPLocation:          m.GCPLocation,
-		Timeout:              timeout,
-		FallbackModelName:    fallbackName,
-		PIIFilter:            m.PIIFilter,
-		SellInputPer1M:       m.SellInputPer1M,
-		SellOutputPer1M:      m.SellOutputPer1M,
-		SellCachedInputPer1M: m.SellCachedInputPer1M,
-		SellCacheWritePer1M:  m.SellCacheWritePer1M,
-		BillPerToken:         m.BillPerToken,
-		BillPerRequest:       m.BillPerRequest,
-		SellPerRequest:       m.SellPerRequest,
-		BillMinPerRequest:    m.BillMinPerRequest,
-		SellMinPerRequest:    m.SellMinPerRequest,
-		RPMLimit:             m.RPMLimit,
+		Name:                  m.Name,
+		Provider:              m.Provider,
+		Type:                  modelType,
+		BaseURL:               m.BaseURL,
+		APIKey:                apiKeyPlaintext,
+		Aliases:               aliases,
+		MaxContextTokens:      m.MaxContextTokens,
+		Pricing:               config.PricingConfig{InputPer1M: m.InputPricePer1M, OutputPer1M: m.OutputPricePer1M},
+		AzureDeployment:       m.AzureDeployment,
+		AzureAPIVersion:       m.AzureAPIVersion,
+		GCPProject:            m.GCPProject,
+		GCPLocation:           m.GCPLocation,
+		Timeout:               timeout,
+		Strategy:              m.Strategy,
+		MaxRetries:            m.MaxRetries,
+		FallbackModelName:     fallbackName,
+		PIIFilter:             m.PIIFilter,
+		SellInputPer1M:        m.SellInputPer1M,
+		SellOutputPer1M:       m.SellOutputPer1M,
+		SellCachedInputPer1M:  m.SellCachedInputPer1M,
+		SellCacheWritePer1M:   m.SellCacheWritePer1M,
+		BillPerToken:          m.BillPerToken,
+		BillPerRequest:        m.BillPerRequest,
+		SellPerRequest:        m.SellPerRequest,
+		BillMinPerRequest:     m.BillMinPerRequest,
+		SellMinPerRequest:     m.SellMinPerRequest,
+		RoutingStrategy:       m.RoutingStrategy,
+		StickyRoundRobinLimit: m.StickyRoundRobinLimit,
+		RPMLimit:              m.RPMLimit,
 	}
 }
 
@@ -750,7 +754,13 @@ func (h *Handler) CreateModel(c fiber.Ctx) error {
 	}
 
 	if m.IsActive {
-		h.Registry.AddModel(dbModelToProxy(m, req.APIKey, req.FallbackModelName))
+		if h.ReloadModels != nil {
+			if reloadErr := h.ReloadModels(ctx); reloadErr != nil {
+				h.Log.ErrorContext(ctx, "create model: reload registry", slog.String("error", reloadErr.Error()))
+			}
+		} else {
+			h.Registry.AddModel(dbModelToProxy(m, req.APIKey, req.FallbackModelName))
+		}
 	}
 
 	if h.Redis != nil {
@@ -1306,7 +1316,13 @@ func (h *Handler) ActivateModel(c fiber.Ctx) error {
 	}
 
 	fallbackName := h.resolveFallbackName(ctx, m.FallbackModelID)
-	h.Registry.AddModel(dbModelToProxy(m, plaintext, fallbackName))
+	if h.ReloadModels != nil {
+		if reloadErr := h.ReloadModels(ctx); reloadErr != nil {
+			h.Log.ErrorContext(ctx, "activate model: reload registry", slog.String("error", reloadErr.Error()))
+		}
+	} else {
+		h.Registry.AddModel(dbModelToProxy(m, plaintext, fallbackName))
+	}
 
 	if h.Redis != nil {
 		if pubErr := h.Redis.PublishInvalidation(ctx, voidredis.ChannelModels, "reload"); pubErr != nil {

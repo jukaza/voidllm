@@ -19,7 +19,9 @@ type HourlyRollup struct {
 	PromptTokens     int
 	CompletionTokens int
 	TotalTokens      int
+	CachedTokens     int
 	CostSum          float64
+	RevenueSum       float64
 	DurationSumMS    float64
 	TTFTSumMS        float64
 	TTFTCount        int
@@ -54,14 +56,14 @@ func (d *DB) GetHourlyUsageTotals(ctx context.Context, filter UsageFilter, since
 
 	query := "SELECT COALESCE(SUM(request_count), 0), " +
 		"COALESCE(SUM(prompt_tokens), 0), COALESCE(SUM(completion_tokens), 0), " +
-		"COALESCE(SUM(total_tokens), 0), COALESCE(SUM(cost_sum), 0), " +
+		"COALESCE(SUM(total_tokens), 0), " +
 		"CASE WHEN SUM(request_count) > 0 THEN SUM(duration_sum_ms) * 1.0 / SUM(request_count) ELSE 0 END " +
 		"FROM usage_hourly WHERE " + strings.Join(conditions, " AND ")
 
 	var a UsageAggregate
 	err := d.sql.QueryRowContext(ctx, query, args...).Scan(
 		&a.TotalRequests, &a.PromptTokens, &a.CompletionTokens,
-		&a.TotalTokens, &a.CostEstimate, &a.AvgDurationMS,
+		&a.TotalTokens, &a.AvgDurationMS,
 	)
 	if err != nil {
 		return a, fmt.Errorf("get hourly usage totals: %w", err)
@@ -77,17 +79,19 @@ func (d *DB) UpsertUsageHourly(ctx context.Context, r HourlyRollup) error {
 	query := "INSERT INTO usage_hourly (" +
 		"user_id, key_id, model_name, bucket_hour, " +
 		"request_count, prompt_tokens, completion_tokens, total_tokens, " +
-		"cost_sum, duration_sum_ms, ttft_sum_ms, ttft_count" +
+		"cached_tokens, cost_sum, revenue_sum, duration_sum_ms, ttft_sum_ms, ttft_count" +
 		") VALUES (" +
 		p(1) + ", " + p(2) + ", " + p(3) + ", " + p(4) + ", " +
 		p(5) + ", " + p(6) + ", " + p(7) + ", " + p(8) + ", " +
-		p(9) + ", " + p(10) + ", " + p(11) + ", " + p(12) +
+		p(9) + ", " + p(10) + ", " + p(11) + ", " + p(12) + ", " + p(13) + ", " + p(14) +
 		") ON CONFLICT (key_id, model_name, bucket_hour) DO UPDATE SET " +
 		"request_count = request_count + excluded.request_count, " +
 		"prompt_tokens = prompt_tokens + excluded.prompt_tokens, " +
 		"completion_tokens = completion_tokens + excluded.completion_tokens, " +
 		"total_tokens = total_tokens + excluded.total_tokens, " +
+		"cached_tokens = cached_tokens + excluded.cached_tokens, " +
 		"cost_sum = cost_sum + excluded.cost_sum, " +
+		"revenue_sum = revenue_sum + excluded.revenue_sum, " +
 		"duration_sum_ms = duration_sum_ms + excluded.duration_sum_ms, " +
 		"ttft_sum_ms = ttft_sum_ms + excluded.ttft_sum_ms, " +
 		"ttft_count = ttft_count + excluded.ttft_count"
@@ -95,7 +99,7 @@ func (d *DB) UpsertUsageHourly(ctx context.Context, r HourlyRollup) error {
 	_, err := d.sql.ExecContext(ctx, query,
 		r.UserID, r.KeyID, r.ModelName, r.BucketHour,
 		r.RequestCount, r.PromptTokens, r.CompletionTokens, r.TotalTokens,
-		r.CostSum, r.DurationSumMS, r.TTFTSumMS, r.TTFTCount,
+		r.CachedTokens, r.CostSum, r.RevenueSum, r.DurationSumMS, r.TTFTSumMS, r.TTFTCount,
 	)
 	if err != nil {
 		return fmt.Errorf("upsert usage hourly: %w", err)

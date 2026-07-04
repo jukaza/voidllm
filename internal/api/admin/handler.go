@@ -18,6 +18,7 @@ import (
 	"github.com/voidmind-io/voidllm/internal/proxy"
 	voidredis "github.com/voidmind-io/voidllm/internal/redis"
 	"github.com/voidmind-io/voidllm/internal/update"
+	"github.com/voidmind-io/voidllm/internal/usage"
 	"github.com/voidmind-io/voidllm/internal/wallet"
 )
 
@@ -57,6 +58,8 @@ type Handler struct {
 	// Wallet is the prepaid wallet service. Nil disables wallet features
 	// (signup still creates the DB wallet row).
 	Wallet *wallet.Service
+	// LiveStats exposes in-memory live request counters for SSE dashboards.
+	LiveStats *usage.LiveStats
 	// UpdateChecker provides cached update status read from the settings table.
 	// Nil in dev builds (Version == "dev") — GetUpdateStatus returns a static
 	// response in that case.

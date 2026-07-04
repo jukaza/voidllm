@@ -16,7 +16,6 @@ export interface DashboardStats {
   total_members?: number
   requests_24h: number
   tokens_24h: number
-  cost_estimate_24h: number
   budget_warnings?: BudgetWarning[]
   models_healthy: number
   models_unhealthy: number

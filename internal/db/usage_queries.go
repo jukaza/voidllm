@@ -27,7 +27,6 @@ type UsageAggregate struct {
 	TotalTokens      int64
 	CachedTokens     int64
 	Revenue          float64
-	CostEstimate     float64
 	AvgDurationMS    float64
 }
 
@@ -35,6 +34,7 @@ type UsageAggregate struct {
 type UsageFilter struct {
 	UserID string
 	KeyID  string
+	Model  string
 }
 
 // UsageScope identifies which column to filter on for token-usage lookups.
@@ -70,6 +70,10 @@ func (d *DB) queryUsageAggregates(ctx context.Context, filter *UsageFilter, from
 		groupCol = "DATE(created_at)"
 	case "hour":
 		groupCol = d.dialect.HourTrunc()
+	case "deployment":
+		groupCol = "deployment_id"
+	case "provider":
+		groupCol = d.dialect.MetaProviderSlug()
 	default:
 		return nil, fmt.Errorf("queryUsageAggregates: invalid groupBy %q", groupBy)
 	}
@@ -82,11 +86,11 @@ func (d *DB) queryUsageAggregates(ctx context.Context, filter *UsageFilter, from
 	var conditions []string
 	var args []any
 
-	conditions = append(conditions, "created_at >= "+p(argN))
+	conditions = append(conditions, d.dialect.TimestampGTE("created_at", p(argN)))
 	args = append(args, fromStr)
 	argN++
 
-	conditions = append(conditions, "created_at <= "+p(argN))
+	conditions = append(conditions, d.dialect.TimestampLTE("created_at", p(argN)))
 	args = append(args, toStr)
 	argN++
 
@@ -101,6 +105,11 @@ func (d *DB) queryUsageAggregates(ctx context.Context, filter *UsageFilter, from
 			args = append(args, filter.KeyID)
 			argN++
 		}
+		if filter.Model != "" {
+			conditions = append(conditions, "model_name = "+p(argN))
+			args = append(args, filter.Model)
+			argN++
+		}
 	}
 
 	where := "WHERE " + strings.Join(conditions, " AND ")
@@ -111,7 +120,7 @@ func (d *DB) queryUsageAggregates(ctx context.Context, filter *UsageFilter, from
 		query = "SELECT " + selectCol + ", COUNT(*), " +
 			"COALESCE(SUM(prompt_tokens), 0), COALESCE(SUM(completion_tokens), 0), " +
 			"COALESCE(SUM(total_tokens), 0), COALESCE(SUM(cached_tokens), 0), COALESCE(SUM(revenue), 0), " +
-			"COALESCE(SUM(cost_estimate), 0), COALESCE(AVG(request_duration_ms), 0) " +
+			"COALESCE(AVG(request_duration_ms), 0) " +
 			"FROM usage_events " + where +
 			" GROUP BY " + groupCol +
 			" ORDER BY " + groupCol
@@ -119,7 +128,7 @@ func (d *DB) queryUsageAggregates(ctx context.Context, filter *UsageFilter, from
 		query = "SELECT '' AS group_key, COUNT(*), " +
 			"COALESCE(SUM(prompt_tokens), 0), COALESCE(SUM(completion_tokens), 0), " +
 			"COALESCE(SUM(total_tokens), 0), COALESCE(SUM(cached_tokens), 0), COALESCE(SUM(revenue), 0), " +
-			"COALESCE(SUM(cost_estimate), 0), COALESCE(AVG(request_duration_ms), 0) " +
+			"COALESCE(AVG(request_duration_ms), 0) " +
 			"FROM usage_events " + where
 	}
 
@@ -140,7 +149,6 @@ func (d *DB) queryUsageAggregates(ctx context.Context, filter *UsageFilter, from
 			&a.TotalTokens,
 			&a.CachedTokens,
 			&a.Revenue,
-			&a.CostEstimate,
 			&a.AvgDurationMS,
 		); err != nil {
 			return nil, fmt.Errorf("queryUsageAggregates scan: %w", err)

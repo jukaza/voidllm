@@ -43,6 +43,10 @@ func RegisterRoutes(app *fiber.App, handler *Handler, keyCache *cache.Cache[stri
 
 	// Own usage — no role restriction; any authenticated key sees its own data.
 	api.Get("/usage/me", handler.MyUsage)
+	api.Get("/usage/me/logs", handler.MyUsageLogs)
+	api.Get("/usage/me/logs/:request_id", handler.MyUsageLogDetail)
+	api.Get("/usage/stream", handler.UsageStream)
+	api.Get("/usage/live", handler.UsageLive)
 
 	// Dashboard stats — no role restriction.
 	api.Get("/dashboard/stats", handler.DashboardStats)
@@ -92,10 +96,15 @@ func RegisterRoutes(app *fiber.App, handler *Handler, keyCache *cache.Cache[stri
 
 	// Usage
 	api.Get("/usage", auth.RequireRole(auth.RoleSystemAdmin), handler.SystemAdminUsage)
+	api.Get("/usage/logs", auth.RequireRole(auth.RoleSystemAdmin), handler.SystemUsageLogs)
+	api.Get("/usage/logs/:request_id", auth.RequireRole(auth.RoleSystemAdmin), handler.SystemUsageLogDetail)
+	api.Get("/usage/profit", auth.RequireRole(auth.RoleSystemAdmin), handler.UsageProfit)
+	api.Get("/usage/channels", auth.RequireRole(auth.RoleSystemAdmin), handler.UsageChannels)
 
 	// Providers (upstream partners) — system_admin only.
 	// Static sub-paths (presets, discover-models, import) are registered before
 	// /:provider_id so Fiber does not treat them as provider_id parameter values.
+	api.Get("/providers/usage", auth.RequireRole(auth.RoleSystemAdmin), handler.ProviderUsage)
 	api.Get("/providers/presets", auth.RequireRole(auth.RoleSystemAdmin), handler.ListProviderPresets)
 	api.Post("/providers/discover-models", auth.RequireRole(auth.RoleSystemAdmin), handler.DiscoverProviderModels)
 	api.Post("/providers/import", auth.RequireRole(auth.RoleSystemAdmin), handler.ImportProvider)

@@ -10,6 +10,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/voidmind-io/voidllm/internal/db"
+	"github.com/voidmind-io/voidllm/pkg/keygen"
 )
 
 // ---- POST /api/v1/auth/login -------------------------------------------------
@@ -37,8 +38,8 @@ func TestLogin(t *testing.T) {
 					t.Errorf("token field missing or empty: %v", body)
 					return
 				}
-				if !strings.HasPrefix(token, "vl_sk_") {
-					t.Errorf("token = %q, want prefix %q", token, "vl_sk_")
+				if !strings.HasPrefix(token, keygen.PrefixAPI) {
+					t.Errorf("token = %q, want prefix %q", token, keygen.PrefixAPI)
 				}
 			},
 		},
@@ -207,8 +208,8 @@ func TestLogin_TokenWorks(t *testing.T) {
 	if token == "" {
 		t.Fatal("login response token is empty")
 	}
-	if !strings.HasPrefix(token, "vl_sk_") {
-		t.Fatalf("token = %q, want prefix vl_sk_", token)
+	if !strings.HasPrefix(token, keygen.PrefixAPI) {
+		t.Fatalf("token = %q, want prefix %s", token, keygen.PrefixAPI)
 	}
 
 	// Step 2: use the token to call an authenticated endpoint.

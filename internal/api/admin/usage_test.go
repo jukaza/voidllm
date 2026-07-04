@@ -87,8 +87,7 @@ func TestGetUsage_ValidRange_ReturnsCorrectTotals(t *testing.T) {
 			TotalRequests    int64   `json:"total_requests"`
 			PromptTokens     int64   `json:"prompt_tokens"`
 			CompletionTokens int64   `json:"completion_tokens"`
-			TotalTokens      int64   `json:"total_tokens"`
-			CostEstimate     float64 `json:"cost_estimate"`
+			TotalTokens      int64 `json:"total_tokens"`
 		} `json:"data"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
@@ -296,7 +295,6 @@ func TestGetUsage_ResponseShape(t *testing.T) {
 			PromptTokens     int64   `json:"prompt_tokens"`
 			CompletionTokens int64   `json:"completion_tokens"`
 			TotalTokens      int64   `json:"total_tokens"`
-			CostEstimate     float64 `json:"cost_estimate"`
 			AvgDurationMS    float64 `json:"avg_duration_ms"`
 		} `json:"data"`
 	}

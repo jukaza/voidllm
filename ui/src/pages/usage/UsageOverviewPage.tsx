@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { StatCard } from '../../components/ui/StatCard'
 import { AreaChart } from '../../components/ui/charts'
 import { useMyUsage } from '../../hooks/useUsage'
-import { formatNumber, formatTokens, formatCost } from '../../lib/utils'
+import { formatNumber, formatTokens } from '../../lib/utils'
 
 function getLast7Days(): { from: string; to: string } {
   const now = new Date()
@@ -37,15 +37,6 @@ function SparklesIcon() {
   )
 }
 
-function DollarIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="12" y1="1" x2="12" y2="23" />
-      <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
-    </svg>
-  )
-}
-
 function ArrowRightIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -68,14 +59,13 @@ export default function UsageOverviewPage() {
   const llmTrend = useMyUsage(from7d, to7d, 'day')
 
   const llmSummary = useMemo(() => {
-    if (!llmTotals.data?.data) return { requests: 0, tokens: 0, cost: 0 }
+    if (!llmTotals.data?.data) return { requests: 0, tokens: 0 }
     return llmTotals.data.data.reduce(
       (acc, d) => ({
         requests: acc.requests + d.total_requests,
         tokens: acc.tokens + d.total_tokens,
-        cost: acc.cost + d.cost_estimate,
       }),
-      { requests: 0, tokens: 0, cost: 0 },
+      { requests: 0, tokens: 0 },
     )
   }, [llmTotals.data])
 
@@ -96,7 +86,7 @@ export default function UsageOverviewPage() {
           </Link>
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3">
           <StatCard
             label="Requests 24h"
             value={llmLoading ? '...' : formatNumber(llmSummary.requests)}
@@ -109,13 +99,6 @@ export default function UsageOverviewPage() {
             value={llmLoading ? '...' : formatTokens(llmSummary.tokens)}
             icon={<SparklesIcon />}
             iconColor="blue"
-            className="p-3"
-          />
-          <StatCard
-            label="Cost 24h"
-            value={llmLoading ? '...' : formatCost(llmSummary.cost)}
-            icon={<DollarIcon />}
-            iconColor="green"
             className="p-3"
           />
         </div>

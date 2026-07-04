@@ -41,6 +41,34 @@ export function useProviderPresets() {
   })
 }
 
+export interface ProviderUsageEntry {
+  revenue: number
+  total_requests: number
+}
+
+export interface ProviderUsageSlice {
+  from: string
+  to: string
+  totals: {
+    total_requests: number
+    revenue: number
+  }
+  by_provider: Record<string, ProviderUsageEntry>
+}
+
+export interface ProviderUsageResponse {
+  today: ProviderUsageSlice
+  all_time: ProviderUsageSlice
+}
+
+export function useProviderUsage() {
+  return useQuery({
+    queryKey: ['provider-usage'],
+    queryFn: () => apiClient<ProviderUsageResponse>('/providers/usage'),
+    staleTime: 60_000,
+  })
+}
+
 export function useProviders(cursor = '', limit = 50) {
   return useQuery({
     queryKey: ['providers', cursor, limit],

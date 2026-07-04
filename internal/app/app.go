@@ -672,7 +672,9 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 	proxyHandler.AliasCache = aliasCache
 	proxyHandler.CircuitBreakers = cbRegistry
 	proxyHandler.Router = modelRouter
+	liveStats := usage.NewLiveStats()
 	proxyHandler.UsageLogger = usageLogger
+	proxyHandler.LiveStats = liveStats
 	proxyHandler.RateLimiter = rateLimiter
 	proxyHandler.TokenCounter = tokenCounter
 	if cfg.Settings.Wallet.ShouldEnforceBalance() {
@@ -709,6 +711,7 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 		Log:           log,
 		LoginThrottle: loginThrottle,
 		Wallet:        walletService,
+		LiveStats:     liveStats,
 	}
 	// Wire the in-process reload callback so deployment mutations can re-gate the
 	// model registry immediately after storing a new license, even on

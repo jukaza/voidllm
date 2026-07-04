@@ -10,26 +10,20 @@ import (
 func TestGenerate(t *testing.T) {
 	t.Parallel()
 
+	const wantLen = 51 // sk- + 48 hex chars
+
 	tests := []struct {
-		name       string
-		keyType    string
-		wantPrefix string
-		wantLen    int
-		wantErr    bool
+		name    string
+		keyType string
+		wantErr bool
 	}{
 		{
-			name:       "user key has correct prefix and length",
-			keyType:    keygen.KeyTypeUser,
-			wantPrefix: keygen.PrefixUser,
-			wantLen:    54,
-			wantErr:    false,
+			name:    "user key has sk- prefix",
+			keyType: keygen.KeyTypeUser,
 		},
 		{
-			name:       "session key has correct prefix and length",
-			keyType:    keygen.KeyTypeSession,
-			wantPrefix: keygen.PrefixSession,
-			wantLen:    54,
-			wantErr:    false,
+			name:    "session key also uses sk- prefix",
+			keyType: keygen.KeyTypeSession,
 		},
 		{
 			name:    "invalid key type returns error",
@@ -62,11 +56,11 @@ func TestGenerate(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Generate(%q) unexpected error: %v", tc.keyType, err)
 			}
-			if !strings.HasPrefix(got, tc.wantPrefix) {
-				t.Errorf("Generate(%q) = %q, want prefix %q", tc.keyType, got, tc.wantPrefix)
+			if !strings.HasPrefix(got, keygen.PrefixAPI) {
+				t.Errorf("Generate(%q) = %q, want prefix %q", tc.keyType, got, keygen.PrefixAPI)
 			}
-			if len(got) != tc.wantLen {
-				t.Errorf("Generate(%q) len = %d, want %d", tc.keyType, len(got), tc.wantLen)
+			if len(got) != wantLen {
+				t.Errorf("Generate(%q) len = %d, want %d", tc.keyType, len(got), wantLen)
 			}
 		})
 	}
@@ -104,27 +98,27 @@ func TestHash(t *testing.T) {
 	}{
 		{
 			name:          "same key and secret produce same hash",
-			key:           "vl_uk_abc123",
+			key:           "sk-abc123deadbeefdeadbeefdeadbeefdeadbeef00",
 			secret:        fixedSecret,
-			compareKey:    "vl_uk_abc123",
+			compareKey:    "sk-abc123deadbeefdeadbeefdeadbeefdeadbeef00",
 			compareSecret: fixedSecret,
 			wantMatch:     true,
 			wantHexLen:    64,
 		},
 		{
 			name:          "same key different secret produces different hash",
-			key:           "vl_uk_abc123",
+			key:           "sk-abc123deadbeefdeadbeefdeadbeefdeadbeef00",
 			secret:        fixedSecret,
-			compareKey:    "vl_uk_abc123",
+			compareKey:    "sk-abc123deadbeefdeadbeefdeadbeefdeadbeef00",
 			compareSecret: []byte("zzzzyyyyxxxxwwwwvvvvuuuuttttssss"),
 			wantMatch:     false,
 			wantHexLen:    64,
 		},
 		{
 			name:          "different key same secret produces different hash",
-			key:           "vl_uk_abc123",
+			key:           "sk-abc123deadbeefdeadbeefdeadbeefdeadbeef00",
 			secret:        fixedSecret,
-			compareKey:    "vl_uk_xyz789",
+			compareKey:    "sk-xyz789deadbeefdeadbeefdeadbeefdeadbeef00",
 			compareSecret: fixedSecret,
 			wantMatch:     false,
 			wantHexLen:    64,
@@ -155,7 +149,7 @@ func TestHashDeterministic(t *testing.T) {
 	t.Parallel()
 
 	secret := []byte("aaaabbbbccccddddeeeeffffgggghhhh")
-	key := "vl_uk_deterministic"
+	key := "sk-deterministicdeadbeefdeadbeefdeadbeef00"
 
 	h1 := keygen.Hash(key, secret)
 	h2 := keygen.Hash(key, secret)
@@ -174,7 +168,12 @@ func TestHint(t *testing.T) {
 		want  string
 	}{
 		{
-			name:  "long key produces truncated hint",
+			name:  "long sk- key produces truncated hint",
+			input: "sk-a3f2e8b1c9d4f6e7a3f2e8b1c9d4f6e7a3f2e8b1c9d4f6e7",
+			want:  "sk-a3f...f6e7",
+		},
+		{
+			name:  "legacy user key hint",
 			input: "vl_uk_a3f2e8b1c9d4f6e7a3f2e8b1c9d4f6e7a3f2e8b1c9d4f6e7",
 			want:  "vl_uk_...f6e7",
 		},
@@ -226,16 +225,19 @@ func TestValidatePrefix(t *testing.T) {
 		wantErr     bool
 	}{
 		{
-			name:        "user key prefix recognized",
-			key:         "vl_uk_anything",
+			name:        "sk- prefix recognized",
+			key:         "sk-a3f2e8b1c9d4f6e7a3f2e8b1c9d4f6e7a3f2e8b1c9d4f6e7",
 			wantKeyType: keygen.KeyTypeUser,
-			wantErr:     false,
 		},
 		{
-			name:        "session key prefix recognized",
+			name:        "legacy user key prefix recognized",
+			key:         "vl_uk_anything",
+			wantKeyType: keygen.KeyTypeUser,
+		},
+		{
+			name:        "legacy session key prefix recognized",
 			key:         "vl_sk_anything",
 			wantKeyType: keygen.KeyTypeSession,
-			wantErr:     false,
 		},
 		{
 			name:    "legacy team key prefix rejected",
@@ -243,8 +245,8 @@ func TestValidatePrefix(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "openai-style key rejected",
-			key:     "sk-anything",
+			name:    "bare sk- rejected",
+			key:     "sk-short",
 			wantErr: true,
 		},
 		{
@@ -253,7 +255,7 @@ func TestValidatePrefix(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "partial prefix rejected",
+			name:    "partial legacy prefix rejected",
 			key:     "vl_uk",
 			wantErr: true,
 		},
@@ -295,8 +297,8 @@ func TestVerify(t *testing.T) {
 
 	secret := []byte("aaaabbbbccccddddeeeeffffgggghhhh") // 32 bytes
 	wrongSecret := []byte("zzzzyyyyxxxxwwwwvvvvuuuuttttssss")
-	key := "vl_uk_a3f2e8b1c9d4f6e7a3f2e8b1c9d4f6e7"
-	wrongKey := "vl_uk_deadbeef00000000deadbeef00000000"
+	key := "sk-a3f2e8b1c9d4f6e7a3f2e8b1c9d4f6e7a3f2e8b1c9d4f6e7"
+	wrongKey := "sk-deadbeef00000000deadbeef00000000deadbeef00"
 
 	correctHash := keygen.Hash(key, secret)
 
@@ -369,7 +371,7 @@ func BenchmarkGenerate(b *testing.B) {
 
 func BenchmarkHash(b *testing.B) {
 	secret := []byte("aaaabbbbccccddddeeeeffffgggghhhh")
-	key := "vl_uk_a3f2e8b1c9d4f6e7a3f2e8b1c9d4f6e7a3f2e8b1c9d4f6e7"
+	key := "sk-a3f2e8b1c9d4f6e7a3f2e8b1c9d4f6e7a3f2e8b1c9d4f6e7"
 
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {

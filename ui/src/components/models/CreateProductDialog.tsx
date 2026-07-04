@@ -12,8 +12,6 @@ import { UpstreamModelSelectModal } from './UpstreamModelSelectModal'
 import type { RouteStepDraft } from './ComboRouteEditor'
 import type { ModelRouteStepInput } from '../../hooks/useModelRoutes'
 import { useCreateModel, useUpdateModel, type BillingMode, type CreateModelParams } from '../../hooks/useModels'
-import { useAllUpstreamModels } from '../../hooks/useUpstreamModels'
-import { deriveCacheSellPrices } from '../../lib/pricing-markup'
 import { useReplaceModelRoutes } from '../../hooks/useModelRoutes'
 import { useToast } from '../../hooks/useToast'
 import { useTranslation } from '../../lib/i18n'
@@ -53,7 +51,6 @@ export function CreateProductDialog({ open, onClose }: CreateProductDialogProps)
   const [sellOutputPer1m, setSellOutputPer1m] = useState('')
   const [sellCachedInputPer1m, setSellCachedInputPer1m] = useState('')
   const [sellCacheWritePer1m, setSellCacheWritePer1m] = useState('')
-  const { data: upstreamInventory } = useAllUpstreamModels(true, open)
   const [sellPerRequest, setSellPerRequest] = useState('')
   const [sellMinPerRequest, setSellMinPerRequest] = useState('')
   const [isPublic, setIsPublic] = useState(false)
@@ -149,16 +146,6 @@ export function CreateProductDialog({ open, onClose }: CreateProductDialogProps)
     let hasSellCacheWrite = sellCacheWritePer1m.trim() && !isNaN(parseFloat(sellCacheWritePer1m))
     const hasSellPerReq = sellPerRequest.trim() && !isNaN(parseFloat(sellPerRequest))
 
-    if (hasSellInput || hasSellOutput) {
-      const derived = deriveCacheSellPrices(steps, upstreamInventory?.data ?? [])
-      if (!hasSellCached && derived.sellCached != null) {
-        hasSellCached = true
-      }
-      if (!hasSellCacheWrite && derived.sellCacheWrite != null) {
-        hasSellCacheWrite = true
-      }
-    }
-
     const hasAnySellPrice =
       hasSellInput || hasSellOutput || hasSellCached || hasSellCacheWrite || hasSellPerReq
 
@@ -178,22 +165,8 @@ export function CreateProductDialog({ open, onClose }: CreateProductDialogProps)
       params.bill_per_request = billingMode === 'request'
       if (hasSellInput) params.sell_input_per_1m = parseFloat(sellInputPer1m)
       if (hasSellOutput) params.sell_output_per_1m = parseFloat(sellOutputPer1m)
-      if (hasSellCached) {
-        if (sellCachedInputPer1m.trim() && !isNaN(parseFloat(sellCachedInputPer1m))) {
-          params.sell_cached_input_per_1m = parseFloat(sellCachedInputPer1m)
-        } else {
-          const derived = deriveCacheSellPrices(steps, upstreamInventory?.data ?? [])
-          if (derived.sellCached != null) params.sell_cached_input_per_1m = derived.sellCached
-        }
-      }
-      if (hasSellCacheWrite) {
-        if (sellCacheWritePer1m.trim() && !isNaN(parseFloat(sellCacheWritePer1m))) {
-          params.sell_cache_write_per_1m = parseFloat(sellCacheWritePer1m)
-        } else {
-          const derived = deriveCacheSellPrices(steps, upstreamInventory?.data ?? [])
-          if (derived.sellCacheWrite != null) params.sell_cache_write_per_1m = derived.sellCacheWrite
-        }
-      }
+      if (hasSellCached) params.sell_cached_input_per_1m = parseFloat(sellCachedInputPer1m)
+      if (hasSellCacheWrite) params.sell_cache_write_per_1m = parseFloat(sellCacheWritePer1m)
       if (hasSellPerReq) params.sell_per_request = parseFloat(sellPerRequest)
       if (billingMode === 'token' && billMinPerRequest && sellMinPerRequest.trim()) {
         params.bill_min_per_request = true
