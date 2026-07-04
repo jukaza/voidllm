@@ -200,6 +200,7 @@ func TestSetDefaults(t *testing.T) {
 		{"cache model ttl", cfg.Cache.ModelTTL, 60 * time.Second},
 		{"cache alias ttl", cfg.Cache.AliasTTL, 60 * time.Second},
 		{"redis key prefix", cfg.Redis.KeyPrefix, "voidllm:"},
+		{"max stream duration", cfg.Server.Proxy.MaxStreamDuration, 30 * time.Minute},
 		{"usage buffer size", cfg.Settings.Usage.BufferSize, 100}, // set explicitly in minimal YAML
 		{"usage flush interval", cfg.Settings.Usage.FlushInterval, 5 * time.Second},
 		{"soft limit threshold", cfg.Settings.GetSoftLimitThreshold(), 0.9},
@@ -240,6 +241,48 @@ func TestSetDefaults_TokenCountingNilIsEnabled(t *testing.T) {
 
 	if !cfg.Settings.TokenCounting.IsEnabled() {
 		t.Error("IsEnabled() = false when enabled not set, want true")
+	}
+}
+
+func TestSetDefaults_CircuitBreakerNilIsEnabled(t *testing.T) {
+	t.Parallel()
+
+	path := writeTemp(t, "voidllm.yaml", minimalValidYAML())
+	cfg, _, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load() unexpected error: %v", err)
+	}
+
+	if !cfg.Settings.CircuitBreaker.IsEnabled() {
+		t.Error("IsEnabled() = false when enabled not set, want true")
+	}
+}
+
+func TestSetDefaults_ExplicitCircuitBreakerFalse(t *testing.T) {
+	t.Parallel()
+
+	yaml := `
+server:
+  proxy:
+    port: 8080
+database:
+  driver: sqlite
+  dsn: voidllm.db
+settings:
+  encryption_key: aaaaaaaaaaaaaaaa
+  usage:
+    buffer_size: 100
+  circuit_breaker:
+    enabled: false
+`
+	path := writeTemp(t, "voidllm.yaml", yaml)
+	cfg, _, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load() unexpected error: %v", err)
+	}
+
+	if cfg.Settings.CircuitBreaker.IsEnabled() {
+		t.Error("IsEnabled() = true when enabled: false, want false")
 	}
 }
 

@@ -30,7 +30,7 @@ config:
       idleTimeout: 60s
       maxRequestBody: 20971520    # 20 MB
       maxResponseBody: 52428800   # 50 MB
-      maxStreamDuration: 5m
+      maxStreamDuration: 30m
     admin:
       # -- Separate admin port. 0 = combined mode (everything on proxy port).
       port: 0
@@ -80,7 +80,7 @@ config:
       flushInterval: 5s
     circuitBreaker:
       # -- Enable per-model circuit breaker for upstream errors
-      enabled: false
+      enabled: true
       threshold: 5
       timeout: 30s
       halfOpenMax: 1

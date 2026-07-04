@@ -37,7 +37,7 @@ type ProxyConfig struct {
 	IdleTimeout       time.Duration `yaml:"idle_timeout"`
 	MaxRequestBody    int           `yaml:"max_request_body"`    // bytes, 0 = use default
 	MaxResponseBody   int           `yaml:"max_response_body"`   // bytes, 0 = use default
-	MaxStreamDuration time.Duration `yaml:"max_stream_duration"` // 0 = use default (5m)
+	MaxStreamDuration time.Duration `yaml:"max_stream_duration"` // 0 = use default (30m)
 	DrainTimeout      time.Duration `yaml:"drain_timeout"`       // graceful shutdown drain window; default 25s
 }
 
@@ -231,8 +231,9 @@ type AuditConfig struct {
 
 // CircuitBreakerConfig holds per-model circuit breaker configuration.
 type CircuitBreakerConfig struct {
-	// Enabled activates circuit breaker functionality. Defaults to false.
-	Enabled bool `yaml:"enabled"`
+	// Enabled defaults to true. A *bool is used so that an explicit false
+	// can be distinguished from the zero value after unmarshalling.
+	Enabled *bool `yaml:"enabled"`
 	// Threshold is the number of consecutive upstream failures required before
 	// the circuit opens and starts rejecting requests. Defaults to 5.
 	Threshold int `yaml:"threshold"`
@@ -242,6 +243,14 @@ type CircuitBreakerConfig struct {
 	// HalfOpenMax is the maximum number of concurrent probe requests allowed
 	// while the circuit is in half-open state. Defaults to 1.
 	HalfOpenMax int `yaml:"half_open_max"`
+}
+
+// IsEnabled returns true when the field is nil (not set) or explicitly true.
+func (c CircuitBreakerConfig) IsEnabled() bool {
+	if c.Enabled == nil {
+		return true
+	}
+	return *c.Enabled
 }
 
 // OTelConfig holds OpenTelemetry tracing configuration. Tracing is an
@@ -590,7 +599,7 @@ func (c *Config) setDefaults() {
 		c.Server.Proxy.MaxResponseBody = 50 * 1024 * 1024 // 50 MB
 	}
 	if c.Server.Proxy.MaxStreamDuration <= 0 {
-		c.Server.Proxy.MaxStreamDuration = 5 * time.Minute
+		c.Server.Proxy.MaxStreamDuration = 30 * time.Minute
 	}
 	if c.Server.Proxy.DrainTimeout <= 0 {
 		c.Server.Proxy.DrainTimeout = 25 * time.Second

@@ -461,6 +461,141 @@ func TestGetAllHealth_NoneProbed(t *testing.T) {
 	}
 }
 
+func newProviderRegistry(t *testing.T, provider, baseURL string) *proxy.Registry {
+	t.Helper()
+	reg, err := proxy.NewRegistry([]config.ModelConfig{
+		{
+			Name:     "test-model",
+			Provider: provider,
+			BaseURL:  baseURL,
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+	return reg
+}
+
+// TestProbeModels_Anthropic_Success verifies that Anthropic models are probed
+// at /v1/models rather than the OpenAI-style /models path.
+func TestProbeModels_Anthropic_Success(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/models" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"data":[]}`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+
+	reg := newProviderRegistry(t, "anthropic", srv.URL)
+	c := health.NewChecker(reg, cfg(false, true, false), newLogger())
+	stop := c.Start()
+	t.Cleanup(stop)
+
+	mh, ok := c.GetHealth("test-model")
+	if !ok {
+		t.Fatal("GetHealth returned false; probe did not run")
+	}
+	if mh.ModelsOK == nil || !*mh.ModelsOK {
+		t.Errorf("ModelsOK = %v, want true", mh.ModelsOK)
+	}
+}
+
+// TestProbeModels_Gemini_Success verifies that Gemini models are probed at
+// /v1beta/models.
+func TestProbeModels_Gemini_Success(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1beta/models" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"models":[]}`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+
+	reg := newProviderRegistry(t, "gemini", srv.URL)
+	c := health.NewChecker(reg, cfg(false, true, false), newLogger())
+	stop := c.Start()
+	t.Cleanup(stop)
+
+	mh, ok := c.GetHealth("test-model")
+	if !ok {
+		t.Fatal("GetHealth returned false; probe did not run")
+	}
+	if mh.ModelsOK == nil || !*mh.ModelsOK {
+		t.Errorf("ModelsOK = %v, want true", mh.ModelsOK)
+	}
+}
+
+// TestProbeFunctional_Anthropic_Success verifies that Anthropic functional
+// probes use POST /v1/messages instead of /chat/completions.
+func TestProbeFunctional_Anthropic_Success(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/messages" && r.Method == http.MethodPost {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"content":[{"type":"text","text":"hi"}]}`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+
+	reg := newProviderRegistry(t, "anthropic", srv.URL)
+	c := health.NewChecker(reg, cfg(false, false, true), newLogger())
+	stop := c.Start()
+	t.Cleanup(stop)
+
+	mh, ok := c.GetHealth("test-model")
+	if !ok {
+		t.Fatal("GetHealth returned false; probe did not run")
+	}
+	if mh.FunctionalOK == nil || !*mh.FunctionalOK {
+		t.Errorf("FunctionalOK = %v, want true", mh.FunctionalOK)
+	}
+}
+
+// TestProbeFunctional_Gemini_Success verifies that Gemini functional probes
+// use POST generateContent.
+func TestProbeFunctional_Gemini_Success(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1beta/models/test-model:generateContent" && r.Method == http.MethodPost {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"candidates":[{"content":{"parts":[{"text":"hi"}]}}]}`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+
+	reg := newProviderRegistry(t, "gemini", srv.URL)
+	c := health.NewChecker(reg, cfg(false, false, true), newLogger())
+	stop := c.Start()
+	t.Cleanup(stop)
+
+	mh, ok := c.GetHealth("test-model")
+	if !ok {
+		t.Fatal("GetHealth returned false; probe did not run")
+	}
+	if mh.FunctionalOK == nil || !*mh.FunctionalOK {
+		t.Errorf("FunctionalOK = %v, want true", mh.FunctionalOK)
+	}
+}
+
 // TestSanitizeError_ConnectionRefused verifies that the sanitizer maps a
 // connection-refused error (which contains the upstream IP) to a safe string.
 func TestSanitizeError_ConnectionRefused(t *testing.T) {

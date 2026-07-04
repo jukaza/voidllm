@@ -357,10 +357,33 @@ func probeHealth(ctx context.Context, client *http.Client, t probeTarget) (int64
 	return latencyMs, nil
 }
 
-// probeModels performs a GET to <base_url>/models and returns success on any
-// 2xx HTTP response.
+// modelsProbeURL returns the provider-specific models list endpoint. The second
+// return value is false when the probe should be skipped (e.g. Azure/Vertex have
+// no OpenAI-style /models path at the configured base URL).
+func modelsProbeURL(t probeTarget) (string, bool) {
+	base := strings.TrimRight(t.baseURL, "/")
+	switch t.provider {
+	case "anthropic":
+		if strings.HasSuffix(base, "/v1") {
+			return base + "/models", true
+		}
+		return base + "/v1/models", true
+	case "gemini":
+		return base + "/v1beta/models", true
+	case "azure", "vertex":
+		return "", false
+	default:
+		return base + "/models", true
+	}
+}
+
+// probeModels performs a GET to the provider-specific models list endpoint and
+// returns success on any 2xx HTTP response.
 func probeModels(ctx context.Context, client *http.Client, t probeTarget) (int64, error) {
-	rawURL := strings.TrimRight(t.baseURL, "/") + "/models"
+	rawURL, ok := modelsProbeURL(t)
+	if !ok {
+		return 0, nil
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
@@ -396,8 +419,123 @@ func probeFunctional(ctx context.Context, client *http.Client, t probeTarget) (i
 		// Skip — incompatible endpoint or too expensive to probe.
 		return 0, nil
 	default: // "chat", "completion", ""
-		return probeFunctionalChat(ctx, client, t)
+		switch t.provider {
+		case "anthropic":
+			return probeFunctionalAnthropic(ctx, client, t)
+		case "gemini":
+			return probeFunctionalGemini(ctx, client, t)
+		case "vertex":
+			return probeFunctionalVertex(ctx, client, t)
+		default:
+			return probeFunctionalChat(ctx, client, t)
+		}
 	}
+}
+
+// anthropicMessagesURL maps a configured base URL to the Anthropic Messages API path.
+func anthropicMessagesURL(baseURL string) string {
+	base := strings.TrimRight(baseURL, "/")
+	if strings.HasSuffix(base, "/v1") {
+		return base + "/messages"
+	}
+	return base + "/v1/messages"
+}
+
+// probeFunctionalAnthropic performs a minimal POST /v1/messages request.
+func probeFunctionalAnthropic(ctx context.Context, client *http.Client, t probeTarget) (int64, error) {
+	rawURL := anthropicMessagesURL(t.baseURL)
+
+	payload := map[string]any{
+		"model":      t.modelName,
+		"max_tokens": 1,
+		"messages":   []map[string]string{{"role": "user", "content": "hi"}},
+	}
+	body, err := jsonx.Marshal(payload)
+	if err != nil {
+		return 0, fmt.Errorf("marshal request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, rawURL, bytes.NewReader(body))
+	if err != nil {
+		return 0, fmt.Errorf("build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	setAuthHeaders(req, t)
+
+	return doProbeRequest(client, req)
+}
+
+// probeFunctionalGemini performs a minimal POST generateContent request.
+func probeFunctionalGemini(ctx context.Context, client *http.Client, t probeTarget) (int64, error) {
+	base := strings.TrimRight(t.baseURL, "/")
+	rawURL := fmt.Sprintf("%s/v1beta/models/%s:generateContent", base, t.modelName)
+
+	payload := map[string]any{
+		"contents": []map[string]any{
+			{"role": "user", "parts": []map[string]string{{"text": "hi"}}},
+		},
+		"generationConfig": map[string]int{"maxOutputTokens": 1},
+	}
+	body, err := jsonx.Marshal(payload)
+	if err != nil {
+		return 0, fmt.Errorf("marshal request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, rawURL, bytes.NewReader(body))
+	if err != nil {
+		return 0, fmt.Errorf("build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	setAuthHeaders(req, t)
+
+	return doProbeRequest(client, req)
+}
+
+// probeFunctionalVertex performs a minimal POST generateContent request on Vertex AI.
+func probeFunctionalVertex(ctx context.Context, client *http.Client, t probeTarget) (int64, error) {
+	if t.gcpProject == "" || t.gcpLocation == "" {
+		return 0, nil
+	}
+	base := strings.TrimRight(t.baseURL, "/")
+	rawURL := fmt.Sprintf("%s/v1/projects/%s/locations/%s/publishers/google/models/%s:generateContent",
+		base, t.gcpProject, t.gcpLocation, t.modelName)
+
+	payload := map[string]any{
+		"contents": []map[string]any{
+			{"role": "user", "parts": []map[string]string{{"text": "hi"}}},
+		},
+		"generationConfig": map[string]int{"maxOutputTokens": 1},
+	}
+	body, err := jsonx.Marshal(payload)
+	if err != nil {
+		return 0, fmt.Errorf("marshal request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, rawURL, bytes.NewReader(body))
+	if err != nil {
+		return 0, fmt.Errorf("build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	setAuthHeaders(req, t)
+
+	return doProbeRequest(client, req)
+}
+
+// doProbeRequest executes req and returns latency on 2xx, or an error otherwise.
+func doProbeRequest(client *http.Client, req *http.Request) (int64, error) {
+	start := time.Now()
+	resp, err := client.Do(req)
+	latencyMs := time.Since(start).Milliseconds()
+	if err != nil {
+		return 0, fmt.Errorf("do request: %w", err)
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return 0, fmt.Errorf("http %d", resp.StatusCode)
+	}
+	return latencyMs, nil
 }
 
 // probeFunctionalChat performs a minimal POST /chat/completions request with a
@@ -429,19 +567,7 @@ func probeFunctionalChat(ctx context.Context, client *http.Client, t probeTarget
 
 	setAuthHeaders(req, t)
 
-	start := time.Now()
-	resp, err := client.Do(req)
-	latencyMs := time.Since(start).Milliseconds()
-	if err != nil {
-		return 0, fmt.Errorf("do request: %w", err)
-	}
-	defer resp.Body.Close()
-	_, _ = io.Copy(io.Discard, resp.Body)
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return 0, fmt.Errorf("http %d", resp.StatusCode)
-	}
-	return latencyMs, nil
+	return doProbeRequest(client, req)
 }
 
 // probeEmbedding performs a minimal POST /embeddings request with a single
@@ -488,10 +614,14 @@ func setAuthHeaders(req *http.Request, t probeTarget) {
 	if t.apiKey == "" {
 		return
 	}
-	if t.provider == "anthropic" {
+	switch t.provider {
+	case "anthropic":
 		req.Header.Set("x-api-key", t.apiKey)
 		req.Header.Set("anthropic-version", "2023-06-01")
-	} else {
+	case "gemini":
+		req.Header.Del("Authorization")
+		req.Header.Set("x-goog-api-key", t.apiKey)
+	default:
 		req.Header.Set("Authorization", "Bearer "+t.apiKey)
 	}
 }

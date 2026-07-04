@@ -142,7 +142,7 @@ var errResponseSent = errors.New("response sent")
 const (
 	defaultMaxRequestBody    = 20 * 1024 * 1024  // 20 MB
 	defaultMaxResponseBody   = 50 * 1024 * 1024  // 50 MB
-	defaultMaxStreamDuration = 300 * time.Second // 5 minutes
+	defaultMaxStreamDuration = 30 * time.Minute // matches config default
 )
 
 // streamUsageExtractor observes OpenAI-format SSE lines and records the last

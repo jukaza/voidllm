@@ -601,7 +601,7 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 	shutdownState := shutdown.New()
 
 	var cbRegistry *circuitbreaker.Registry
-	if cfg.Settings.CircuitBreaker.Enabled {
+	if cfg.Settings.CircuitBreaker.IsEnabled() {
 		cbRegistry = circuitbreaker.NewRegistry(circuitbreaker.Config{
 			Enabled:     true,
 			Threshold:   cfg.Settings.CircuitBreaker.Threshold,

@@ -80,13 +80,11 @@ data:
         buffer_size: {{ .Values.config.settings.audit.bufferSize }}
         flush_interval: {{ .Values.config.settings.audit.flushInterval }}
       {{- end }}
-      {{- if .Values.config.settings.circuitBreaker.enabled }}
       circuit_breaker:
-        enabled: true
+        enabled: {{ .Values.config.settings.circuitBreaker.enabled }}
         threshold: {{ .Values.config.settings.circuitBreaker.threshold }}
         timeout: {{ .Values.config.settings.circuitBreaker.timeout }}
         half_open_max: {{ .Values.config.settings.circuitBreaker.halfOpenMax }}
-      {{- end }}
       {{- if .Values.config.settings.otel.enabled }}
       otel:
         enabled: true
