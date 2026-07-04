@@ -290,7 +290,7 @@ export function Sidebar() {
       <div className="shrink-0 border-t border-white/5 p-3">
         {/* Language selector */}
         <div className="flex items-center justify-between mb-3 px-1">
-          <span className="text-[11px] text-text-tertiary uppercase tracking-wider">Ngôn ngữ</span>
+          <span className="text-[11px] text-text-tertiary uppercase tracking-wider">{t('sidebar.language')}</span>
           <div className="flex gap-1 bg-white/5 p-0.5 rounded border border-white/5">
             <button
               onClick={() => setLanguage('vi')}
@@ -315,7 +315,7 @@ export function Sidebar() {
           <Link
             to="/profile"
             className="text-xs text-text-secondary truncate max-w-[140px] hover:text-text-primary transition-colors no-underline"
-            title="View profile"
+            title={t('common.view_profile')}
           >
             {data?.display_name || data?.email || '...'}
           </Link>

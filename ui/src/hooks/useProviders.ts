@@ -96,6 +96,83 @@ export function useDeleteProvider() {
 }
 
 // ---------------------------------------------------------------------------
+// Provider wizard (discover + import)
+// ---------------------------------------------------------------------------
+
+export interface DiscoveredModel {
+  id: string
+  known_cost?: { in: number; out: number; cached_in?: number; cache_write?: number }
+  exists: boolean
+}
+
+export interface DiscoverModelsParams {
+  preset_id?: string
+  provider_id?: string
+  base_url?: string
+  protocol?: string
+  api_key?: string
+}
+
+export interface DiscoverModelsResponse {
+  success: boolean
+  message: string
+  data: DiscoveredModel[]
+}
+
+export function useDiscoverProviderModels() {
+  return useMutation({
+    mutationFn: (params: DiscoverModelsParams) =>
+      apiClient<DiscoverModelsResponse>('/providers/discover-models', {
+        method: 'POST',
+        body: JSON.stringify(params),
+      }),
+  })
+}
+
+export interface ImportModelSpec {
+  upstream_id: string
+  product_name?: string
+}
+
+export interface ImportProviderParams {
+  preset_id?: string
+  provider_id?: string
+  name?: string
+  slug?: string
+  base_url?: string
+  protocol?: string
+  api_key?: string
+  models: ImportModelSpec[]
+  markup?: number
+  make_public?: boolean
+}
+
+export interface ImportProviderResult {
+  upstream_id: string
+  product_name: string
+  model_id?: string
+  created_model: boolean
+  route_id?: string
+  error?: string
+}
+
+export function useImportProvider() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (params: ImportProviderParams) =>
+      apiClient<{ provider: ProviderItem; results: ImportProviderResult[] }>('/providers/import', {
+        method: 'POST',
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['providers'] })
+      void queryClient.invalidateQueries({ queryKey: ['models'] })
+      void queryClient.invalidateQueries({ queryKey: ['public-catalog'] })
+    },
+  })
+}
+
+// ---------------------------------------------------------------------------
 // Public storefront price list (no auth)
 // ---------------------------------------------------------------------------
 

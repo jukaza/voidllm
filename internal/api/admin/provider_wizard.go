@@ -21,9 +21,16 @@ import (
 )
 
 // ListProviderPresets handles GET /api/v1/providers/presets (system_admin).
-// Returns the static setup-wizard catalog.
+// Returns the setup-wizard catalog (self-hosted Ollama excluded — use Custom).
 func (h *Handler) ListProviderPresets(c fiber.Ctx) error {
-	return c.JSON(fiber.Map{"data": provider.Presets})
+	out := make([]provider.Preset, 0, len(provider.Presets))
+	for _, p := range provider.Presets {
+		if p.ID == "ollama" {
+			continue
+		}
+		out = append(out, p)
+	}
+	return c.JSON(fiber.Map{"data": out})
 }
 
 // discoverModelsRequest is the JSON body for POST /providers/discover-models.
@@ -440,12 +447,13 @@ func (h *Handler) ImportProvider(c fiber.Ctx) error {
 		}
 		if errors.Is(lookupErr, db.ErrNotFound) {
 			params := db.CreateModelParams{
-				Name:     res.ProductName,
-				Provider: protocol,
-				BaseURL:  baseURL,
-				Source:   "api",
-				IsPublic: req.MakePublic,
-				Logo:     logo,
+				Name:         res.ProductName,
+				Provider:     protocol,
+				BaseURL:      baseURL,
+				Source:       "api",
+				IsPublic:     req.MakePublic,
+				Logo:         logo,
+				BillPerToken: true,
 			}
 			if cost != nil {
 				params.InputPricePer1M = cost.In

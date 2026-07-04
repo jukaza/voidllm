@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { PageHeader } from '../components/ui/PageHeader'
 import { Table } from '../components/ui/Table'
 import type { Column } from '../components/ui/Table'
@@ -7,41 +8,48 @@ import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { Select } from '../components/ui/Select'
 import { Dialog, ConfirmDialog } from '../components/ui/Dialog'
+import { ProviderSetupDrawer } from '../components/providers/ProviderSetupDrawer'
 import {
   useProviders,
-  useProviderPresets,
   useCreateProvider,
   useUpdateProvider,
   useDeleteProvider,
 } from '../hooks/useProviders'
-import type { ProviderItem, ProviderPreset } from '../hooks/useProviders'
+import type { ProviderItem } from '../hooks/useProviders'
 import { useToast } from '../hooks/useToast'
 import { useTranslation } from '../lib/i18n'
 import { IconPicker } from '../components/ui/IconPicker'
 import { BrandIcon } from '../components/ui/BrandIcon'
 import { defaultIconForSlug } from '../lib/provider-icons'
-
-const PROTOCOL_OPTIONS = [
-  { value: 'openai', label: 'OpenAI' },
-  { value: 'anthropic', label: 'Anthropic' },
-  { value: 'gemini', label: 'Gemini' },
-  { value: 'azure', label: 'Azure' },
-  { value: 'vertex', label: 'Vertex' },
-  { value: 'vllm', label: 'vLLM' },
-  { value: 'ollama', label: 'Ollama' },
-  { value: 'custom', label: 'Custom' },
-]
+import { getConnectionProfile } from '../lib/connection-profiles'
+import { endpointHintKey } from '../lib/endpoint-hints'
 
 export default function ProvidersPage() {
   const { t } = useTranslation()
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  const PROTOCOL_OPTIONS = useMemo(
+    () => [
+      { value: 'openai', label: t('providers.protocol_openai') },
+      { value: 'anthropic', label: t('providers.protocol_anthropic') },
+      { value: 'gemini', label: t('providers.protocol_gemini') },
+      { value: 'azure', label: t('providers.protocol_azure') },
+      { value: 'vertex', label: t('providers.protocol_vertex') },
+      { value: 'vllm', label: t('providers.protocol_vllm') },
+      { value: 'custom', label: t('providers.protocol_custom') },
+    ],
+    [t],
+  )
   const { toast } = useToast()
   const { data, isLoading } = useProviders()
-  const { data: presetsData } = useProviderPresets()
   const createProvider = useCreateProvider()
   const updateProvider = useUpdateProvider()
   const deleteProvider = useDeleteProvider()
 
-  const [dialogOpen, setDialogOpen] = useState(false)
+  const setupOpen = searchParams.get('add') === '1'
+  const initialPresetId = searchParams.get('preset') ?? undefined
+
+  const [manualOpen, setManualOpen] = useState(false)
   const [editing, setEditing] = useState<ProviderItem | null>(null)
   const [name, setName] = useState('')
   const [slug, setSlug] = useState('')
@@ -53,17 +61,18 @@ export default function ProvidersPage() {
   const [notes, setNotes] = useState('')
   const [deleting, setDeleting] = useState<ProviderItem | null>(null)
 
-  function openCreate(preset?: ProviderPreset) {
-    setEditing(null)
-    setName(preset?.name ?? '')
-    setSlug(preset?.id ?? '')
-    setProtocol(preset?.protocol ?? 'openai')
-    setBaseUrl(preset?.base_url ?? '')
-    setApiKey('')
-    setLogo(preset?.logo ?? '')
-    setContact('')
-    setNotes('')
-    setDialogOpen(true)
+  const profile = getConnectionProfile(protocol)
+
+  function openSetupDrawer() {
+    setSearchParams({ add: '1' })
+  }
+
+  function closeSetupDrawer() {
+    setSearchParams({})
+  }
+
+  function openCreateManual() {
+    setSearchParams({ add: '1', preset: 'custom' })
   }
 
   function openEdit(p: ProviderItem) {
@@ -76,10 +85,10 @@ export default function ProvidersPage() {
     setLogo(p.logo ?? '')
     setContact(p.contact_info)
     setNotes(p.notes)
-    setDialogOpen(true)
+    setManualOpen(true)
   }
 
-  function submit() {
+  function submitManual() {
     if (!name.trim()) {
       toast({ variant: 'error', message: t('marketplace.provider_name_required') })
       return
@@ -97,7 +106,7 @@ export default function ProvidersPage() {
     const opts = {
       onSuccess: () => {
         toast({ variant: 'success', message: t('common.saved') })
-        setDialogOpen(false)
+        setManualOpen(false)
       },
       onError: (e: Error) => toast({ variant: 'error', message: e.message }),
     }
@@ -138,12 +147,12 @@ export default function ProvidersPage() {
     },
     {
       key: 'protocol',
-      header: 'Protocol',
+      header: t('common.protocol'),
       render: (row) => <span className="text-text-secondary text-xs">{row.protocol}</span>,
     },
     {
       key: 'base_url',
-      header: 'Base URL',
+      header: t('common.endpoint'),
       render: (row) => (
         <span className="text-text-tertiary text-xs truncate max-w-[200px] inline-block">
           {row.base_url || '—'}
@@ -154,7 +163,9 @@ export default function ProvidersPage() {
       key: 'status',
       header: t('wallet.col_status'),
       render: (row) => (
-        <Badge variant={row.status === 'active' ? 'success' : 'muted'}>{row.status}</Badge>
+        <Badge variant={row.status === 'active' ? 'success' : 'muted'}>
+          {row.status === 'active' ? t('providers.status_active') : t('providers.status_paused')}
+        </Badge>
       ),
     },
     {
@@ -179,51 +190,38 @@ export default function ProvidersPage() {
 
   return (
     <>
-      <PageHeader
-        title="Providers"
-        description="Upstream sources — connection defaults inherited by model channels."
-      />
-      {(presetsData?.data?.length ?? 0) > 0 && (
-        <section className="mb-8">
-          <h2 className="text-sm font-medium text-text-secondary mb-3">Quick add from preset</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-            {presetsData!.data.map((preset) => (
-              <button
-                key={preset.id}
-                type="button"
-                onClick={() => openCreate(preset)}
-                className="flex flex-col items-center gap-2 rounded-xl border border-border bg-bg-secondary p-4 hover:border-accent/40 hover:bg-bg-tertiary transition-colors text-left"
-              >
-                <BrandIcon logo={preset.logo} slug={preset.id} protocol={preset.protocol} size={32} />
-                <span className="text-xs font-medium text-text-primary text-center leading-tight">
-                  {preset.name}
-                </span>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
-      <div className="mb-4 flex justify-end">
-        <Button onClick={() => openCreate()}>{t('marketplace.add_provider')}</Button>
+      <PageHeader title={t('providers.title')} description={t('providers.desc')} />
+      <div className="mb-4 flex justify-end gap-2">
+        <Button variant="secondary" onClick={openCreateManual}>
+          {t('providers.manual_entry')}
+        </Button>
+        <Button onClick={openSetupDrawer}>{t('providers.add_provider')}</Button>
       </div>
       <Table
         columns={columns}
         data={data?.data ?? []}
         keyExtractor={(r) => r.id}
         loading={isLoading}
-        emptyMessage={t('marketplace.no_providers')}
+        emptyMessage={`${t('marketplace.no_providers')} ${t('providers.empty_hint')}`}
         compact
       />
+
+      <ProviderSetupDrawer
+        open={setupOpen}
+        onClose={closeSetupDrawer}
+        initialPresetId={initialPresetId}
+      />
+
       <Dialog
-        open={dialogOpen}
-        onClose={() => setDialogOpen(false)}
+        open={manualOpen}
+        onClose={() => setManualOpen(false)}
         title={editing ? t('marketplace.edit_provider') : t('marketplace.add_provider')}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setDialogOpen(false)}>
+            <Button variant="secondary" onClick={() => setManualOpen(false)}>
               {t('common.cancel')}
             </Button>
-            <Button onClick={submit} loading={createProvider.isPending || updateProvider.isPending}>
+            <Button onClick={submitManual} loading={createProvider.isPending || updateProvider.isPending}>
               {t('common.save')}
             </Button>
           </>
@@ -232,7 +230,7 @@ export default function ProvidersPage() {
         <div className="space-y-4">
           <Input label={t('marketplace.provider_name')} required value={name} onChange={(e) => setName(e.target.value)} />
           <Input
-            label="Slug"
+            label={t('common.slug')}
             value={slug}
             onChange={(e) => {
               const next = e.target.value
@@ -241,22 +239,30 @@ export default function ProvidersPage() {
                 setLogo(defaultIconForSlug(next, protocol))
               }
             }}
-            placeholder="openai, ds, or"
+            placeholder={t('providers.slug_placeholder')}
           />
-          <Select label="Protocol" options={PROTOCOL_OPTIONS} value={protocol} onChange={setProtocol} />
-          <Input label="Base URL" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://api.openai.com/v1" />
+          <Select label={t('common.protocol')} options={PROTOCOL_OPTIONS} value={protocol} onChange={setProtocol} />
+          <p className="text-xs text-text-tertiary -mt-2">{t('providers.protocol_hint')}</p>
           <Input
-            label="API Key"
+            label={t('common.endpoint')}
+            value={baseUrl}
+            onChange={(e) => setBaseUrl(e.target.value)}
+            placeholder={profile.baseUrlPlaceholder}
+            description={t(endpointHintKey(protocol))}
+          />
+          <Input
+            label={profile.keyLabel === 'API Key' ? t('common.api_key') : profile.keyLabel}
             type="password"
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
-            placeholder={editing?.has_api_key ? '••••••••  (leave blank to keep)' : 'sk-...'}
+            placeholder={editing?.has_api_key ? t('providers.key_keep') : profile.keyPlaceholder}
           />
           <IconPicker value={logo} onChange={setLogo} />
           <Input label={t('marketplace.provider_contact')} value={contact} onChange={(e) => setContact(e.target.value)} />
           <Input label={t('marketplace.provider_notes')} value={notes} onChange={(e) => setNotes(e.target.value)} />
         </div>
       </Dialog>
+
       <ConfirmDialog
         open={deleting !== null}
         onClose={() => setDeleting(null)}

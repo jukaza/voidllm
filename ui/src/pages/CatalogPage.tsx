@@ -15,29 +15,26 @@ export default function CatalogPage() {
 
   return (
     <>
-      <PageHeader
-        title={t('sidebar.catalog')}
-        description="Active models and sell prices. Provider details are not shown."
-      />
+      <PageHeader title={t('sidebar.catalog')} description={t('catalog.desc')} />
 
       {isLoading ? (
         <div className="rounded-lg border border-border bg-bg-secondary p-12 text-center">
-          <p className="text-sm text-text-tertiary">Loading...</p>
+          <p className="text-sm text-text-tertiary">{t('common.loading')}</p>
         </div>
       ) : models.length === 0 ? (
         <div className="rounded-lg border border-border bg-bg-secondary p-12 text-center">
-          <p className="text-sm text-text-tertiary">No models with pricing configured yet.</p>
+          <p className="text-sm text-text-tertiary">{t('catalog.empty')}</p>
         </div>
       ) : (
         <div className="rounded-xl border border-border overflow-hidden">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-bg-secondary text-text-tertiary text-left">
-                <th className="px-4 py-3 font-medium">Model</th>
-                <th className="px-4 py-3 font-medium">Type</th>
-                <th className="px-4 py-3 font-medium text-right">Input / 1M</th>
-                <th className="px-4 py-3 font-medium text-right">Output / 1M</th>
-                <th className="px-4 py-3 font-medium text-right">Per request</th>
+                <th className="px-4 py-3 font-medium">{t('storefront.col_model')}</th>
+                <th className="px-4 py-3 font-medium">{t('storefront.col_type')}</th>
+                <th className="px-4 py-3 font-medium text-right">{t('storefront.col_input')} / 1M</th>
+                <th className="px-4 py-3 font-medium text-right">{t('storefront.col_output')} / 1M</th>
+                <th className="px-4 py-3 font-medium text-right">{t('catalog.col_per_request')}</th>
               </tr>
             </thead>
             <tbody>

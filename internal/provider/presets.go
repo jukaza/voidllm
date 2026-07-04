@@ -130,7 +130,14 @@ var Presets = []Preset{
 		ModelsPath: "/models",
 	},
 	{
-		ID: "ollama", Name: "Ollama (local)", Logo: "Ollama",
+		ID: "ollama-cloud", Name: "Ollama Cloud", Logo: "Ollama",
+		Protocol: "openai", BaseURL: "https://ollama.com/v1",
+		KeyHint: "ollama.com API key", DocsURL: "https://ollama.com/settings/keys",
+		ModelsPath: "/models",
+	},
+	{
+		// Self-hosted only; excluded from the public wizard catalog.
+		ID: "ollama", Name: "Ollama (self-hosted)", Logo: "Ollama",
 		Protocol: "ollama", BaseURL: "http://localhost:11434/v1",
 		KeyHint: "(không cần key)", DocsURL: "https://ollama.com",
 		ModelsPath: "/models",
@@ -149,7 +156,7 @@ var Presets = []Preset{
 		ModelsPath: "",
 	},
 	{
-		ID: "custom", Name: "Custom (OpenAI-compatible)", Logo: "Cloudflare.Color",
+		ID: "custom", Name: "Custom (OpenAI-compatible)", Logo: "LobeHub",
 		Protocol: "custom", BaseURL: "",
 		KeyHint: "...", DocsURL: "",
 		ModelsPath: "/models",

@@ -114,6 +114,22 @@ func (h *Handler) CreateProvider(c fiber.Ctx) error {
 		slug = req.Slug
 	}
 
+	// When slug matches a wizard preset, fill connection defaults the admin
+	// should not have to paste (e.g. Gemini → generativelanguage.googleapis.com).
+	if slug != nil && *slug != "" {
+		if preset := provider.PresetByID(*slug); preset != nil {
+			if baseURL == "" {
+				baseURL = preset.BaseURL
+			}
+			if protocol == "" || protocol == "openai" {
+				protocol = preset.Protocol
+			}
+			if logo == "" {
+				logo = preset.Logo
+			}
+		}
+	}
+
 	created, err := h.DB.CreateProvider(c.Context(), db.CreateProviderParams{
 		Name: *req.Name, ContactInfo: contact, Status: status, Notes: notes,
 		Slug: slug, Protocol: protocol, Logo: logo, BaseURL: baseURL,

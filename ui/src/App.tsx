@@ -7,6 +7,7 @@ import DashboardPage from './pages/DashboardPage'
 import KeysPage from './pages/KeysPage'
 import MarketplacePage from './pages/MarketplacePage'
 import ProvidersPage from './pages/ProvidersPage'
+import ProviderWizardPage from './pages/ProviderWizardPage'
 import WalletPage from './pages/WalletPage'
 import ModelsLayout from './pages/ModelsLayout'
 import UsageLayout from './pages/usage/UsageLayout'
@@ -71,6 +72,7 @@ export default function App() {
                 <Route path="catalog" element={<CatalogPage />} />
                 <Route path="keys" element={<KeysPage />} />
                 <Route path="providers" element={<ProvidersPage />} />
+                <Route path="providers/wizard" element={<ProviderWizardPage />} />
                 <Route path="marketplace" element={<MarketplacePage />} />
                 <Route path="wallet" element={<WalletPage />} />
                 <Route path="models" element={<ModelsLayout />} />

@@ -26,19 +26,24 @@ import { useModelHealth } from '../hooks/useModelHealth'
 import type { ModelHealthInfo } from '../hooks/useModelHealth'
 import { useToast } from '../hooks/useToast'
 import { providerBadgeVariant, isKnownProvider } from '../lib/providers'
-import type { ProviderKey } from '../lib/providers'
 import { cn } from '../lib/utils'
 import { useProviders } from '../hooks/useProviders'
+import type { ProviderItem } from '../hooks/useProviders'
+import { getConnectionProfile } from '../lib/connection-profiles'
+import { endpointHintKey, wireMismatchKey } from '../lib/endpoint-hints'
 import { BrandIcon } from '../components/ui/BrandIcon'
+import { useTranslation } from '../lib/i18n'
 
 // ---------------------------------------------------------------------------
 // Module-level constants
 // ---------------------------------------------------------------------------
 
-const providerLabels: Record<ProviderKey, string> = {
+const providerLabels: Record<string, string> = {
   openai: 'OpenAI',
   anthropic: 'Anthropic',
+  gemini: 'Gemini',
   azure: 'Azure',
+  vertex: 'Vertex AI',
   vllm: 'vLLM',
   ollama: 'Ollama',
   custom: 'Custom',
@@ -47,7 +52,9 @@ const providerLabels: Record<ProviderKey, string> = {
 const PROVIDER_OPTIONS = [
   { value: 'openai', label: 'OpenAI' },
   { value: 'anthropic', label: 'Anthropic' },
+  { value: 'gemini', label: 'Gemini' },
   { value: 'azure', label: 'Azure' },
+  { value: 'vertex', label: 'Vertex AI' },
   { value: 'vllm', label: 'vLLM' },
   { value: 'ollama', label: 'Ollama' },
   { value: 'custom', label: 'Custom' },
@@ -119,10 +126,194 @@ const typeBadgeVariant: Record<string, 'default' | 'info' | 'muted' | 'success' 
 const BASE_URL_PLACEHOLDERS: Record<string, string> = {
   openai: 'https://api.openai.com/v1',
   anthropic: 'https://api.anthropic.com',
+  gemini: 'https://generativelanguage.googleapis.com',
   azure: 'https://<resource>.openai.azure.com',
+  vertex: 'https://us-central1-aiplatform.googleapis.com',
   vllm: 'http://localhost:8000/v1',
   ollama: 'http://localhost:11434/v1',
   custom: 'https://your-endpoint/v1',
+}
+
+// ---------------------------------------------------------------------------
+// Deployment form types + connection fields (provider inherit vs manual)
+// ---------------------------------------------------------------------------
+
+interface DeploymentFormEntry {
+  name: string
+  providerId: string
+  provider: string
+  baseUrl: string
+  apiKey: string
+  upstreamModel: string
+  azureDeployment: string
+  azureApiVersion: string
+  weight: number
+  priority: number
+}
+
+interface DeploymentConnectionFieldsProps {
+  entry: DeploymentFormEntry
+  onChange: (patch: Partial<DeploymentFormEntry>) => void
+  errors: { provider?: string; base_url?: string }
+  providerOptions: SelectOption[]
+  providers: ProviderItem[]
+  isPending: boolean
+  isEdit?: boolean
+}
+
+function DeploymentConnectionFields({
+  entry,
+  onChange,
+  errors,
+  providerOptions,
+  providers,
+  isPending,
+  isEdit = false,
+}: DeploymentConnectionFieldsProps) {
+  const { t } = useTranslation()
+  const inherits = Boolean(entry.providerId)
+  const selectedProvider = providers.find((p) => p.id === entry.providerId)
+  const effectiveProtocol = entry.provider || selectedProvider?.protocol || ''
+  const isAzure = effectiveProtocol === 'azure'
+  const wireWarn = wireMismatchKey(effectiveProtocol, entry.upstreamModel)
+
+  const protocolOptions = useMemo<SelectOption[]>(
+    () => [
+      { value: 'openai', label: t('providers.protocol_openai') },
+      { value: 'anthropic', label: t('providers.protocol_anthropic') },
+      { value: 'gemini', label: t('providers.protocol_gemini') },
+      { value: 'azure', label: t('providers.protocol_azure') },
+      { value: 'vertex', label: t('providers.protocol_vertex') },
+      { value: 'vllm', label: t('providers.protocol_vllm') },
+      { value: 'ollama', label: 'Ollama' },
+      { value: 'custom', label: t('providers.protocol_custom') },
+    ],
+    [t],
+  )
+
+  function onProviderSourceChange(providerId: string) {
+    const patch: Partial<DeploymentFormEntry> = { providerId }
+    if (providerId) {
+      patch.provider = ''
+      patch.baseUrl = ''
+      patch.apiKey = ''
+    }
+    onChange(patch)
+  }
+
+  return (
+    <>
+      <Select
+        label={t('connection.provider_source')}
+        options={providerOptions}
+        value={entry.providerId}
+        onChange={onProviderSourceChange}
+        error={errors.provider}
+        disabled={isPending}
+      />
+      {inherits ? (
+        <p className="text-xs text-text-tertiary -mt-2">
+          {t('connection.inherited_from')}{' '}
+          <span className="text-text-secondary font-medium">{selectedProvider?.name ?? 'provider'}</span>
+          {selectedProvider?.protocol ? (
+            <>
+              {' '}
+              · {t('connection.inherited_protocol')}{' '}
+              <code className="text-[11px]">{selectedProvider.protocol}</code>
+            </>
+          ) : null}
+          {selectedProvider?.base_url ? (
+            <>
+              {' '}
+              · <code className="text-[11px]">{selectedProvider.base_url}</code>
+            </>
+          ) : null}
+          {selectedProvider?.has_api_key ? ` ${t('connection.api_key_on_file')}` : null}
+        </p>
+      ) : null}
+      {inherits ? (
+        <>
+          <Select
+            label={t('connection.protocol_override')}
+            options={[{ value: '', label: t('connection.inherit_from_provider') }, ...protocolOptions]}
+            value={entry.provider}
+            onChange={(v) => onChange({ provider: v })}
+            disabled={isPending}
+          />
+          <p className="text-xs text-text-tertiary -mt-2">{t('connection.protocol_override_hint')}</p>
+        </>
+      ) : (
+        <>
+          <Select
+            label={t('common.protocol')}
+            options={protocolOptions}
+            value={entry.provider}
+            onChange={(v) => onChange({ provider: v })}
+            error={errors.provider}
+            disabled={isPending}
+          />
+          <p className="text-xs text-text-tertiary -mt-2">{t('providers.protocol_hint')}</p>
+        </>
+      )}
+      <Input
+        label={t('connection.upstream_model')}
+        value={entry.upstreamModel}
+        onChange={(e) => onChange({ upstreamModel: e.target.value })}
+        placeholder={t('connection.upstream_placeholder')}
+        disabled={isPending}
+      />
+      {entry.upstreamModel.trim().toLowerCase().startsWith('claude-') ? (
+        <p className="text-xs text-text-tertiary -mt-2">{t('connection.claude_upstream_hint')}</p>
+      ) : null}
+      {wireWarn ? (
+        <p className="text-xs text-amber-600 dark:text-amber-400 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+          {t(wireWarn)}
+        </p>
+      ) : null}
+      {!inherits && (
+        <>
+          <Input
+            label={t('common.endpoint')}
+            value={entry.baseUrl}
+            onChange={(e) => onChange({ baseUrl: e.target.value })}
+            placeholder={BASE_URL_PLACEHOLDERS[entry.provider] ?? 'https://'}
+            error={errors.base_url}
+            description={
+              isEdit ? t('connection.leave_empty_keep') : t(endpointHintKey(entry.provider))
+            }
+            disabled={isPending}
+          />
+          <Input
+            label={t('common.api_key')}
+            type="password"
+            value={entry.apiKey}
+            onChange={(e) => onChange({ apiKey: e.target.value })}
+            placeholder={isEdit ? t('connection.leave_empty_keep') : getConnectionProfile(entry.provider).keyPlaceholder}
+            description={isEdit ? t('connection.leave_empty_keep_key') : t('connection.encrypted_at_rest')}
+            disabled={isPending}
+          />
+        </>
+      )}
+      {isAzure && (
+        <>
+          <Input
+            label={t('connection.azure_deployment')}
+            value={entry.azureDeployment}
+            onChange={(e) => onChange({ azureDeployment: e.target.value })}
+            placeholder="e.g. gpt-4o-deployment"
+            disabled={isPending}
+          />
+          <Input
+            label={t('connection.azure_api_version')}
+            value={entry.azureApiVersion}
+            onChange={(e) => onChange({ azureApiVersion: e.target.value })}
+            placeholder="e.g. 2024-02-01"
+            disabled={isPending}
+          />
+        </>
+      )}
+    </>
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -238,34 +429,49 @@ interface DeploymentFormErrors {
 }
 
 function DeploymentDialog({ modelId, deployment, onClose }: DeploymentDialogProps) {
+  const { t } = useTranslation()
   const isEdit = deployment !== null
 
   const [name, setName] = useState(deployment?.name ?? '')
-  const [provider, setProvider] = useState(deployment?.provider ?? 'openai')
-  const [baseUrl, setBaseUrl] = useState(deployment?.base_url ?? '')
-  const [apiKey, setApiKey] = useState('')
-  const [azureDeployment, setAzureDeployment] = useState(deployment?.azure_deployment ?? '')
-  const [azureApiVersion, setAzureApiVersion] = useState(deployment?.azure_api_version ?? '')
-  const [weight, setWeight] = useState(String(deployment?.weight ?? 1))
-  const [priority, setPriority] = useState(String(deployment?.priority ?? 0))
+  const [entry, setEntry] = useState<DeploymentFormEntry>(() => ({
+    name: deployment?.name ?? '',
+    providerId: deployment?.provider_id ?? '',
+    provider: deployment?.provider_id ? '' : (deployment?.provider ?? 'openai'),
+    baseUrl: deployment?.provider_id ? '' : (deployment?.base_url ?? ''),
+    apiKey: '',
+    upstreamModel: deployment?.upstream_model ?? '',
+    azureDeployment: deployment?.azure_deployment ?? '',
+    azureApiVersion: deployment?.azure_api_version ?? '',
+    weight: deployment?.weight ?? 1,
+    priority: deployment?.priority ?? 0,
+  }))
   const [errors, setErrors] = useState<DeploymentFormErrors>({})
 
   const createDeployment = useCreateDeployment()
   const updateDeployment = useUpdateDeployment()
   const { toast } = useToast()
+  const { data: providersData } = useProviders()
+
+  const providers = providersData?.data ?? []
+  const providerOptions: SelectOption[] = useMemo(() => {
+    return [
+      { value: '', label: t('connection.manual_connection') },
+      ...providers.map((p) => ({
+        value: p.id,
+        label: p.slug ? `${p.name} (${p.slug})` : p.name,
+      })),
+    ]
+  }, [providers, t])
 
   const isPending = createDeployment.isPending || updateDeployment.isPending
-  const isAzure = provider === 'azure'
+
+  function patchEntry(patch: Partial<DeploymentFormEntry>) {
+    setEntry((prev) => ({ ...prev, ...patch }))
+  }
 
   function handleClose() {
     setName('')
-    setProvider('openai')
-    setBaseUrl('')
-    setApiKey('')
-    setAzureDeployment('')
-    setAzureApiVersion('')
-    setWeight('1')
-    setPriority('0')
+    setEntry(emptyDeploymentEntry())
     setErrors({})
     onClose()
   }
@@ -273,8 +479,12 @@ function DeploymentDialog({ modelId, deployment, onClose }: DeploymentDialogProp
   function validate(): boolean {
     const next: DeploymentFormErrors = {}
     if (!name.trim()) next.name = 'Name is required'
-    if (!provider) next.provider = 'Provider is required'
-    if (!isEdit && !baseUrl.trim()) next.base_url = 'Base URL is required'
+    if (!entry.providerId && !entry.provider) {
+      next.provider = t('connection.select_or_protocol')
+    }
+    if (!entry.providerId && !isEdit && !entry.baseUrl.trim()) {
+      next.base_url = t('connection.base_url_required')
+    }
     setErrors(next)
     return Object.keys(next).length === 0
   }
@@ -283,23 +493,36 @@ function DeploymentDialog({ modelId, deployment, onClose }: DeploymentDialogProp
     e.preventDefault()
     if (!validate()) return
 
-    const parsedWeight = parseInt(weight, 10)
-    const parsedPriority = parseInt(priority, 10)
+    const parsedWeight = entry.weight
+    const parsedPriority = entry.priority
+    const effectiveProtocol = entry.provider || undefined
 
     if (isEdit) {
       const params: Record<string, unknown> = {}
       if (name.trim() !== deployment.name) params.name = name.trim()
-      if (provider !== deployment.provider) params.provider = provider
-      if (baseUrl.trim() && baseUrl.trim() !== deployment.base_url) params.base_url = baseUrl.trim()
-      if (apiKey.trim()) params.api_key = apiKey.trim()
-      if (isAzure && azureDeployment.trim() !== (deployment.azure_deployment ?? '')) {
-        params.azure_deployment = azureDeployment.trim() || undefined
+      if (effectiveProtocol && effectiveProtocol !== deployment.provider) {
+        params.provider = effectiveProtocol
       }
-      if (isAzure && azureApiVersion.trim() !== (deployment.azure_api_version ?? '')) {
-        params.azure_api_version = azureApiVersion.trim() || undefined
+      if (!entry.providerId && entry.baseUrl.trim() && entry.baseUrl.trim() !== deployment.base_url) {
+        params.base_url = entry.baseUrl.trim()
       }
-      if (!isNaN(parsedWeight) && parsedWeight !== deployment.weight) params.weight = parsedWeight
-      if (!isNaN(parsedPriority) && parsedPriority !== deployment.priority) params.priority = parsedPriority
+      if (entry.apiKey.trim()) params.api_key = entry.apiKey.trim()
+      const providerIdChanged = (entry.providerId || null) !== (deployment.provider_id ?? null)
+      if (providerIdChanged) {
+        params.provider_id = entry.providerId || null
+      }
+      if (entry.upstreamModel.trim() !== (deployment.upstream_model ?? '')) {
+        params.upstream_model = entry.upstreamModel.trim() || undefined
+      }
+      const isAzure = (effectiveProtocol || deployment.provider) === 'azure'
+      if (isAzure && entry.azureDeployment.trim() !== (deployment.azure_deployment ?? '')) {
+        params.azure_deployment = entry.azureDeployment.trim() || undefined
+      }
+      if (isAzure && entry.azureApiVersion.trim() !== (deployment.azure_api_version ?? '')) {
+        params.azure_api_version = entry.azureApiVersion.trim() || undefined
+      }
+      if (parsedWeight !== deployment.weight) params.weight = parsedWeight
+      if (parsedPriority !== deployment.priority) params.priority = parsedPriority
 
       updateDeployment.mutate(
         { modelId, deploymentId: deployment.id, params },
@@ -319,13 +542,21 @@ function DeploymentDialog({ modelId, deployment, onClose }: DeploymentDialogProp
           modelId,
           params: {
             name: name.trim(),
-            provider,
-            base_url: baseUrl.trim(),
-            api_key: apiKey.trim() || undefined,
-            azure_deployment: isAzure && azureDeployment.trim() ? azureDeployment.trim() : undefined,
-            azure_api_version: isAzure && azureApiVersion.trim() ? azureApiVersion.trim() : undefined,
-            weight: !isNaN(parsedWeight) ? parsedWeight : 1,
-            priority: !isNaN(parsedPriority) ? parsedPriority : 0,
+            provider: effectiveProtocol,
+            base_url: entry.providerId ? undefined : entry.baseUrl.trim() || undefined,
+            api_key: entry.providerId ? undefined : entry.apiKey.trim() || undefined,
+            provider_id: entry.providerId || undefined,
+            upstream_model: entry.upstreamModel.trim() || undefined,
+            azure_deployment:
+              effectiveProtocol === 'azure' && entry.azureDeployment.trim()
+                ? entry.azureDeployment.trim()
+                : undefined,
+            azure_api_version:
+              effectiveProtocol === 'azure' && entry.azureApiVersion.trim()
+                ? entry.azureApiVersion.trim()
+                : undefined,
+            weight: parsedWeight,
+            priority: parsedPriority,
           },
         },
         {
@@ -342,83 +573,49 @@ function DeploymentDialog({ modelId, deployment, onClose }: DeploymentDialogProp
   }
 
   return (
-    <Dialog open onClose={handleClose} title={isEdit ? 'Edit Deployment' : 'Add Deployment'}>
+    <Dialog open onClose={handleClose} title={isEdit ? t('models.edit_deployment') : t('models.add_deployment')}>
       <div className="space-y-4">
         <Input
-          label="Name"
+          label={t('common.name')}
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="e.g. primary"
           error={errors.name}
           disabled={isPending}
         />
-        <Select
-          label="Provider"
-          options={PROVIDER_OPTIONS}
-          value={provider}
-          onChange={setProvider}
-          disabled={isPending}
+        <DeploymentConnectionFields
+          entry={entry}
+          onChange={patchEntry}
+          errors={errors}
+          providerOptions={providerOptions}
+          providers={providers}
+          isPending={isPending}
+          isEdit={isEdit}
         />
-        <Input
-          label="Base URL"
-          value={baseUrl}
-          onChange={(e) => setBaseUrl(e.target.value)}
-          placeholder={BASE_URL_PLACEHOLDERS[provider] ?? 'https://'}
-          error={errors.base_url}
-          description={isEdit ? 'Leave empty to keep current' : undefined}
-          disabled={isPending}
-        />
-        <Input
-          label="API Key"
-          type="password"
-          value={apiKey}
-          onChange={(e) => setApiKey(e.target.value)}
-          placeholder={isEdit ? 'Leave empty to keep current' : 'sk-...'}
-          description={isEdit ? 'Leave empty to keep current key' : 'Encrypted at rest, never shown again'}
-          disabled={isPending}
-        />
-        {isAzure && (
-          <>
-            <Input
-              label="Azure Deployment"
-              value={azureDeployment}
-              onChange={(e) => setAzureDeployment(e.target.value)}
-              placeholder="e.g. gpt-4o-deployment"
-              disabled={isPending}
-            />
-            <Input
-              label="Azure API Version"
-              value={azureApiVersion}
-              onChange={(e) => setAzureApiVersion(e.target.value)}
-              placeholder="e.g. 2024-02-01"
-              disabled={isPending}
-            />
-          </>
-        )}
         <div className="grid grid-cols-2 gap-4">
           <Input
-            label="Weight"
+            label={t('common.weight')}
             type="number"
-            value={weight}
-            onChange={(e) => setWeight(e.target.value)}
+            value={String(entry.weight)}
+            onChange={(e) => patchEntry({ weight: parseInt(e.target.value, 10) || 1 })}
             placeholder="1"
             disabled={isPending}
           />
           <Input
-            label="Priority"
+            label={t('common.priority')}
             type="number"
-            value={priority}
-            onChange={(e) => setPriority(e.target.value)}
+            value={String(entry.priority)}
+            onChange={(e) => patchEntry({ priority: parseInt(e.target.value, 10) || 0 })}
             placeholder="0"
             disabled={isPending}
           />
         </div>
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="secondary" onClick={handleClose} disabled={isPending}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button onClick={handleSubmit} loading={isPending}>
-            {isEdit ? 'Save Changes' : 'Add Deployment'}
+            {isEdit ? t('models.save_changes') : t('models.add_deployment')}
           </Button>
         </div>
       </div>
@@ -442,19 +639,6 @@ interface FormErrors {
   deployments?: string
 }
 
-interface DeploymentFormEntry {
-  name: string
-  providerId: string
-  provider: string
-  baseUrl: string
-  apiKey: string
-  upstreamModel: string
-  azureDeployment: string
-  azureApiVersion: string
-  weight: number
-  priority: number
-}
-
 const emptyDeploymentEntry = (): DeploymentFormEntry => ({
   name: '',
   providerId: '',
@@ -475,6 +659,7 @@ interface InlineDeploymentFormErrors {
 }
 
 function CreateModelDialog({ open, onClose }: CreateModelDialogProps) {
+  const { t } = useTranslation()
   const [name, setName] = useState('')
   const [type, setType] = useState('chat')
   const [aliases, setAliases] = useState('')
@@ -511,13 +696,13 @@ function CreateModelDialog({ open, onClose }: CreateModelDialogProps) {
   const providerOptions: SelectOption[] = useMemo(() => {
     const items = providersData?.data ?? []
     return [
-      { value: '', label: '— Select provider source —' },
+      { value: '', label: t('connection.select_provider') },
       ...items.map((p) => ({
         value: p.id,
         label: p.slug ? `${p.name} (${p.slug})` : p.name,
       })),
     ]
-  }, [providersData])
+  }, [providersData, t])
 
   function handleClose() {
     setName('')
@@ -543,7 +728,10 @@ function CreateModelDialog({ open, onClose }: CreateModelDialogProps) {
     const next: InlineDeploymentFormErrors = {}
     if (!depFormEntry.name.trim()) next.name = 'Name is required'
     if (!depFormEntry.providerId && !depFormEntry.provider) {
-      next.provider = 'Select a provider source or set protocol'
+      next.provider = t('connection.select_or_protocol')
+    }
+    if (!depFormEntry.providerId && !depFormEntry.baseUrl.trim()) {
+      next.base_url = t('connection.base_url_required')
     }
     setDepFormErrors(next)
     return Object.keys(next).length === 0
@@ -688,9 +876,13 @@ function CreateModelDialog({ open, onClose }: CreateModelDialogProps) {
     }
   }
 
+  const providers = providersData?.data ?? []
   const isPending = createModel.isPending || createDeployment.isPending
-  const depFormIsAzure = depFormEntry.provider === 'azure'
   const depFormIsOpen = showDeploymentForm || editingDeployment !== null
+
+  function patchDepForm(patch: Partial<DeploymentFormEntry>) {
+    setDepFormEntry((prev) => ({ ...prev, ...patch }))
+  }
 
   const fallbackOptions: SelectOption[] = useMemo(() => {
     const allModels = modelsData?.data ?? []
@@ -703,7 +895,7 @@ function CreateModelDialog({ open, onClose }: CreateModelDialogProps) {
   }, [modelsData, name, type])
 
   return (
-    <Dialog open={open} onClose={handleClose} title="Add Model">
+    <Dialog open={open} onClose={handleClose} title={t('models.add')}>
       <div className="space-y-4">
         <Input
           label="Name"
@@ -722,9 +914,7 @@ function CreateModelDialog({ open, onClose }: CreateModelDialogProps) {
         />
 
         <>
-            <p className="text-xs text-text-tertiary">
-              Routing: priority groups — same priority channels use round-robin.
-            </p>
+            <p className="text-xs text-text-tertiary">{t('models.routing_hint')}</p>
             <Input
               label="Max Retries"
               type="number"
@@ -749,11 +939,11 @@ function CreateModelDialog({ open, onClose }: CreateModelDialogProps) {
             {/* Deployments list */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-text-secondary">Deployments</span>
+                <span className="text-sm font-medium text-text-secondary">{t('models.deployments')}</span>
               </div>
 
               {deployments.length === 0 && !depFormIsOpen && (
-                <p className="text-sm text-text-tertiary mb-2">No deployments added yet.</p>
+                <p className="text-sm text-text-tertiary mb-2">{t('models.no_deployments')}</p>
               )}
 
               {deployments.length > 0 && (
@@ -771,61 +961,14 @@ function CreateModelDialog({ open, onClose }: CreateModelDialogProps) {
                             error={depFormErrors.name}
                             disabled={isPending}
                           />
-                          <Select
-                            label="Provider source"
-                            options={providerOptions}
-                            value={depFormEntry.providerId}
-                            onChange={(v) => setDepFormEntry((prev) => ({ ...prev, providerId: v }))}
-                            disabled={isPending}
+                          <DeploymentConnectionFields
+                            entry={depFormEntry}
+                            onChange={patchDepForm}
+                            errors={depFormErrors}
+                            providerOptions={providerOptions}
+                            providers={providers}
+                            isPending={isPending}
                           />
-                          <Select
-                            label="Protocol override"
-                            options={[{ value: '', label: 'Inherit from provider' }, ...PROVIDER_OPTIONS]}
-                            value={depFormEntry.provider}
-                            onChange={(v) => setDepFormEntry((prev) => ({ ...prev, provider: v }))}
-                            disabled={isPending}
-                          />
-                          <Input
-                            label="Upstream model"
-                            value={depFormEntry.upstreamModel}
-                            onChange={(e) => setDepFormEntry((prev) => ({ ...prev, upstreamModel: e.target.value }))}
-                            placeholder="e.g. deepseek-chat (empty = product name)"
-                            disabled={isPending}
-                          />
-                          <Input
-                            label="Base URL"
-                            value={depFormEntry.baseUrl}
-                            onChange={(e) => setDepFormEntry((prev) => ({ ...prev, baseUrl: e.target.value }))}
-                            placeholder={BASE_URL_PLACEHOLDERS[depFormEntry.provider] ?? 'https://'}
-                            error={depFormErrors.base_url}
-                            disabled={isPending}
-                          />
-                          <Input
-                            label="API Key"
-                            type="password"
-                            value={depFormEntry.apiKey}
-                            onChange={(e) => setDepFormEntry((prev) => ({ ...prev, apiKey: e.target.value }))}
-                            placeholder="sk-..."
-                            disabled={isPending}
-                          />
-                          {depFormIsAzure && (
-                            <>
-                              <Input
-                                label="Azure Deployment"
-                                value={depFormEntry.azureDeployment}
-                                onChange={(e) => setDepFormEntry((prev) => ({ ...prev, azureDeployment: e.target.value }))}
-                                placeholder="e.g. gpt-4o-deployment"
-                                disabled={isPending}
-                              />
-                              <Input
-                                label="Azure API Version"
-                                value={depFormEntry.azureApiVersion}
-                                onChange={(e) => setDepFormEntry((prev) => ({ ...prev, azureApiVersion: e.target.value }))}
-                                placeholder="e.g. 2024-02-01"
-                                disabled={isPending}
-                              />
-                            </>
-                          )}
                           <div className="grid grid-cols-2 gap-3">
                             <Input
                               label="Weight"
@@ -858,11 +1001,20 @@ function CreateModelDialog({ open, onClose }: CreateModelDialogProps) {
                           <div className="min-w-0">
                             <span className="font-mono text-sm text-text-primary">{dep.name}</span>
                             <span className="text-text-tertiary text-xs ml-2">
-                              {providerLabels[dep.provider as ProviderKey] ?? dep.provider}
+                              {dep.providerId
+                                ? providers.find((p) => p.id === dep.providerId)?.name ?? 'provider'
+                                : providerLabels[dep.provider] ?? dep.provider}
                             </span>
-                            <span className="text-text-tertiary text-xs ml-2 truncate hidden sm:inline">
-                              {dep.baseUrl.length > 40 ? dep.baseUrl.slice(0, 40) + '…' : dep.baseUrl}
-                            </span>
+                            {!dep.providerId && (
+                              <span className="text-text-tertiary text-xs ml-2 truncate hidden sm:inline">
+                                {dep.baseUrl.length > 40 ? dep.baseUrl.slice(0, 40) + '…' : dep.baseUrl}
+                              </span>
+                            )}
+                            {dep.upstreamModel && (
+                              <span className="text-text-tertiary text-xs ml-2 font-mono hidden md:inline">
+                                → {dep.upstreamModel}
+                              </span>
+                            )}
                           </div>
                           <div className="flex items-center gap-1 shrink-0 ml-2">
                             <button
@@ -904,60 +1056,14 @@ function CreateModelDialog({ open, onClose }: CreateModelDialogProps) {
                     error={depFormErrors.name}
                     disabled={isPending}
                   />
-                  <Select
-                    label="Provider source"
-                    options={providerOptions}
-                    value={depFormEntry.providerId}
-                    onChange={(v) => setDepFormEntry((prev) => ({ ...prev, providerId: v }))}
-                    disabled={isPending}
+                  <DeploymentConnectionFields
+                    entry={depFormEntry}
+                    onChange={patchDepForm}
+                    errors={depFormErrors}
+                    providerOptions={providerOptions}
+                    providers={providers}
+                    isPending={isPending}
                   />
-                  <Select
-                    label="Protocol override"
-                    options={[{ value: '', label: 'Inherit from provider' }, ...PROVIDER_OPTIONS]}
-                    value={depFormEntry.provider}
-                    onChange={(v) => setDepFormEntry((prev) => ({ ...prev, provider: v }))}
-                    disabled={isPending}
-                  />
-                  <Input
-                    label="Upstream model"
-                    value={depFormEntry.upstreamModel}
-                    onChange={(e) => setDepFormEntry((prev) => ({ ...prev, upstreamModel: e.target.value }))}
-                    placeholder="e.g. deepseek-chat"
-                    disabled={isPending}
-                  />
-                  <Input
-                    label="Base URL override"
-                    value={depFormEntry.baseUrl}
-                    onChange={(e) => setDepFormEntry((prev) => ({ ...prev, baseUrl: e.target.value }))}
-                    placeholder="Leave empty to inherit from provider"
-                    disabled={isPending}
-                  />
-                  <Input
-                    label="API Key"
-                    type="password"
-                    value={depFormEntry.apiKey}
-                    onChange={(e) => setDepFormEntry((prev) => ({ ...prev, apiKey: e.target.value }))}
-                    placeholder="sk-..."
-                    disabled={isPending}
-                  />
-                  {depFormIsAzure && (
-                    <>
-                      <Input
-                        label="Azure Deployment"
-                        value={depFormEntry.azureDeployment}
-                        onChange={(e) => setDepFormEntry((prev) => ({ ...prev, azureDeployment: e.target.value }))}
-                        placeholder="e.g. gpt-4o-deployment"
-                        disabled={isPending}
-                      />
-                      <Input
-                        label="Azure API Version"
-                        value={depFormEntry.azureApiVersion}
-                        onChange={(e) => setDepFormEntry((prev) => ({ ...prev, azureApiVersion: e.target.value }))}
-                        placeholder="e.g. 2024-02-01"
-                        disabled={isPending}
-                      />
-                    </>
-                  )}
                   <div className="grid grid-cols-2 gap-3">
                     <Input
                       label="Weight"
@@ -993,7 +1099,7 @@ function CreateModelDialog({ open, onClose }: CreateModelDialogProps) {
                   onClick={(e) => { e.preventDefault(); setShowDeploymentForm(true) }}
                   className="text-xs text-accent hover:text-accent/80 transition-colors"
                 >
-                  + Add Deployment
+                  {t('models.add_deployment_link')}
                 </button>
               )}
             </div>
@@ -1508,6 +1614,7 @@ function EditModelDialog({ model, onClose }: EditModelDialogProps) {
 // ---------------------------------------------------------------------------
 
 export default function ModelsPage() {
+  const { t } = useTranslation()
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [editModel, setEditModel] = useState<ModelResponse | null>(null)
   const [deleteModelId, setDeleteModelId] = useState<string | null>(null)
@@ -1544,7 +1651,7 @@ export default function ModelsPage() {
     },
     {
       key: 'name',
-      header: 'Name',
+      header: t('models.col_name'),
       render: (row) => (
         <span className="font-mono text-text-primary text-sm">{row.name}</span>
       ),
@@ -1756,29 +1863,29 @@ export default function ModelsPage() {
   return (
     <>
       <PageHeader
-        title="Models"
-        description="System model registry"
+        title={t('models.title')}
+        description={t('models.desc')}
         actions={
-          <Button onClick={() => setShowCreateDialog(true)}>Add Model</Button>
+          <Button onClick={() => setShowCreateDialog(true)}>{t('models.add')}</Button>
         }
       />
 
       {/* Stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <StatCard
-          label="Total Models"
+          label={t('models.total')}
           value={isLoading ? '—' : allModels.length}
           icon={<IconLayers />}
           iconColor="purple"
         />
         <StatCard
-          label="Active"
+          label={t('models.active')}
           value={isLoading ? '—' : activeCount}
           icon={<IconActivity />}
           iconColor="green"
         />
         <StatCard
-          label="Inactive"
+          label={t('models.inactive')}
           value={isLoading ? '—' : inactiveCount}
           icon={<IconPauseCircle />}
           iconColor="yellow"
@@ -1790,7 +1897,7 @@ export default function ModelsPage() {
         data={allModels}
         keyExtractor={(row) => row.id}
         loading={isLoading}
-        emptyMessage="No models configured"
+        emptyMessage={t('models.empty')}
         expandedKeys={expandedModels}
         onToggleExpand={(key) => {
           setExpandedModels((prev) => {
@@ -1809,14 +1916,14 @@ export default function ModelsPage() {
                 <table className="min-w-full">
                   <thead>
                     <tr className="border-b border-border/40">
-                      <th className="px-3 py-2 text-[10px] font-medium text-text-tertiary uppercase tracking-wider text-left">Deployment</th>
-                      <th className="px-3 py-2 text-[10px] font-medium text-text-tertiary uppercase tracking-wider text-left">Provider</th>
-                      <th className="px-3 py-2 text-[10px] font-medium text-text-tertiary uppercase tracking-wider text-left">Health</th>
-                      <th className="px-3 py-2 text-[10px] font-medium text-text-tertiary uppercase tracking-wider text-left">Base URL</th>
-                      <th className="px-3 py-2 text-[10px] font-medium text-text-tertiary uppercase tracking-wider text-left">Weight</th>
-                      <th className="px-3 py-2 text-[10px] font-medium text-text-tertiary uppercase tracking-wider text-left">Priority</th>
+                      <th className="px-3 py-2 text-[10px] font-medium text-text-tertiary uppercase tracking-wider text-left">{t('models.col_deployment')}</th>
+                      <th className="px-3 py-2 text-[10px] font-medium text-text-tertiary uppercase tracking-wider text-left">{t('models.col_provider')}</th>
+                      <th className="px-3 py-2 text-[10px] font-medium text-text-tertiary uppercase tracking-wider text-left">{t('models.col_health')}</th>
+                      <th className="px-3 py-2 text-[10px] font-medium text-text-tertiary uppercase tracking-wider text-left">{t('common.endpoint')}</th>
+                      <th className="px-3 py-2 text-[10px] font-medium text-text-tertiary uppercase tracking-wider text-left">{t('common.weight')}</th>
+                      <th className="px-3 py-2 text-[10px] font-medium text-text-tertiary uppercase tracking-wider text-left">{t('common.priority')}</th>
                       {isApi && (
-                        <th className="px-3 py-2 text-[10px] font-medium text-text-tertiary uppercase tracking-wider text-right">Actions</th>
+                        <th className="px-3 py-2 text-[10px] font-medium text-text-tertiary uppercase tracking-wider text-right">{t('common.actions')}</th>
                       )}
                     </tr>
                   </thead>
@@ -1875,7 +1982,7 @@ export default function ModelsPage() {
                     onClick={() => setEditDeployment({ modelId: row.id, deployment: null })}
                     className="text-xs text-accent hover:text-accent/80 transition-colors"
                   >
-                    + Add Deployment
+                    {t('models.add_deployment_link')}
                   </button>
                 </div>
               )}
@@ -1900,9 +2007,9 @@ export default function ModelsPage() {
         open={deleteModelId !== null}
         onClose={() => setDeleteModelId(null)}
         onConfirm={handleDelete}
-        title="Delete Model"
-        description="Are you sure you want to delete this model? This action cannot be undone. YAML-sourced models must be removed from the config file."
-        confirmLabel="Delete"
+        title={t('models.delete')}
+        description={t('models.delete_confirm')}
+        confirmLabel={t('common.delete')}
         loading={deleteModel.isPending}
       />
 
@@ -1918,9 +2025,9 @@ export default function ModelsPage() {
         open={deleteDeployment !== null}
         onClose={() => setDeleteDeployment(null)}
         onConfirm={handleDeleteDeployment}
-        title="Delete Deployment"
-        description="Are you sure you want to delete this deployment?"
-        confirmLabel="Delete"
+        title={t('models.delete_deployment')}
+        description={t('models.delete_dep_confirm')}
+        confirmLabel={t('common.delete')}
         loading={deleteDeploymentMutation.isPending}
       />
     </>

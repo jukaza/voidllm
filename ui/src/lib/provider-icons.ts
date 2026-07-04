@@ -14,7 +14,7 @@ const LEGACY_LOGO_PATH: Record<string, string> = {
   '/logos/ollama.svg': 'Ollama',
   '/logos/azure.svg': 'AzureAI',
   '/logos/vertex.svg': 'Gemini.Color',
-  '/logos/custom.svg': 'Cloudflare.Color',
+  '/logos/custom.svg': 'LobeHub',
 }
 
 function normalizeLogoKey(logo?: string | null): string | undefined {
@@ -37,9 +37,10 @@ export const PRESET_ICON_BY_SLUG: Record<string, string> = {
   moonshot: 'Kimi.Color',
   zhipu: 'Zhipu.Color',
   ollama: 'Ollama',
+  'ollama-cloud': 'Ollama',
   azure: 'AzureAI',
   vertex: 'Gemini.Color',
-  custom: 'Cloudflare.Color',
+  custom: 'LobeHub',
 }
 
 export interface PopularIconOption {
@@ -65,7 +66,7 @@ export const POPULAR_ICONS: PopularIconOption[] = [
   { value: 'Cohere.Color', label: 'Cohere' },
   { value: 'Minimax.Color', label: 'MiniMax' },
   { value: 'Doubao.Color', label: 'Doubao' },
-  { value: 'Cloudflare.Color', label: 'Custom / Other' },
+  { value: 'LobeHub', label: 'Custom / Other' },
 ]
 
 const MODEL_NAME_RULES: Array<{ test: RegExp; icon: string }> = [
@@ -94,7 +95,7 @@ export function resolveProviderIcon(
   if (s && PRESET_ICON_BY_SLUG[s]) return PRESET_ICON_BY_SLUG[s]
   const p = protocol?.trim().toLowerCase()
   if (p && PRESET_ICON_BY_SLUG[p]) return PRESET_ICON_BY_SLUG[p]
-  return 'Cloudflare.Color'
+  return 'LobeHub'
 }
 
 /** Resolve icon for a catalog model from stored logo or model name. */
@@ -105,7 +106,7 @@ export function resolveModelIcon(logo?: string | null, modelName?: string | null
   for (const rule of MODEL_NAME_RULES) {
     if (rule.test.test(name)) return rule.icon
   }
-  return 'Cloudflare.Color'
+  return 'LobeHub'
 }
 
 /** Default icon when creating a provider from slug/protocol. */

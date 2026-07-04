@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ToastProvider } from '../hooks/useToast'
+import { TranslationProvider } from '../lib/i18n'
 import ModelsPage from './ModelsPage'
 
 // ---------------------------------------------------------------------------
@@ -73,7 +74,9 @@ function makeWrapper() {
   function Wrapper({ children }: { children: React.ReactNode }) {
     return (
       <QueryClientProvider client={queryClient}>
-        <ToastProvider>{children}</ToastProvider>
+        <TranslationProvider>
+          <ToastProvider>{children}</ToastProvider>
+        </TranslationProvider>
       </QueryClientProvider>
     )
   }
@@ -81,6 +84,7 @@ function makeWrapper() {
 }
 
 function renderModelsPage() {
+  localStorage.setItem('voidllm_lang', 'en')
   const { Wrapper } = makeWrapper()
   return render(<ModelsPage />, { wrapper: Wrapper })
 }
