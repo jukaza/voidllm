@@ -260,13 +260,11 @@ func (h *Handler) AvailableModels(c fiber.Ctx) error {
 
 	models := make([]availableModel, 0, len(allModels))
 	for _, m := range allModels {
-		if h.AccessCache == nil || h.AccessCache.Check("", "", keyInfo.ID, m.Name) {
-			modelType := m.Type
-			if modelType == "" {
-				modelType = "chat"
-			}
-			models = append(models, availableModel{Name: m.Name, Type: modelType})
+		modelType := m.Type
+		if modelType == "" {
+			modelType = "chat"
 		}
+		models = append(models, availableModel{Name: m.Name, Type: modelType})
 	}
 
 	return c.JSON(availableModelsResponse{Models: models})

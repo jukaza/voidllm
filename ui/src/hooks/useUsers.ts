@@ -18,8 +18,6 @@ export interface CreateUserParams {
   display_name: string
   password: string
   is_system_admin?: boolean
-  org_id: string
-  role?: string
 }
 
 export interface PaginatedUsers {

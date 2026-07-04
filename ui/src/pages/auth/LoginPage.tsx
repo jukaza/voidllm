@@ -59,7 +59,7 @@ export default function LoginPage() {
         <form onSubmit={(e) => void handleSubmit(e)} className="space-y-5">
           <Input
             label={t('login.email')}
-            type="email"
+            type="text"
             autoComplete="email"
             required
             value={email}

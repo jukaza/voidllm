@@ -339,36 +339,57 @@ func topupToJSON(t *db.TopupRequest) fiber.Map {
 	}
 }
 
-// publicModelItem is one row of the public storefront price list.
-type publicModelItem struct {
+// catalogModelItem is one row of the public model catalog (sell prices only).
+type catalogModelItem struct {
 	Name                 string   `json:"name"`
 	Type                 string   `json:"type"`
+	Logo                 string   `json:"logo,omitempty"`
 	MaxContextTokens     int      `json:"max_context_tokens,omitempty"`
-	SellInputPer1M       *float64 `json:"sell_input_per_1m"`
-	SellOutputPer1M      *float64 `json:"sell_output_per_1m"`
+	BillPerToken         bool     `json:"bill_per_token"`
+	BillPerRequest       bool     `json:"bill_per_request"`
+	SellInputPer1M       *float64 `json:"sell_input_per_1m,omitempty"`
+	SellOutputPer1M      *float64 `json:"sell_output_per_1m,omitempty"`
 	SellCachedInputPer1M *float64 `json:"sell_cached_input_per_1m,omitempty"`
+	SellPerRequest       *float64 `json:"sell_per_request,omitempty"`
 }
 
-// PublicModels handles GET /api/v1/public/models — the unauthenticated
-// storefront price list. Only models flagged is_public are returned, and only
-// sell-side fields are exposed (never cost prices or upstream details).
-func (h *Handler) PublicModels(c fiber.Ctx) error {
-	models, err := h.DB.ListPublicModels(c.Context())
+func modelToCatalogItem(m db.Model) catalogModelItem {
+	modelType := m.ModelType
+	if modelType == "" {
+		modelType = "chat"
+	}
+	return catalogModelItem{
+		Name:                 m.Name,
+		Type:                 modelType,
+		Logo:                 m.Logo,
+		MaxContextTokens:     m.MaxContextTokens,
+		BillPerToken:         m.BillPerToken,
+		BillPerRequest:       m.BillPerRequest,
+		SellInputPer1M:       m.SellInputPer1M,
+		SellOutputPer1M:      m.SellOutputPer1M,
+		SellCachedInputPer1M: m.SellCachedInputPer1M,
+		SellPerRequest:       m.SellPerRequest,
+	}
+}
+
+// PublicCatalog handles GET /api/v1/public/catalog — the unauthenticated model
+// price catalog. Returns active models with at least one configured sell price.
+func (h *Handler) PublicCatalog(c fiber.Ctx) error {
+	models, err := h.DB.ListCatalogModels(c.Context())
 	if err != nil {
-		h.Log.ErrorContext(c.Context(), "public models", slog.String("error", err.Error()))
-		return apierror.InternalError(c, "failed to load models")
+		h.Log.ErrorContext(c.Context(), "public catalog", slog.String("error", err.Error()))
+		return apierror.InternalError(c, "failed to load catalog")
 	}
 
-	items := make([]publicModelItem, len(models))
+	items := make([]catalogModelItem, len(models))
 	for i, m := range models {
-		items[i] = publicModelItem{
-			Name:                 m.Name,
-			Type:                 m.ModelType,
-			MaxContextTokens:     m.MaxContextTokens,
-			SellInputPer1M:       m.SellInputPer1M,
-			SellOutputPer1M:      m.SellOutputPer1M,
-			SellCachedInputPer1M: m.SellCachedInputPer1M,
-		}
+		items[i] = modelToCatalogItem(m)
 	}
 	return c.JSON(fiber.Map{"data": items})
+}
+
+// PublicModels handles GET /api/v1/public/models — deprecated alias for the
+// public catalog. New clients should use GET /api/v1/public/catalog.
+func (h *Handler) PublicModels(c fiber.Ctx) error {
+	return h.PublicCatalog(c)
 }

@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
-import { usePublicModels } from '../../hooks/useProviders'
+import { BrandIcon } from '../../components/ui/BrandIcon'
+import { usePublicCatalog } from '../../hooks/useProviders'
 import { useTranslation } from '../../lib/i18n'
 
 function formatPrice(v: number | null | undefined): string {
@@ -8,7 +9,7 @@ function formatPrice(v: number | null | undefined): string {
 }
 
 export default function LandingPage() {
-  const { data, isLoading } = usePublicModels()
+  const { data, isLoading } = usePublicCatalog()
   const { t } = useTranslation()
   const models = data?.data ?? []
 
@@ -94,7 +95,7 @@ export default function LandingPage() {
                 <th className="px-4 py-3 font-medium">{t('storefront.col_type')}</th>
                 <th className="px-4 py-3 font-medium text-right">{t('storefront.col_input')}</th>
                 <th className="px-4 py-3 font-medium text-right">{t('storefront.col_output')}</th>
-                <th className="px-4 py-3 font-medium text-right">{t('storefront.col_cached')}</th>
+                <th className="px-4 py-3 font-medium text-right">Per request</th>
               </tr>
             </thead>
             <tbody>
@@ -114,12 +115,17 @@ export default function LandingPage() {
               )}
               {models.map((m) => (
                 <tr key={m.name} className="border-t border-white/5">
-                  <td className="px-4 py-3 font-mono">{m.name}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2.5 font-mono">
+                      <BrandIcon logo={m.logo} modelName={m.name} size={18} />
+                      <span>{m.name}</span>
+                    </div>
+                  </td>
                   <td className="px-4 py-3 text-text-tertiary">{m.type}</td>
-                  <td className="px-4 py-3 text-right">{formatPrice(m.sell_input_per_1m)}</td>
-                  <td className="px-4 py-3 text-right">{formatPrice(m.sell_output_per_1m)}</td>
+                  <td className="px-4 py-3 text-right">{m.bill_per_token ? formatPrice(m.sell_input_per_1m) : '—'}</td>
+                  <td className="px-4 py-3 text-right">{m.bill_per_token ? formatPrice(m.sell_output_per_1m) : '—'}</td>
                   <td className="px-4 py-3 text-right text-text-tertiary">
-                    {formatPrice(m.sell_cached_input_per_1m)}
+                    {m.bill_per_request ? formatPrice(m.sell_per_request) : '—'}
                   </td>
                 </tr>
               ))}

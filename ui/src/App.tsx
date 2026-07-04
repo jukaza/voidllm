@@ -1,45 +1,27 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import LoginPage from './pages/auth/LoginPage'
-import CallbackPage from './pages/auth/CallbackPage'
-import AcceptInvitePage from './pages/AcceptInvitePage'
+import LandingPage from './pages/storefront/LandingPage'
+import RegisterPage from './pages/storefront/RegisterPage'
 import DashboardPage from './pages/DashboardPage'
 import KeysPage from './pages/KeysPage'
-import TeamsPage from './pages/TeamsPage'
-import TeamDetailPage from './pages/TeamDetailPage'
-import TeamMembersTab from './pages/TeamMembersTab'
-import TeamModelsTab from './pages/TeamModelsTab'
-import TeamSettingsTab from './pages/TeamSettingsTab'
-import TeamMCPAccessTab from './pages/TeamMCPAccessTab'
-import OrganizationPage from './pages/OrganizationPage'
-import OrgUsersPage from './pages/OrgUsersPage'
-import OrganizationsPage from './pages/OrganizationsPage'
-import OrgDetailPage from './pages/OrgDetailPage'
-import OrgDetailMembersTab from './pages/OrgDetailMembersTab'
-import OrgDetailTeamsTab from './pages/OrgDetailTeamsTab'
-import OrgDetailSettingsTab from './pages/OrgDetailSettingsTab'
-import OrgDetailSSOTab from './pages/OrgDetailSSOTab'
-import SSOConfigPage from './pages/SSOConfigPage'
-import ServiceAccountsPage from './pages/ServiceAccountsPage'
+import MarketplacePage from './pages/MarketplacePage'
+import ProvidersPage from './pages/ProvidersPage'
+import WalletPage from './pages/WalletPage'
 import ModelsLayout from './pages/ModelsLayout'
-import ModelsAccessTab from './pages/ModelsAccessTab'
-import MCPAccessTab from './pages/MCPAccessTab'
-import SettingsPage from './pages/SettingsPage'
-import LicensePage from './pages/LicensePage'
 import UsageLayout from './pages/usage/UsageLayout'
 import UsageOverviewPage from './pages/usage/UsageOverviewPage'
 import LLMUsagePage from './pages/usage/LLMUsagePage'
-import MCPUsagePage from './pages/usage/MCPUsagePage'
 import CostReportsPage from './pages/CostReportsPage'
 import ProfilePage from './pages/ProfilePage'
-import AuditLogPage from './pages/AuditLogPage'
 import PlaygroundPage from './pages/PlaygroundPage'
 import SystemUsersPage from './pages/SystemUsersPage'
-import MCPServersPage from './pages/MCPServersPage'
+import CatalogPage from './pages/CatalogPage'
 import { ToastProvider } from './hooks/useToast'
 import { Shell } from './components/layout/Shell'
 import { PageHeader } from './components/ui/PageHeader'
 import { LOCAL_STORAGE_KEY } from './lib/constants'
+import { TranslationProvider } from './lib/i18n.tsx'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -63,11 +45,15 @@ function PlaceholderPage({ title, description }: { title: string; description?: 
 
 function RequireAuth() {
   const token = localStorage.getItem(LOCAL_STORAGE_KEY)
-  if (!token) return <Navigate to="/login" replace />
+  if (!token) return <Navigate to="/" replace />
   return <Shell />
 }
 
-import { TranslationProvider } from './lib/i18n.tsx'
+function HomeRoute() {
+  const token = localStorage.getItem(LOCAL_STORAGE_KEY)
+  if (!token) return <LandingPage />
+  return <Navigate to="/dashboard" replace />
+}
 
 export default function App() {
   return (
@@ -76,50 +62,25 @@ export default function App() {
         <ToastProvider>
           <BrowserRouter>
             <Routes>
+              <Route path="/" element={<HomeRoute />} />
               <Route path="/login" element={<LoginPage />} />
-              <Route path="/auth/callback" element={<CallbackPage />} />
-              <Route path="/invite/:token" element={<AcceptInvitePage />} />
+              <Route path="/register" element={<RegisterPage />} />
               <Route element={<RequireAuth />}>
-                <Route index element={<DashboardPage />} />
+                <Route path="dashboard" element={<DashboardPage />} />
                 <Route path="playground" element={<PlaygroundPage />} />
+                <Route path="catalog" element={<CatalogPage />} />
                 <Route path="keys" element={<KeysPage />} />
-                <Route path="teams" element={<TeamsPage />} />
-                <Route path="teams/:teamId" element={<TeamDetailPage />}>
-                  <Route index element={<Navigate to="members" replace />} />
-                  <Route path="members" element={<TeamMembersTab />} />
-                  <Route path="models" element={<TeamModelsTab />} />
-                  <Route path="mcp-access" element={<TeamMCPAccessTab />} />
-                  <Route path="settings" element={<TeamSettingsTab />} />
-                </Route>
-                <Route path="org" element={<OrganizationPage />}>
-                  <Route index element={<Navigate to="users" replace />} />
-                  <Route path="settings" element={<SettingsPage />} />
-                  <Route path="users" element={<OrgUsersPage />} />
-                  <Route path="models" element={<ModelsAccessTab />} />
-                  <Route path="mcp-access" element={<MCPAccessTab />} />
-                </Route>
-                <Route path="service-accounts" element={<ServiceAccountsPage />} />
+                <Route path="providers" element={<ProvidersPage />} />
+                <Route path="marketplace" element={<MarketplacePage />} />
+                <Route path="wallet" element={<WalletPage />} />
                 <Route path="models" element={<ModelsLayout />} />
                 <Route path="usage" element={<UsageLayout />}>
                   <Route index element={<UsageOverviewPage />} />
                   <Route path="llm" element={<LLMUsagePage />} />
-                  <Route path="mcp" element={<MCPUsagePage />} />
                 </Route>
                 <Route path="cost-reports" element={<CostReportsPage />} />
                 <Route path="profile" element={<ProfilePage />} />
-                <Route path="license" element={<LicensePage />} />
-                <Route path="audit-log" element={<AuditLogPage />} />
-                <Route path="sso" element={<SSOConfigPage />} />
-                <Route path="orgs" element={<OrganizationsPage />} />
-                <Route path="orgs/:orgId" element={<OrgDetailPage />}>
-                  <Route index element={<Navigate to="members" replace />} />
-                  <Route path="members" element={<OrgDetailMembersTab />} />
-                  <Route path="teams" element={<OrgDetailTeamsTab />} />
-                  <Route path="settings" element={<OrgDetailSettingsTab />} />
-                  <Route path="sso" element={<OrgDetailSSOTab />} />
-                </Route>
                 <Route path="users" element={<SystemUsersPage />} />
-                <Route path="mcp-servers" element={<MCPServersPage />} />
                 <Route
                   path="*"
                   element={

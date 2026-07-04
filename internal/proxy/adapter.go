@@ -59,6 +59,10 @@ type UsageInfo struct {
 	// prompt cache (usage.prompt_tokens_details.cached_tokens). Zero when the
 	// provider does not report cache usage.
 	CachedTokens int
+	// CacheWriteTokens is the number of tokens written to the provider's
+	// prompt cache (Anthropic usage.cache_creation_input_tokens). Zero when
+	// the provider does not report cache writes.
+	CacheWriteTokens int
 }
 
 // Adapter transforms requests and responses between the client's OpenAI-compatible

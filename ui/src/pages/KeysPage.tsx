@@ -1,5 +1,4 @@
 import React, { useMemo, useState, useEffect } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import { PageHeader } from '../components/ui/PageHeader'
 import { useTranslation } from '../lib/i18n'
 import { Table } from '../components/ui/Table'
@@ -9,8 +8,7 @@ import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { Select } from '../components/ui/Select'
-import TabSwitcher from '../components/ui/TabSwitcher'
-import { Toggle } from '../components/ui/Toggle'
+
 import { KeyHint } from '../components/ui/KeyHint'
 import { TimeAgo } from '../components/ui/TimeAgo'
 import { CopyButton } from '../components/ui/CopyButton'
@@ -18,9 +16,7 @@ import { StatCard } from '../components/ui/StatCard'
 import { useMe } from '../hooks/useMe'
 import { useAPIKeys, useCreateAPIKey, useDeleteAPIKey, useUpdateAPIKey, useRotateAPIKey } from '../hooks/useAPIKeys'
 import type { APIKeyResponse, CreateAPIKeyParams } from '../hooks/useAPIKeys'
-import { useTeams } from '../hooks/useTeams'
 import { useToast } from '../hooks/useToast'
-import apiClient from '../api/client'
 
 // ---------------------------------------------------------------------------
 // Module-level constants
@@ -39,11 +35,6 @@ const keyTypeLabels: Record<string, string> = {
   sa_key: 'Service Acct',
   session_key: 'Session',
 }
-
-const KEY_TYPE_OPTIONS = [
-  { value: 'user_key', label: 'User Key' },
-  { value: 'team_key', label: 'Team Key' },
-]
 
 const EXPIRES_OPTIONS = [
   { value: '30d', label: '30 days' },
@@ -214,18 +205,12 @@ interface CreateKeyDialogProps {
   open: boolean
   onClose: () => void
   onCreated: (key: string) => void
-  orgId: string
 }
 
-function CreateKeyDialog({ open, onClose, onCreated, orgId }: CreateKeyDialogProps) {
+function CreateKeyDialog({ open, onClose, onCreated }: CreateKeyDialogProps) {
   const [name, setName] = useState('')
-  const [keyType, setKeyType] = useState('user_key')
   const [expiresIn, setExpiresIn] = useState('90d')
   const [nameError, setNameError] = useState<string | undefined>()
-  const [teamId, setTeamId] = useState('')
-  const [teamError, setTeamError] = useState<string | undefined>()
-  const [restrictModels, setRestrictModels] = useState(false)
-  const [selectedModels, setSelectedModels] = useState<Set<string>>(new Set())
   const [showAdvancedLimits, setShowAdvancedLimits] = useState(false)
   const [dailyTokenLimit, setDailyTokenLimit] = useState('')
   const [monthlyTokenLimit, setMonthlyTokenLimit] = useState('')
@@ -233,53 +218,19 @@ function CreateKeyDialog({ open, onClose, onCreated, orgId }: CreateKeyDialogPro
   const [requestsPerDay, setRequestsPerDay] = useState('')
 
   const { data: me } = useMe()
-  const { data: teams } = useTeams(orgId)
-
-  const userTeams = teams?.data ?? []
-  const showTeamPickerForUserKey = keyType === 'user_key' && userTeams.length > 1
-  const showTeamPicker = keyType === 'team_key' || showTeamPickerForUserKey
-
-  const createKey = useCreateAPIKey(orgId)
+  const createKey = useCreateAPIKey()
   const { toast } = useToast()
-
-  const { data: availableModels } = useQuery({
-    queryKey: ['available-models'],
-    queryFn: () => apiClient<{ models: string[] }>('/me/available-models'),
-  })
 
   function handleClose() {
     setName('')
-    setKeyType('user_key')
     setExpiresIn('90d')
     setNameError(undefined)
-    setTeamId('')
-    setTeamError(undefined)
-    setRestrictModels(false)
-    setSelectedModels(new Set())
     setShowAdvancedLimits(false)
     setDailyTokenLimit('')
     setMonthlyTokenLimit('')
     setRequestsPerMinute('')
     setRequestsPerDay('')
     onClose()
-  }
-
-  function handleKeyTypeChange(newType: string) {
-    setKeyType(newType)
-    setTeamId('')
-    setTeamError(undefined)
-  }
-
-  function toggleModel(modelName: string) {
-    setSelectedModels((prev) => {
-      const next = new Set(prev)
-      if (next.has(modelName)) {
-        next.delete(modelName)
-      } else {
-        next.add(modelName)
-      }
-      return next
-    })
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -295,39 +246,17 @@ function CreateKeyDialog({ open, onClose, onCreated, orgId }: CreateKeyDialogPro
       setNameError(undefined)
     }
 
-    if (keyType === 'user_key' && userTeams.length > 1 && !teamId) {
-      setTeamError('Select a team for this key')
-      hasError = true
-    } else if (keyType === 'team_key' && !teamId) {
-      setTeamError('Team is required')
-      hasError = true
-    } else {
-      setTeamError(undefined)
-    }
-
-    if (keyType === 'user_key' && !me?.id) {
+    if (!me?.id) {
       hasError = true
     }
 
     if (hasError) return
 
-    let effectiveTeamId = teamId
-    if (keyType === 'user_key') {
-      if (userTeams.length === 1) {
-        effectiveTeamId = userTeams[0].id
-      } else if (userTeams.length === 0) {
-        effectiveTeamId = ''
-      }
-    }
-
     const params: CreateAPIKeyParams = {
       name: trimmedName,
-      key_type: keyType,
+      key_type: 'user_key',
+      user_id: me?.id,
       expires_at: expiresAtFromOption(expiresIn),
-      ...(keyType === 'user_key' ? {
-        user_id: me?.id,
-      } : {}),
-      ...(keyType === 'team_key' && effectiveTeamId ? { team_id: effectiveTeamId } : {}),
     }
 
     const parsedDailyToken = parseInt(dailyTokenLimit, 10)
@@ -348,20 +277,7 @@ function CreateKeyDialog({ open, onClose, onCreated, orgId }: CreateKeyDialogPro
     }
 
     createKey.mutate(params, {
-      onSuccess: async (data) => {
-        if (restrictModels && selectedModels.size > 0) {
-          try {
-            await apiClient(`/orgs/${orgId}/keys/${data.id}/model-access`, {
-              method: 'PUT',
-              body: JSON.stringify({ models: Array.from(selectedModels) }),
-            })
-          } catch {
-            toast({
-              variant: 'error',
-              message: 'Key created but model access could not be set',
-            })
-          }
-        }
+      onSuccess: (data) => {
         handleClose()
         if (data.key) {
           onCreated(data.key)
@@ -387,27 +303,6 @@ function CreateKeyDialog({ open, onClose, onCreated, orgId }: CreateKeyDialogPro
           error={nameError}
           disabled={createKey.isPending}
         />
-        <div>
-          <label className="block text-xs font-medium tracking-wider uppercase text-text-tertiary mb-2">Key Type</label>
-          <TabSwitcher
-            tabs={KEY_TYPE_OPTIONS.map(o => ({ key: o.value, label: o.label }))}
-            activeKey={keyType}
-            onChange={handleKeyTypeChange}
-            className="mb-0"
-          />
-        </div>
-        {showTeamPicker && (
-          <Select
-            label="Team"
-            options={userTeams.map((t) => ({ value: t.id, label: t.name }))}
-            value={teamId}
-            onChange={(v) => { setTeamId(v); setTeamError(undefined) }}
-            placeholder="Select a team..."
-            searchable
-            error={teamError}
-            disabled={createKey.isPending}
-          />
-        )}
         <Select
           label="Expires In"
           options={EXPIRES_OPTIONS}
@@ -472,62 +367,6 @@ function CreateKeyDialog({ open, onClose, onCreated, orgId }: CreateKeyDialogPro
                   disabled={createKey.isPending}
                 />
               </div>
-            </div>
-          )}
-        </div>
-
-        {/* Model Access — collapsible */}
-        <div className="border-t border-border pt-4">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-medium tracking-widest uppercase text-text-tertiary">
-              Model Access
-            </span>
-            <Toggle
-              checked={restrictModels}
-              onChange={setRestrictModels}
-              label="Restrict models"
-              size="sm"
-              disabled={createKey.isPending}
-            />
-          </div>
-          <p className="mt-2 text-xs text-text-tertiary">
-            {restrictModels
-              ? 'Only selected models will be accessible with this key.'
-              : 'Key inherits model access from team and organization scope.'}
-          </p>
-
-          {restrictModels && (
-            <div className="mt-3 space-y-1.5">
-              {availableModels?.models && availableModels.models.length > 0 ? (
-                <div className="max-h-48 overflow-y-auto rounded-lg border border-border p-1.5">
-                  {availableModels.models.map((modelName) => (
-                    <label
-                      key={modelName}
-                      className="flex cursor-pointer items-center gap-3 rounded px-2 py-1.5 hover:bg-bg-tertiary"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedModels.has(modelName)}
-                        onChange={() => toggleModel(modelName)}
-                        className="accent-accent h-4 w-4 shrink-0 cursor-pointer"
-                        disabled={createKey.isPending}
-                      />
-                      <span className="font-mono text-sm text-text-primary">{modelName}</span>
-                    </label>
-                  ))}
-                </div>
-              ) : availableModels?.models && availableModels.models.length === 0 ? (
-                <p className="text-xs text-text-tertiary">No models available.</p>
-              ) : (
-                <div className="space-y-1 rounded-lg border border-border p-1.5">
-                  {Array.from({ length: 3 }).map((_, i) => (
-                    <div key={i} className="flex items-center gap-3 rounded px-2 py-1.5">
-                      <div className="h-4 w-4 shrink-0 animate-pulse rounded bg-bg-tertiary" />
-                      <div className="h-4 w-32 animate-pulse rounded bg-bg-tertiary" />
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           )}
         </div>
@@ -627,10 +466,9 @@ const EDIT_EXPIRES_OPTIONS = [
 interface EditKeyDialogProps {
   apiKey: APIKeyResponse
   onClose: () => void
-  orgId: string
 }
 
-function EditKeyDialog({ apiKey, onClose, orgId }: EditKeyDialogProps) {
+function EditKeyDialog({ apiKey, onClose }: EditKeyDialogProps) {
   const [name, setName] = useState(apiKey.name)
   const [expiresIn, setExpiresIn] = useState('keep')
   const [dailyTokenLimit, setDailyTokenLimit] = useState(
@@ -647,7 +485,7 @@ function EditKeyDialog({ apiKey, onClose, orgId }: EditKeyDialogProps) {
   )
   const [nameError, setNameError] = useState<string | undefined>()
 
-  const updateKey = useUpdateAPIKey(orgId)
+  const updateKey = useUpdateAPIKey()
   const { toast } = useToast()
 
   function handleSubmit(e: React.FormEvent) {
@@ -782,8 +620,6 @@ function EditKeyDialog({ apiKey, onClose, orgId }: EditKeyDialogProps) {
 // ---------------------------------------------------------------------------
 
 export default function KeysPage() {
-  const { data: me } = useMe()
-  const orgId = me?.org_id ?? ''
   const { t } = useTranslation()
 
   const [cursor, setCursor] = useState<string | undefined>()
@@ -799,9 +635,9 @@ export default function KeysPage() {
     return () => setCreatedKey(null)
   }, [])
 
-  const { data: keys, isLoading } = useAPIKeys(orgId, cursor)
-  const deleteKey = useDeleteAPIKey(orgId)
-  const rotateKey = useRotateAPIKey(orgId)
+  const { data: keys, isLoading } = useAPIKeys(cursor)
+  const deleteKey = useDeleteAPIKey()
+  const rotateKey = useRotateAPIKey()
   const { toast } = useToast()
 
   const allKeys = useMemo(() => keys?.data ?? [], [keys?.data])
@@ -942,7 +778,7 @@ export default function KeysPage() {
   }
 
   // Empty state (not loading, no keys, orgId resolved)
-  const showEmptyState = !isLoading && !!orgId && allKeys.length === 0 && !keys?.has_more
+  const showEmptyState = !isLoading && allKeys.length === 0 && !keys?.has_more
 
   return (
     <>
@@ -992,7 +828,7 @@ export default function KeysPage() {
           columns={columns}
           data={allKeys}
           keyExtractor={(row) => row.id}
-          loading={isLoading && !!orgId}
+          loading={isLoading}
           emptyMessage="Không tìm thấy khóa API nào"
           pagination={{
             cursor: cursor ?? null,
@@ -1017,7 +853,6 @@ export default function KeysPage() {
         open={showCreateDialog}
         onClose={() => setShowCreateDialog(false)}
         onCreated={(key) => setCreatedKey(key)}
-        orgId={orgId}
       />
 
       <KeyCreatedDialog
@@ -1029,7 +864,6 @@ export default function KeysPage() {
         <EditKeyDialog
           apiKey={editKey}
           onClose={() => setEditKey(null)}
-          orgId={orgId}
         />
       )}
 

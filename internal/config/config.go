@@ -193,6 +193,13 @@ func (m ModelConfig) LogValue() slog.Value {
 type PricingConfig struct {
 	InputPer1M  float64 `yaml:"input_per_1m"`
 	OutputPer1M float64 `yaml:"output_per_1m"`
+	// CachedInputPer1M is the cost per 1M cache-hit prompt tokens. Zero means
+	// bill cache hits at InputPer1M.
+	CachedInputPer1M float64 `yaml:"cached_input_per_1m"`
+	// CacheWritePer1M is the cost per 1M cache-write tokens (Anthropic-style
+	// prompt caching bills writes above the input rate). Zero means cache
+	// writes are not billed separately.
+	CacheWritePer1M float64 `yaml:"cache_write_per_1m"`
 }
 
 // LoggingConfig controls log output level and format.

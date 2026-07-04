@@ -44,8 +44,7 @@ type Handler struct {
 	EncryptionKey []byte // AES-256-GCM key for upstream API key encryption
 	KeyCache      *cache.Cache[string, auth.KeyInfo]
 	Registry      *proxy.Registry
-	AccessCache   *proxy.ModelAccessCache // in-memory model access cache; nil disables refresh
-	AliasCache    *proxy.AliasCache       // in-memory model alias cache; nil disables refresh
+	AliasCache    *proxy.AliasCache // in-memory model alias cache; nil disables refresh
 	Redis         *voidredis.Client       // nil when Redis is not configured
 	AuditLogger   *audit.Logger           // nil when audit logging is disabled
 	Log           *slog.Logger
@@ -103,18 +102,4 @@ func parsePagination(c fiber.Ctx) (paginationParams, error) {
 	return paginationParams{Limit: limit, Cursor: cursor}, nil
 }
 
-// refreshAccessCache reloads all model access allowlists from the database into
-// the in-memory access cache. It is called after any Set*ModelAccess mutation
-// so that the hot path immediately reflects the updated configuration.
-// If AccessCache is nil the call is a no-op.
-func (h *Handler) refreshAccessCache(ctx context.Context) {
-	if h.AccessCache == nil {
-		return
-	}
-	orgA, teamA, keyA, err := h.DB.LoadAllModelAccess(ctx)
-	if err != nil {
-		h.Log.ErrorContext(ctx, "refresh model access cache", slog.String("error", err.Error()))
-		return
-	}
-	h.AccessCache.Load(orgA, teamA, keyA)
-}
+

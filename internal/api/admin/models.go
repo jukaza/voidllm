@@ -69,6 +69,11 @@ type createModelRequest struct {
 	SellInputPer1M       *float64 `json:"sell_input_per_1m,omitempty"`
 	SellOutputPer1M      *float64 `json:"sell_output_per_1m,omitempty"`
 	SellCachedInputPer1M *float64 `json:"sell_cached_input_per_1m,omitempty"`
+	// Logo is the customer-facing logo URL or asset path.
+	Logo string `json:"logo,omitempty"`
+	BillPerToken   *bool    `json:"bill_per_token"`
+	BillPerRequest *bool    `json:"bill_per_request"`
+	SellPerRequest *float64 `json:"sell_per_request"`
 }
 
 // updateModelRequest is the JSON body accepted by UpdateModel.
@@ -115,6 +120,31 @@ type updateModelRequest struct {
 	SellInputPer1M       *float64 `json:"sell_input_per_1m"`
 	SellOutputPer1M      *float64 `json:"sell_output_per_1m"`
 	SellCachedInputPer1M *float64 `json:"sell_cached_input_per_1m"`
+	// Logo, when non-nil, replaces the customer-facing logo. Pass "" to clear.
+	Logo *string `json:"logo"`
+	BillPerToken   *bool    `json:"bill_per_token"`
+	BillPerRequest *bool    `json:"bill_per_request"`
+	SellPerRequest *float64 `json:"sell_per_request"`
+}
+
+func validateBillingModes(billToken, billRequest bool, sellIn, sellOut, sellCached, sellPerReq *float64) string {
+	if !billToken && !billRequest {
+		return "at least one billing mode (bill_per_token or bill_per_request) must be enabled"
+	}
+	if billToken {
+		hasTokenPrice := (sellIn != nil && *sellIn > 0) ||
+			(sellOut != nil && *sellOut > 0) ||
+			(sellCached != nil && *sellCached > 0)
+		if !hasTokenPrice {
+			return "bill_per_token requires at least one sell token price > 0"
+		}
+	}
+	if billRequest {
+		if sellPerReq == nil || *sellPerReq <= 0 {
+			return "bill_per_request requires sell_per_request > 0"
+		}
+	}
+	return ""
 }
 
 // parsePIIFilterField inspects raw JSON bytes to determine how the pii_filter
@@ -180,6 +210,11 @@ type modelResponse struct {
 	SellInputPer1M       *float64 `json:"sell_input_per_1m,omitempty"`
 	SellOutputPer1M      *float64 `json:"sell_output_per_1m,omitempty"`
 	SellCachedInputPer1M *float64 `json:"sell_cached_input_per_1m,omitempty"`
+	// Logo is the customer-facing logo URL or asset path.
+	Logo string `json:"logo,omitempty"`
+	BillPerToken   bool     `json:"bill_per_token"`
+	BillPerRequest bool     `json:"bill_per_request"`
+	SellPerRequest *float64 `json:"sell_per_request,omitempty"`
 	// Deployments contains the model's deployment entries when present.
 	Deployments []deploymentResponse `json:"deployments,omitempty"`
 	CreatedAt   string               `json:"created_at"`
@@ -251,6 +286,10 @@ func modelToResponse(m *db.Model, fallbackName string) modelResponse {
 		SellInputPer1M:       m.SellInputPer1M,
 		SellOutputPer1M:      m.SellOutputPer1M,
 		SellCachedInputPer1M: m.SellCachedInputPer1M,
+		Logo:                 m.Logo,
+		BillPerToken:         m.BillPerToken,
+		BillPerRequest:       m.BillPerRequest,
+		SellPerRequest:       m.SellPerRequest,
 		CreatedAt:            m.CreatedAt,
 		UpdatedAt:            m.UpdatedAt,
 	}
@@ -294,6 +333,9 @@ func dbModelToProxy(m *db.Model, apiKeyPlaintext string, fallbackName string) pr
 		SellInputPer1M:       m.SellInputPer1M,
 		SellOutputPer1M:      m.SellOutputPer1M,
 		SellCachedInputPer1M: m.SellCachedInputPer1M,
+		BillPerToken:         m.BillPerToken,
+		BillPerRequest:       m.BillPerRequest,
+		SellPerRequest:       m.SellPerRequest,
 	}
 }
 
@@ -517,6 +559,23 @@ func (h *Handler) CreateModel(c fiber.Ctx) error {
 			return apierror.Send(c, fiber.StatusBadRequest, "invalid_strategy",
 				"strategy must be one of: round-robin, least-latency, weighted, priority")
 		}
+	} else if req.BaseURL == "" {
+		req.Strategy = "priority"
+	}
+
+	billPerToken := true
+	billPerRequest := false
+	if req.BillPerToken != nil {
+		billPerToken = *req.BillPerToken
+	}
+	if req.BillPerRequest != nil {
+		billPerRequest = *req.BillPerRequest
+	}
+	if req.BillPerRequest != nil || req.BillPerToken != nil || req.SellPerRequest != nil ||
+		req.SellInputPer1M != nil || req.SellOutputPer1M != nil || req.SellCachedInputPer1M != nil {
+		if msg := validateBillingModes(billPerToken, billPerRequest, req.SellInputPer1M, req.SellOutputPer1M, req.SellCachedInputPer1M, req.SellPerRequest); msg != "" {
+			return apierror.BadRequest(c, msg)
+		}
 	}
 
 	aliasStr, aliasMsg := h.validateAndJoinAliases(ctx, req.Aliases, "")
@@ -591,6 +650,10 @@ func (h *Handler) CreateModel(c fiber.Ctx) error {
 		SellInputPer1M:       req.SellInputPer1M,
 		SellOutputPer1M:      req.SellOutputPer1M,
 		SellCachedInputPer1M: req.SellCachedInputPer1M,
+		Logo:                 req.Logo,
+		BillPerToken:         billPerToken,
+		BillPerRequest:       billPerRequest,
+		SellPerRequest:       req.SellPerRequest,
 	})
 	if err != nil {
 		if errors.Is(err, db.ErrConflict) {
@@ -852,6 +915,37 @@ func (h *Handler) UpdateModel(c fiber.Ctx) error {
 		}
 	}
 
+	if req.BillPerToken != nil || req.BillPerRequest != nil || req.SellPerRequest != nil ||
+		req.SellInputPer1M != nil || req.SellOutputPer1M != nil || req.SellCachedInputPer1M != nil {
+		billToken := existing.BillPerToken
+		billRequest := existing.BillPerRequest
+		if req.BillPerToken != nil {
+			billToken = *req.BillPerToken
+		}
+		if req.BillPerRequest != nil {
+			billRequest = *req.BillPerRequest
+		}
+		sellIn := existing.SellInputPer1M
+		if req.SellInputPer1M != nil {
+			sellIn = req.SellInputPer1M
+		}
+		sellOut := existing.SellOutputPer1M
+		if req.SellOutputPer1M != nil {
+			sellOut = req.SellOutputPer1M
+		}
+		sellCached := existing.SellCachedInputPer1M
+		if req.SellCachedInputPer1M != nil {
+			sellCached = req.SellCachedInputPer1M
+		}
+		sellPerReq := existing.SellPerRequest
+		if req.SellPerRequest != nil {
+			sellPerReq = req.SellPerRequest
+		}
+		if msg := validateBillingModes(billToken, billRequest, sellIn, sellOut, sellCached, sellPerReq); msg != "" {
+			return apierror.BadRequest(c, msg)
+		}
+	}
+
 	params := db.UpdateModelParams{
 		Name:                 req.Name,
 		Provider:             req.Provider,
@@ -873,6 +967,10 @@ func (h *Handler) UpdateModel(c fiber.Ctx) error {
 		SellInputPer1M:       req.SellInputPer1M,
 		SellOutputPer1M:      req.SellOutputPer1M,
 		SellCachedInputPer1M: req.SellCachedInputPer1M,
+		Logo:                 req.Logo,
+		BillPerToken:         req.BillPerToken,
+		BillPerRequest:       req.BillPerRequest,
+		SellPerRequest:       req.SellPerRequest,
 	}
 
 	if req.Aliases != nil {

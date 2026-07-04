@@ -46,6 +46,17 @@ type Deployment struct {
 	// per 1M tokens. Nil falls back to the model-level Pricing.
 	CostInputPer1M  *float64
 	CostOutputPer1M *float64
+	// CostCachedInputPer1M is this channel's cost price in USD per 1M cache-hit
+	// prompt tokens. Nil falls back to CostInputPer1M (or model Pricing).
+	CostCachedInputPer1M *float64
+	// CostCacheWritePer1M is this channel's cost price in USD per 1M
+	// cache-write tokens. Nil means cache writes are not costed separately.
+	CostCacheWritePer1M *float64
+	// UpstreamModel is the model name sent to this deployment's endpoint.
+	// Empty means use the canonical model name. Non-empty enables cross-model
+	// routes: the product model a customer buys can be served by a
+	// differently-named upstream model.
+	UpstreamModel string
 	// destPrivate is computed once at registry/config load time from the
 	// deployment's BaseURL host. It is true when the host is a loopback address
 	// (127.0.0.0/8, ::1), a private RFC-1918/ULA address (10/8, 172.16/12,
@@ -62,6 +73,10 @@ type Deployment struct {
 	// PIIFilter and the network-based default (destPrivate). The pointer is
 	// treated as immutable after registry load.
 	PIIFilter *bool
+	// ProviderID links this channel to an admin-configured upstream source.
+	// Used only at registry load to inherit connection defaults; not exposed
+	// to customers.
+	ProviderID string
 }
 
 // LogValue implements slog.LogValuer to prevent the upstream API key from
@@ -79,6 +94,11 @@ func (d Deployment) LogValue() slog.Value {
 type Model struct {
 	Name     string
 	Provider string // "vllm" | "openai" | "anthropic" | "azure" | "ollama" | "custom"
+	// UpstreamModel is the model name sent upstream for the currently applied
+	// deployment (see applyDeployment). Empty means Name is sent as-is. It is
+	// never set on registry entries directly — it is overlaid per-hop from the
+	// selected Deployment.
+	UpstreamModel string
 	// "completion", "image", "audio_transcription", or "tts". Defaults to "chat".
 	Type             string
 	BaseURL          string
@@ -108,6 +128,11 @@ type Model struct {
 	SellInputPer1M       *float64
 	SellOutputPer1M      *float64
 	SellCachedInputPer1M *float64
+	// BillPerToken / BillPerRequest control which sell-price modes debit wallets.
+	BillPerToken   bool
+	BillPerRequest bool
+	// SellPerRequest is the flat USD charge per API call.
+	SellPerRequest *float64
 	// FallbackModelName is the canonical name of the fallback target.
 	// Empty when no fallback is configured. Set to empty by the registry
 	// builder if the license does not include FeatureFallbackChains.

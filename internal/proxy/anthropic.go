@@ -37,6 +37,10 @@ type AnthropicAdapter struct {
 	modelName    string // stored from TransformRequest for use in TransformResponse
 	inputTokens  int    // accumulated from message_start usage
 	outputTokens int    // accumulated from message_delta usage
+	// cacheReadTokens / cacheWriteTokens are captured from message_start usage
+	// (cache_read_input_tokens / cache_creation_input_tokens).
+	cacheReadTokens  int
+	cacheWriteTokens int
 
 	// toolCallCounter is incremented each time a tool_use content_block_start
 	// is encountered. It maps the Anthropic content-block index to the
@@ -139,8 +143,10 @@ type anthropicResponse struct {
 	Content    []anthropicResponseBlock `json:"content"`
 	StopReason *string                  `json:"stop_reason"`
 	Usage      struct {
-		InputTokens  int `json:"input_tokens"`
-		OutputTokens int `json:"output_tokens"`
+		InputTokens              int `json:"input_tokens"`
+		OutputTokens             int `json:"output_tokens"`
+		CacheReadInputTokens     int `json:"cache_read_input_tokens"`
+		CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
 	} `json:"usage"`
 }
 
@@ -188,6 +194,18 @@ type openAIUsage struct {
 	PromptTokens     int `json:"prompt_tokens"`
 	CompletionTokens int `json:"completion_tokens"`
 	TotalTokens      int `json:"total_tokens"`
+	// PromptTokensDetails carries the cache-hit token count in OpenAI's
+	// standard location so downstream usage extraction is uniform.
+	PromptTokensDetails *openAIPromptTokensDetails `json:"prompt_tokens_details,omitempty"`
+	// CacheCreationInputTokens is a passthrough of Anthropic's cache-write
+	// count. Nonstandard for OpenAI clients but harmless, and required for
+	// cache-write cost accounting.
+	CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
+}
+
+// openAIPromptTokensDetails mirrors OpenAI's usage.prompt_tokens_details.
+type openAIPromptTokensDetails struct {
+	CachedTokens int `json:"cached_tokens"`
 }
 
 // openAIChunk is the shape of a single OpenAI streaming chunk.
@@ -660,6 +678,22 @@ func (a *AnthropicAdapter) TransformResponse(body []byte) ([]byte, error) {
 	if respModel == "" {
 		respModel = "claude"
 	}
+	// Anthropic reports input_tokens EXCLUDING cache reads/writes; OpenAI's
+	// prompt_tokens INCLUDES cached tokens. Normalize to the OpenAI shape so
+	// downstream usage extraction and billing treat both providers uniformly:
+	// prompt_tokens = fresh + cache_read + cache_write, with cache_read in
+	// prompt_tokens_details.cached_tokens and the write count passed through.
+	promptTokens := ar.Usage.InputTokens + ar.Usage.CacheReadInputTokens + ar.Usage.CacheCreationInputTokens
+	usage := openAIUsage{
+		PromptTokens:             promptTokens,
+		CompletionTokens:         ar.Usage.OutputTokens,
+		TotalTokens:              promptTokens + ar.Usage.OutputTokens,
+		CacheCreationInputTokens: ar.Usage.CacheCreationInputTokens,
+	}
+	if ar.Usage.CacheReadInputTokens > 0 {
+		usage.PromptTokensDetails = &openAIPromptTokensDetails{CachedTokens: ar.Usage.CacheReadInputTokens}
+	}
+
 	resp := openAIResponse{
 		ID:     fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano()),
 		Object: "chat.completion",
@@ -671,11 +705,7 @@ func (a *AnthropicAdapter) TransformResponse(body []byte) ([]byte, error) {
 				FinishReason: finishReason,
 			},
 		},
-		Usage: openAIUsage{
-			PromptTokens:     ar.Usage.InputTokens,
-			CompletionTokens: ar.Usage.OutputTokens,
-			TotalTokens:      ar.Usage.InputTokens + ar.Usage.OutputTokens,
-		},
+		Usage: usage,
 	}
 
 	out, err := jsonx.Marshal(resp)
@@ -750,7 +780,9 @@ func (a *AnthropicAdapter) TransformStreamLine(line []byte) ([][]byte, error) {
 			Message struct {
 				ID    string `json:"id"`
 				Usage struct {
-					InputTokens int `json:"input_tokens"`
+					InputTokens              int `json:"input_tokens"`
+					CacheReadInputTokens     int `json:"cache_read_input_tokens"`
+					CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
 				} `json:"usage"`
 			} `json:"message"`
 		}
@@ -759,6 +791,8 @@ func (a *AnthropicAdapter) TransformStreamLine(line []byte) ([][]byte, error) {
 				a.msgID = ms.Message.ID
 			}
 			a.inputTokens = ms.Message.Usage.InputTokens
+			a.cacheReadTokens = ms.Message.Usage.CacheReadInputTokens
+			a.cacheWriteTokens = ms.Message.Usage.CacheCreationInputTokens
 		}
 		if a.msgID == "" {
 			a.msgID = "chatcmpl-proxy"
@@ -908,11 +942,16 @@ func (a *AnthropicAdapter) TransformStreamLine(line []byte) ([][]byte, error) {
 // StreamUsage returns the token counts accumulated during the Anthropic stream.
 // inputTokens is captured from the message_start event and outputTokens from
 // the message_delta event. Both are zero until those events have been processed.
+// Prompt tokens are normalized to the OpenAI convention (inclusive of cache
+// reads and writes) to match TransformResponse.
 func (a *AnthropicAdapter) StreamUsage() UsageInfo {
+	prompt := a.inputTokens + a.cacheReadTokens + a.cacheWriteTokens
 	return UsageInfo{
-		PromptTokens:     a.inputTokens,
+		PromptTokens:     prompt,
 		CompletionTokens: a.outputTokens,
-		TotalTokens:      a.inputTokens + a.outputTokens,
+		TotalTokens:      prompt + a.outputTokens,
+		CachedTokens:     a.cacheReadTokens,
+		CacheWriteTokens: a.cacheWriteTokens,
 	}
 }
 

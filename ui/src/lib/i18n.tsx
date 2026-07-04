@@ -98,6 +98,9 @@ const translations = {
     'marketplace.activate': 'Activate',
     'marketplace.confirm_delete_provider': 'Delete this provider?',
     'sidebar.wallet': 'Wallet',
+    'sidebar.catalog': 'Catalog',
+    'sidebar.providers': 'Providers',
+    'sidebar.topups': 'Top-ups',
     'sidebar.marketplace': 'Marketplace',
     // sidebar
     'sidebar.overview': 'Overview',
@@ -303,6 +306,9 @@ const translations = {
     'marketplace.activate': 'Kích hoạt',
     'marketplace.confirm_delete_provider': 'Xoá nhà cung cấp này?',
     'sidebar.wallet': 'Ví',
+    'sidebar.catalog': 'Bảng giá',
+    'sidebar.providers': 'Nhà cung cấp',
+    'sidebar.topups': 'Nạp tiền',
     'sidebar.marketplace': 'Marketplace',
     // sidebar
     'sidebar.overview': 'Tổng quan',

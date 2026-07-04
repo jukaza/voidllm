@@ -1151,8 +1151,11 @@ func TestHandle_NoFallbackOn400(t *testing.T) {
 	}
 }
 
-// TestHandle_NoFallbackOn401 verifies 401 is not fallback-eligible.
-func TestHandle_NoFallbackOn401(t *testing.T) {
+// TestHandle_FallbackOn401 verifies that an upstream 401 is treated as OUR
+// credential failure (invalid/expired provider key), not the customer's
+// fault, and triggers a fallback to the next route/model instead of being
+// forwarded verbatim.
+func TestHandle_FallbackOn401(t *testing.T) {
 	t.Parallel()
 
 	upstreamA, _ := upstreamCapture(t, http.StatusUnauthorized,
@@ -1182,11 +1185,51 @@ func TestHandle_NoFallbackOn401(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
-	if bHit {
-		t.Error("model-b was tried but should not have been (401 is not fallback-eligible)")
+	if !bHit {
+		t.Error("model-b was never tried (401 should be fallback-eligible: it is our credential failure, not the customer's)")
+	}
+}
+
+// TestHandle_401MaskedWhenFallbackExhausted verifies that when every
+// candidate in the chain fails with 401/403, the client sees a generic 502
+// rather than the raw "unauthorized" — leaking that message would wrongly
+// suggest the customer's own API key is invalid.
+func TestHandle_401MaskedWhenFallbackExhausted(t *testing.T) {
+	t.Parallel()
+
+	upstreamA, _ := upstreamCapture(t, http.StatusUnauthorized,
+		`{"error":{"message":"unauthorized"}}`,
+		map[string]string{"Content-Type": "application/json"},
+	)
+	upstreamB, _ := upstreamCapture(t, http.StatusUnauthorized,
+		`{"error":{"message":"unauthorized"}}`,
+		map[string]string{"Content-Type": "application/json"},
+	)
+
+	reg := testRegistryWithFallback(t, upstreamA.URL, upstreamB.URL)
+	handler := NewProxyHandler(reg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	handler.FallbackMaxDepth = 1
+	app := testApp(t, handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions",
+		strings.NewReader(`{"model":"model-a","messages":[]}`))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req, testTimeout)
+	if err != nil {
+		t.Fatalf("app.Test: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadGateway {
+		t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusBadGateway)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if strings.Contains(string(body), "unauthorized") {
+		t.Errorf("response leaked upstream error detail: %s", body)
 	}
 }
 
@@ -1460,10 +1503,12 @@ func TestIsFallbackEligible(t *testing.T) {
 		{"503 eligible", 503, nil, true},
 		{"504 eligible", 504, nil, true},
 		{"599 eligible", 599, nil, true},
-		// 4xx are NOT eligible.
+		// 401/403 are OUR credential failures (bad/expired upstream key), not
+		// the customer's fault — eligible so another route can serve it.
+		{"401 eligible", 401, nil, true},
+		{"403 eligible", 403, nil, true},
+		// Other 4xx are genuine client errors and NOT eligible.
 		{"400 not eligible", 400, nil, false},
-		{"401 not eligible", 401, nil, false},
-		{"403 not eligible", 403, nil, false},
 		{"404 not eligible", 404, nil, false},
 		// 429 is 4xx — not eligible per production code.
 		{"429 not eligible", 429, nil, false},
@@ -1610,75 +1655,6 @@ func testAppWithAuth(t *testing.T, handler *ProxyHandler, keyInfo auth.KeyInfo) 
 	app.All("/v1/*", handler.Handle)
 
 	return app, rawKey
-}
-
-// TestHandle_FallbackBlockedByAccessCache verifies that when a key is denied
-// access to the fallback model (Fix C1 / VULN-001), the chain stops and the
-// primary's error is returned without calling the fallback upstream.
-func TestHandle_FallbackBlockedByAccessCache(t *testing.T) {
-	t.Parallel()
-
-	// model-a returns 502 to trigger fallback eligibility.
-	upstreamA, _ := upstreamCapture(t, http.StatusBadGateway,
-		`{"error":{"message":"bad gateway"}}`,
-		map[string]string{"Content-Type": "application/json"},
-	)
-
-	// model-b must never be called; use an atomic counter to detect any call.
-	var bCallCount atomic.Int32
-	upstreamB := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		bCallCount.Add(1)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, `{"id":"x","object":"chat.completion","choices":[]}`)
-	}))
-	t.Cleanup(upstreamB.Close)
-
-	reg := testRegistryWithFallback(t, upstreamA.URL, upstreamB.URL)
-
-	// Wire the AccessCache so model-a is allowed but model-b is denied for
-	// the test key ID.
-	accessCache := NewModelAccessCache()
-	const testKeyID = "test-key-fb-access"
-	// Allow only model-a for this key; model-b is not in the list.
-	accessCache.Load(
-		nil,
-		nil,
-		map[string][]string{
-			testKeyID: {"model-a"},
-		},
-	)
-
-	handler := NewProxyHandler(reg, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	handler.FallbackMaxDepth = 1
-	handler.AccessCache = accessCache
-
-	keyInfo := auth.KeyInfo{
-		ID:    testKeyID,
-		Role:  "member",
-	}
-	app, rawKey := testAppWithAuth(t, handler, keyInfo)
-
-	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions",
-		strings.NewReader(`{"model":"model-a","messages":[]}`))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+rawKey)
-
-	resp, err := app.Test(req, testTimeout)
-	if err != nil {
-		t.Fatalf("app.Test: %v", err)
-	}
-	defer resp.Body.Close()
-
-	// model-b must never have been called.
-	if bCallCount.Load() > 0 {
-		t.Error("SECURITY: fallback model-b was called despite key not having access — access policy bypassed")
-	}
-
-	// The response must be the error from model-a (bad gateway), not a 200 from model-b.
-	if resp.StatusCode == http.StatusOK {
-		t.Errorf("status = %d, want non-200 (primary error should be preserved)", resp.StatusCode)
-	}
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -2017,12 +1993,8 @@ func TestRegistry_ConcurrentFallbackMutations(t *testing.T) {
 // Expected execution:
 //  1. model-a is tried → upstream returns 502 (fallback-eligible)
 //  2. Access check for model-b passes → model-b is tried → upstream returns 502
-//  3. Access check for model-c fails → chain stops
-//  4. Client receives model-b's 502 (the last response that was actually
-//     forwarded; the loop breaks before draining it, so resp holds model-b's
-//     response at break time)
-//  5. model-c's upstream is never contacted
-func TestHandle_FallbackChainBlockedAtMidHop(t *testing.T) {
+//  3. model-c succeeds → client receives 200 from the third hop
+func TestHandle_FallbackChainReachesThirdHop(t *testing.T) {
 	t.Parallel()
 
 	// model-a returns 502 to trigger the first fallback hop.
@@ -2045,7 +2017,6 @@ func TestHandle_FallbackChainBlockedAtMidHop(t *testing.T) {
 	}))
 	t.Cleanup(upstreamB.Close)
 
-	// model-c must never be contacted; any call here is a security failure.
 	var cCalls atomic.Int32
 	upstreamC := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cCalls.Add(1)
@@ -2065,24 +2036,12 @@ func TestHandle_FallbackChainBlockedAtMidHop(t *testing.T) {
 		t.Fatalf("NewRegistry: %v", err)
 	}
 
-	// Allow model-a and model-b for this key; model-c is intentionally absent.
-	const testKeyID = "test-key-mid-hop"
-	accessCache := NewModelAccessCache()
-	accessCache.Load(
-		nil,
-		nil,
-		map[string][]string{
-			testKeyID: {"mid-hop-a", "mid-hop-b"},
-		},
-	)
-
 	handler := NewProxyHandler(r, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	handler.FallbackMaxDepth = 2
-	handler.AccessCache = accessCache
 
 	keyInfo := auth.KeyInfo{
-		ID:    testKeyID,
-		Role:  "member",
+		ID:   "test-key-mid-hop",
+		Role: "member",
 	}
 	app, rawKey := testAppWithAuth(t, handler, keyInfo)
 
@@ -2101,23 +2060,19 @@ func TestHandle_FallbackChainBlockedAtMidHop(t *testing.T) {
 	if got := int(aCalls.Load()); got != 1 {
 		t.Errorf("model-a call count = %d, want 1", got)
 	}
-	// model-b must have been tried exactly once (access was permitted).
+	// model-b must have been tried exactly once.
 	if got := int(bCalls.Load()); got != 1 {
 		t.Errorf("model-b call count = %d, want 1", got)
 	}
-	// model-c must never have been called — access was denied; calling it would
-	// mean the access policy was bypassed at the second hop.
-	if got := int(cCalls.Load()); got != 0 {
-		t.Errorf("SECURITY: model-c call count = %d, want 0 — access policy bypassed at second hop", got)
+	// model-c must have been tried after a and b failed.
+	if got := int(cCalls.Load()); got != 1 {
+		t.Errorf("model-c call count = %d, want 1", got)
 	}
 
-	// The client receives model-b's 502 response. The loop breaks before draining
-	// resp (that only happens when the hop commits), so resp holds model-b's
-	// response at break time and is forwarded as-is.
-	if resp.StatusCode != http.StatusBadGateway {
+	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		t.Errorf("status = %d, want %d (model-b's last error); body: %s",
-			resp.StatusCode, http.StatusBadGateway, body)
+		t.Errorf("status = %d, want %d (model-c success); body: %s",
+			resp.StatusCode, http.StatusOK, body)
 	}
 }
 

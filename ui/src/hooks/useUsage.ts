@@ -13,23 +13,27 @@ export interface UsageDataPoint {
 }
 
 export interface UsageResponse {
-  org_id: string
   from: string
   to: string
   group_by: string
   data: UsageDataPoint[]
 }
 
-export function useUsage(orgId: string, from: string, to: string, groupBy: string) {
+export function useMyUsage(from: string, to: string, groupBy: string) {
   return useQuery({
-    queryKey: ['usage', orgId, from, to, groupBy],
+    queryKey: ['usage-me', from, to, groupBy],
     queryFn: () =>
       apiClient<UsageResponse>(
-        `/orgs/${orgId}/usage?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&group_by=${groupBy}`,
+        `/usage/me?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&group_by=${groupBy}`,
       ),
-    enabled: !!orgId && !!from && !!to,
+    enabled: !!from && !!to,
     staleTime: 60_000,
   })
+}
+
+/** @deprecated Use useMyUsage — kept as alias during migration */
+export function useUsage(_orgId: string, from: string, to: string, groupBy: string) {
+  return useMyUsage(from, to, groupBy)
 }
 
 export function useCrossOrgUsage(

@@ -65,8 +65,7 @@ type Application struct {
 
 	registry    *proxy.Registry
 	keyCache    *cache.Cache[string, auth.KeyInfo]
-	accessCache *proxy.ModelAccessCache
-	aliasCache  *proxy.AliasCache
+	aliasCache *proxy.AliasCache
 
 	rateLimiter      ratelimit.Checker
 	tokenCounter     *ratelimit.TokenCounter
@@ -198,6 +197,21 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 			return fmt.Errorf("list active models: %w", loadErr)
 		}
 
+		providerByID := make(map[string]db.Provider)
+		providerKeys := make(map[string]string)
+		if provs, provErr := database.ListProviders(loadCtx, "", 500); provErr != nil {
+			return fmt.Errorf("list providers: %w", provErr)
+		} else {
+			for _, p := range provs {
+				providerByID[p.ID] = p
+				if p.APIKeyEncrypted != nil {
+					if key, decErr := crypto.DecryptString(*p.APIKeyEncrypted, encKey, []byte("provider:"+p.ID)); decErr == nil {
+						providerKeys[p.ID] = key
+					}
+				}
+			}
+		}
+
 		// Build an id→name map from the loaded models so we can resolve
 		// FallbackModelID to a name without extra DB round-trips.
 		idToName := make(map[string]string, len(dbModels))
@@ -260,30 +274,54 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 						)
 					}
 				}
+				depProvider := dep.Provider
+				depBaseURL := dep.BaseURL
+				provKey := ""
+				if dep.ProviderID != nil {
+					if p, ok := providerByID[*dep.ProviderID]; ok {
+						provKey = providerKeys[p.ID]
+						depProvider, depBaseURL, depAPIKey = db.OverlayProviderConnection(
+							depProvider, depBaseURL, depAPIKey, &p, provKey,
+						)
+					}
+				}
+				providerID := ""
+				if dep.ProviderID != nil {
+					providerID = *dep.ProviderID
+				}
 				deployments = append(deployments, proxy.Deployment{
-					ID:                dep.ID,
-					Name:              dep.Name,
-					Provider:          dep.Provider,
-					BaseURL:           dep.BaseURL,
-					APIKey:            depAPIKey,
-					AzureDeployment:   dep.AzureDeployment,
-					AzureAPIVersion:   dep.AzureAPIVersion,
-					GCPProject:        dep.GCPProject,
-					GCPLocation:       dep.GCPLocation,
-					Weight:            dep.Weight,
-					Priority:          dep.Priority,
-					RPMLimit:          dep.RPMLimit,
-					TPMLimit:          dep.TPMLimit,
-					DailyRequestLimit: dep.DailyRequestLimit,
-					CostInputPer1M:    dep.CostInputPer1M,
-					CostOutputPer1M:   dep.CostOutputPer1M,
-					PIIFilter:         dep.PIIFilter,
+					ID:                   dep.ID,
+					Name:                 dep.Name,
+					Provider:             depProvider,
+					BaseURL:              depBaseURL,
+					APIKey:               depAPIKey,
+					ProviderID:           providerID,
+					AzureDeployment:      dep.AzureDeployment,
+					AzureAPIVersion:      dep.AzureAPIVersion,
+					GCPProject:           dep.GCPProject,
+					GCPLocation:          dep.GCPLocation,
+					Weight:               dep.Weight,
+					Priority:             dep.Priority,
+					RPMLimit:             dep.RPMLimit,
+					TPMLimit:             dep.TPMLimit,
+					DailyRequestLimit:    dep.DailyRequestLimit,
+					CostInputPer1M:       dep.CostInputPer1M,
+					CostOutputPer1M:      dep.CostOutputPer1M,
+					CostCachedInputPer1M: dep.CostCachedInputPer1M,
+					CostCacheWritePer1M:  dep.CostCacheWritePer1M,
+					UpstreamModel:        dep.UpstreamModel,
+					PIIFilter:            dep.PIIFilter,
 				})
 			}
 
 			var fallbackName string
 			if m.FallbackModelID != nil {
 				fallbackName = idToName[*m.FallbackModelID]
+			}
+
+			strategy := m.Strategy
+			if strategy == "" && len(deployments) > 0 {
+				strategy = "priority"
 			}
 
 			registry.AddModel(proxy.Model{
@@ -300,7 +338,7 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 				GCPProject:           m.GCPProject,
 				GCPLocation:          m.GCPLocation,
 				Timeout:              timeout,
-				Strategy:             m.Strategy,
+				Strategy:             strategy,
 				MaxRetries:           m.MaxRetries,
 				Deployments:          deployments,
 				FallbackModelName:    fallbackName,
@@ -308,6 +346,9 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 				SellInputPer1M:       m.SellInputPer1M,
 				SellOutputPer1M:      m.SellOutputPer1M,
 				SellCachedInputPer1M: m.SellCachedInputPer1M,
+				BillPerToken:         m.BillPerToken,
+				BillPerRequest:       m.BillPerRequest,
+				SellPerRequest:       m.SellPerRequest,
 			})
 		}
 		return nil
@@ -388,14 +429,7 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 	retentionCleaner = retention.New(database, cfg.Settings.Retention, log)
 	retentionCleaner.Start()
 
-	// Step 9: load model access cache and alias cache from DB.
-	accessCache := proxy.NewModelAccessCache()
-	orgA, teamA, keyA, err := database.LoadAllModelAccess(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("load model access cache: %w", err)
-	}
-	accessCache.Load(orgA, teamA, keyA)
-
+	// Step 9: load alias cache from DB.
 	aliasCache := proxy.NewAliasCache()
 	orgAliases, teamAliases, err := database.LoadAllModelAliases(ctx)
 	if err != nil {
@@ -437,18 +471,6 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 						return
 					}
 					log.LogAttrs(context.Background(), slog.LevelDebug, "redis: model registry reloaded")
-				case voidredis.ChannelAccess:
-					// Reload full model access cache from the database.
-					orgA, teamA, keyA, loadErr := database.LoadAllModelAccess(context.Background())
-					if loadErr != nil {
-						log.LogAttrs(context.Background(), slog.LevelError,
-							"redis: reload access cache failed",
-							slog.String("error", loadErr.Error()),
-						)
-						return
-					}
-					accessCache.Load(orgA, teamA, keyA)
-					log.LogAttrs(context.Background(), slog.LevelDebug, "redis: access cache reloaded")
 				case voidredis.ChannelAliases:
 					// Reload full alias cache from the database.
 					orgAl, teamAl, loadErr := database.LoadAllModelAliases(context.Background())
@@ -541,7 +563,6 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 	modelRouter.SetUpstreamLimiter(upstreamLimiter)
 
 	proxyHandler := proxy.NewProxyHandler(registry, log)
-	proxyHandler.AccessCache = accessCache
 	proxyHandler.AliasCache = aliasCache
 	proxyHandler.CircuitBreakers = cbRegistry
 	proxyHandler.Router = modelRouter
@@ -574,8 +595,7 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 		EncryptionKey: encKey,
 		KeyCache:      keyCache,
 		Registry:      registry,
-		AccessCache:   accessCache,
-		AliasCache:    aliasCache,
+		AliasCache: aliasCache,
 		Redis:         redisClient,
 		AuditLogger:   auditLogger,
 		Log:           log,
@@ -606,8 +626,7 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 		hmacSecret:       hmacSecret,
 		registry:         registry,
 		keyCache:         keyCache,
-		accessCache:      accessCache,
-		aliasCache:       aliasCache,
+		aliasCache: aliasCache,
 		rateLimiter:      rateLimiter,
 		tokenCounter:     tokenCounter,
 		walletService:    walletService,
@@ -637,18 +656,6 @@ func (a *Application) Start() error {
 	// that the key refresh stops first on shutdown (matching startup order).
 	a.stopFuncs = append(a.stopFuncs,
 		auth.StartCacheRefresh(a.database, a.keyCache, a.cfg.Cache.KeyTTL, a.log),
-		startTicker(a.cfg.Cache.ModelTTL, func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
-			orgA, teamA, keyA, err := a.database.LoadAllModelAccess(ctx)
-			if err != nil {
-				a.log.LogAttrs(context.Background(), slog.LevelError, "access cache refresh failed",
-					slog.String("error", err.Error()),
-				)
-				return
-			}
-			a.accessCache.Load(orgA, teamA, keyA)
-		}),
 		startTicker(a.cfg.Cache.AliasTTL, func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
@@ -668,7 +675,6 @@ func (a *Application) Start() error {
 		}),
 		startTicker(30*time.Second, func() {
 			metrics.CacheSize.WithLabelValues("keys").Set(float64(a.keyCache.Len()))
-			metrics.CacheSize.WithLabelValues("access").Set(float64(a.accessCache.Len()))
 			metrics.CacheSize.WithLabelValues("aliases").Set(float64(a.aliasCache.Len()))
 		}),
 	)

@@ -14,7 +14,8 @@ const deploymentSelectColumns = "id, model_id, name, provider, base_url, api_key
 	"azure_deployment, azure_api_version, gcp_project, gcp_location, " +
 	"weight, priority, is_active, " +
 	"created_at, updated_at, deleted_at, pii_filter, " +
-	"provider_id, rpm_limit, tpm_limit, daily_request_limit, cost_input_per_1m, cost_output_per_1m"
+	"provider_id, rpm_limit, tpm_limit, daily_request_limit, cost_input_per_1m, cost_output_per_1m, " +
+	"upstream_model, cost_cached_input_per_1m, cost_cache_write_per_1m"
 
 // Deployment represents a row in the model_deployments table.
 // Each deployment is a concrete upstream endpoint associated with a model.
@@ -56,6 +57,17 @@ type Deployment struct {
 	CostInputPer1M *float64
 	// CostOutputPer1M is this channel's cost price in USD per 1M output tokens.
 	CostOutputPer1M *float64
+	// UpstreamModel is the model name sent to the upstream endpoint. Empty
+	// means use the canonical model name. Non-empty enables cross-model
+	// routes: a product model can be served by a differently-named upstream
+	// model (e.g. product 'coding-pro' -> upstream 'deepseek-chat').
+	UpstreamModel string
+	// CostCachedInputPer1M is the cost price USD/1M for cache-hit prompt
+	// tokens. Nil falls back to CostInputPer1M.
+	CostCachedInputPer1M *float64
+	// CostCacheWritePer1M is the cost price USD/1M for cache-write tokens
+	// (Anthropic-style prompt caching bills writes above the input rate).
+	CostCacheWritePer1M *float64
 }
 
 // CreateDeploymentParams holds the input for creating a deployment.
@@ -92,6 +104,12 @@ type CreateDeploymentParams struct {
 	CostInputPer1M *float64
 	// CostOutputPer1M is this channel's cost price per 1M output tokens.
 	CostOutputPer1M *float64
+	// UpstreamModel is the model name sent upstream. Empty = canonical name.
+	UpstreamModel string
+	// CostCachedInputPer1M is the cost price USD/1M for cache-hit prompt tokens.
+	CostCachedInputPer1M *float64
+	// CostCacheWritePer1M is the cost price USD/1M for cache-write tokens.
+	CostCacheWritePer1M *float64
 }
 
 // UpdateDeploymentParams holds optional fields for a partial deployment update.
@@ -130,6 +148,13 @@ type UpdateDeploymentParams struct {
 	CostInputPer1M *float64
 	// CostOutputPer1M, when non-nil, replaces the channel's output cost price.
 	CostOutputPer1M *float64
+	// UpstreamModel, when non-nil, replaces the upstream model name. Set to a
+	// pointer to the empty string to revert to the canonical name.
+	UpstreamModel *string
+	// CostCachedInputPer1M, when non-nil, replaces the cache-hit cost price.
+	CostCachedInputPer1M *float64
+	// CostCacheWritePer1M, when non-nil, replaces the cache-write cost price.
+	CostCacheWritePer1M *float64
 }
 
 // CreateDeployment inserts a new deployment and returns the persisted record.
@@ -151,12 +176,14 @@ func (d *DB) CreateDeployment(ctx context.Context, params CreateDeploymentParams
 		"azure_deployment, azure_api_version, gcp_project, gcp_location, " +
 		"weight, priority, is_active, pii_filter, " +
 		"provider_id, rpm_limit, tpm_limit, daily_request_limit, cost_input_per_1m, cost_output_per_1m, " +
+		"upstream_model, cost_cached_input_per_1m, cost_cache_write_per_1m, " +
 		"created_at, updated_at) " +
 		"VALUES (" +
 		p(1) + ", " + p(2) + ", " + p(3) + ", " + p(4) + ", " + p(5) + ", " + p(6) + ", " +
 		p(7) + ", " + p(8) + ", " + p(9) + ", " + p(10) + ", " + p(11) + ", " + p(12) + ", " +
 		"1, " + p(13) + ", " +
 		p(14) + ", " + p(15) + ", " + p(16) + ", " + p(17) + ", " + p(18) + ", " + p(19) + ", " +
+		p(20) + ", " + p(21) + ", " + p(22) + ", " +
 		"CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
 
 	selectQuery := "SELECT " + deploymentSelectColumns +
@@ -184,6 +211,9 @@ func (d *DB) CreateDeployment(ctx context.Context, params CreateDeploymentParams
 			params.DailyRequestLimit,
 			params.CostInputPer1M,
 			params.CostOutputPer1M,
+			params.UpstreamModel,
+			params.CostCachedInputPer1M,
+			params.CostCacheWritePer1M,
 		)
 		if execErr != nil {
 			return translateError(execErr)
@@ -377,6 +407,21 @@ func (d *DB) UpdateDeployment(ctx context.Context, id string, params UpdateDeplo
 		args = append(args, *params.CostOutputPer1M)
 		argN++
 	}
+	if params.UpstreamModel != nil {
+		setClauses = append(setClauses, "upstream_model = "+p(argN))
+		args = append(args, *params.UpstreamModel)
+		argN++
+	}
+	if params.CostCachedInputPer1M != nil {
+		setClauses = append(setClauses, "cost_cached_input_per_1m = "+p(argN))
+		args = append(args, *params.CostCachedInputPer1M)
+		argN++
+	}
+	if params.CostCacheWritePer1M != nil {
+		setClauses = append(setClauses, "cost_cache_write_per_1m = "+p(argN))
+		args = append(args, *params.CostCacheWritePer1M)
+		argN++
+	}
 
 	if len(setClauses) == 0 {
 		return d.GetDeployment(ctx, id)
@@ -493,6 +538,7 @@ func scanDeployment(scanner interface{ Scan(...any) error }) (*Deployment, error
 		&piiFilterInt,
 		&dep.ProviderID, &dep.RPMLimit, &dep.TPMLimit, &dep.DailyRequestLimit,
 		&dep.CostInputPer1M, &dep.CostOutputPer1M,
+		&dep.UpstreamModel, &dep.CostCachedInputPer1M, &dep.CostCacheWritePer1M,
 	)
 	if err != nil {
 		return nil, err

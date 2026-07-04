@@ -7,6 +7,11 @@ export interface ProviderItem {
   contact_info: string
   status: 'active' | 'paused'
   notes: string
+  slug?: string
+  protocol?: string
+  logo?: string
+  base_url?: string
+  has_api_key?: boolean
   created_at: string
   updated_at: string
 }
@@ -15,6 +20,24 @@ interface Paginated<T> {
   data: T[]
   has_more: boolean
   cursor: string
+}
+
+export interface ProviderPreset {
+  id: string
+  name: string
+  logo: string
+  protocol: string
+  base_url: string
+  key_hint?: string
+  docs_url?: string
+}
+
+export function useProviderPresets() {
+  return useQuery({
+    queryKey: ['provider-presets'],
+    queryFn: () => apiClient<{ data: ProviderPreset[] }>('/providers/presets'),
+    staleTime: 300_000,
+  })
 }
 
 export function useProviders(cursor = '', limit = 50) {
@@ -32,6 +55,11 @@ export interface ProviderParams {
   contact_info?: string
   status?: string
   notes?: string
+  slug?: string
+  protocol?: string
+  logo?: string
+  base_url?: string
+  api_key?: string
 }
 
 export function useCreateProvider() {
@@ -71,23 +99,35 @@ export function useDeleteProvider() {
 // Public storefront price list (no auth)
 // ---------------------------------------------------------------------------
 
-export interface PublicModelItem {
+export interface CatalogModelItem {
   name: string
   type: string
+  logo?: string
   max_context_tokens?: number
-  sell_input_per_1m: number | null
-  sell_output_per_1m: number | null
+  bill_per_token: boolean
+  bill_per_request: boolean
+  sell_input_per_1m?: number | null
+  sell_output_per_1m?: number | null
   sell_cached_input_per_1m?: number | null
+  sell_per_request?: number | null
 }
 
-export function usePublicModels() {
+/** @deprecated Use CatalogModelItem */
+export type PublicModelItem = CatalogModelItem
+
+export function usePublicCatalog() {
   return useQuery({
-    queryKey: ['public-models'],
+    queryKey: ['public-catalog'],
     queryFn: async () => {
-      const res = await fetch('/api/v1/public/models')
-      if (!res.ok) throw new Error('failed to load price list')
-      return (await res.json()) as { data: PublicModelItem[] }
+      const res = await fetch('/api/v1/public/catalog')
+      if (!res.ok) throw new Error('failed to load catalog')
+      return (await res.json()) as { data: CatalogModelItem[] }
     },
     staleTime: 60_000,
   })
+}
+
+/** @deprecated Use usePublicCatalog */
+export function usePublicModels() {
+  return usePublicCatalog()
 }

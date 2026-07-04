@@ -391,12 +391,12 @@ func TestPick_Priority(t *testing.T) {
 			wantFirst: "high",
 		},
 		{
-			name: "equal priorities preserve original order (stable sort)",
+			name: "equal priorities round-robin within group",
 			deployments: []proxy.Deployment{
 				{Name: "first", Priority: 2},
 				{Name: "second", Priority: 2},
 			},
-			wantFirst: "first",
+			wantFirst: "first", // first call starts at index 0
 		},
 		{
 			name: "already sorted",
@@ -436,6 +436,40 @@ func TestPick_Priority(t *testing.T) {
 					got[0].Name, tc.wantFirst, deploymentNames(got))
 			}
 		})
+	}
+}
+
+// TestPick_Priority_RoundRobinWithinGroup verifies that deployments sharing
+// the same priority value are rotated across successive Pick calls.
+func TestPick_Priority_RoundRobinWithinGroup(t *testing.T) {
+	t.Parallel()
+
+	r := router.NewRouter(nil, nil)
+	m := proxy.Model{
+		Name:     "model",
+		Strategy: "priority",
+		Deployments: []proxy.Deployment{
+			{Name: "a", Priority: 1},
+			{Name: "b", Priority: 1},
+			{Name: "c", Priority: 5},
+		},
+	}
+
+	firstA := r.Pick(m)[0].Name
+	secondA := r.Pick(m)[0].Name
+	if firstA == secondA {
+		t.Errorf("expected rotation within priority group, got %q twice", firstA)
+	}
+
+	// Priority 1 group should come before priority 5 on every call.
+	for range 4 {
+		got := r.Pick(m)
+		if got[0].Priority != 1 {
+			t.Fatalf("expected priority-1 group first, got %v", deploymentNames(got))
+		}
+		if got[len(got)-1].Name != "c" {
+			t.Errorf("expected backup channel last, got %v", deploymentNames(got))
+		}
 	}
 }
 

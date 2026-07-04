@@ -10,13 +10,11 @@ import { DonutChart } from '../components/ui/charts/DonutChart'
 import { HorizontalBar } from '../components/ui/charts/HorizontalBar'
 import { MiniTable } from '../components/ui/charts/MiniTable'
 import type { MiniTableColumn } from '../components/ui/charts/MiniTable'
-import { useMe } from '../hooks/useMe'
 import { useDashboardStats } from '../hooks/useDashboardStats'
 import type { BudgetWarning } from '../hooks/useDashboardStats'
 import { useTopModels } from '../hooks/useTopModels'
-import type { UsageDataPoint } from '../hooks/useTopModels'
-import { useUsage } from '../hooks/useUsage'
-import { useOrg } from '../hooks/useOrg'
+import type { UsageDataPoint } from '../hooks/useUsage'
+import { useMyUsage } from '../hooks/useUsage'
 import { useModelHealth } from '../hooks/useModelHealth'
 import type { ModelHealthInfo } from '../hooks/useModelHealth'
 import { useUpdateCheck } from '../hooks/useUpdateCheck'
@@ -53,46 +51,6 @@ function BudgetWarningBanners({ warnings }: { warnings: BudgetWarning[] }) {
           title={`${w.window === 'daily' ? 'Daily' : 'Monthly'} token budget: ${formatNumber(w.usage)} / ${formatNumber(w.limit)} (${Math.round(w.percent_used * 100)}% used)`}
         />
       ))}
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// ProgressBar (token budget)
-// ---------------------------------------------------------------------------
-
-function ProgressBar({ label, used, limit }: { label: string; used: number; limit: number }) {
-  const pct = limit > 0 ? Math.min((used / limit) * 100, 100) : 0
-  const color = pct > 90 ? 'bg-error' : pct > 70 ? 'bg-warning' : 'bg-accent'
-  return (
-    <div>
-      <div className="flex justify-between text-sm mb-1">
-        <span className="text-text-secondary">{label}</span>
-        <span className="text-text-tertiary tabular-nums">
-          {formatNumber(used)} / {formatNumber(limit)}
-        </span>
-      </div>
-      <div className="h-2 bg-bg-tertiary rounded-full overflow-hidden">
-        <div className={`h-full rounded-full transition-all duration-300 ${color}`} style={{ width: `${pct}%` }} />
-      </div>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// BudgetSection
-// ---------------------------------------------------------------------------
-
-function BudgetSection({ orgId, tokens24h }: { orgId: string; tokens24h: number }) {
-  const { data: org } = useOrg(orgId)
-  const { t } = useTranslation()
-  if (!org || org.daily_token_limit <= 0) return null
-  return (
-    <div className="bg-bg-secondary rounded-xl border border-border p-6">
-      <h2 className="text-lg font-semibold text-text-primary mb-6">{t('keys.table.limits')}</h2>
-      <div className="space-y-4">
-        <ProgressBar label="Ngân sách Token hàng ngày" used={tokens24h} limit={org.daily_token_limit} />
-      </div>
     </div>
   )
 }
@@ -288,7 +246,6 @@ function IconXCircle() {
 // ---------------------------------------------------------------------------
 
 export default function DashboardPage() {
-  const { data: me } = useMe()
   const { data: stats, isLoading: statsLoading } = useDashboardStats()
   const { data: updateInfo } = useUpdateCheck()
   const { t } = useTranslation()
@@ -309,43 +266,21 @@ export default function DashboardPage() {
     setShowUpdateDialog(false)
   }
 
-  const canViewOrgUsage = me?.role === 'system_admin' || me?.role === 'org_admin'
-  const orgId = me?.org_id ?? ''
-
-  const { data: topModels, isLoading: modelsLoading } = useTopModels(
-    orgId,
-    canViewOrgUsage,
-  )
+  const { data: topModels, isLoading: modelsLoading } = useTopModels(true)
   const { data: modelHealth } = useModelHealth()
 
   // Performance rows combining usage data with health check latency
   const perfRows = useMemo(
-    () => buildPerfRows(topModels?.data ?? [], modelHealth?.models ?? []),
-    [topModels?.data, modelHealth?.models],
+    () => buildPerfRows(topModels ?? [], modelHealth?.models ?? []),
+    [topModels, modelHealth?.models],
   )
 
   // Time-series data for the area chart
   const { from, to } = useMemo(() => getTimeRange(timeRange), [timeRange])
-  const { from: from24h } = useMemo(() => getTimeRange('24h'), [])
 
-  const { data: usageSeries, isLoading: seriesLoading } = useUsage(
-    orgId,
-    from,
-    to,
-    'day',
-  )
+  const { data: usageSeries, isLoading: seriesLoading } = useMyUsage(from, to, 'day')
 
-  // Team usage (admin only)
-  const { data: teamUsage, isLoading: teamUsageLoading } = useUsage(
-    orgId,
-    from24h,
-    to,
-    'team',
-  )
-
-  const scope = stats?.scope ?? 'user'
-  const description = scope === 'org' ? t('dashboard.overview_desc') : t('dashboard.overview_desc')
-  const isOrgScope = scope === 'org'
+  const description = t('dashboard.overview_desc')
 
   // Build area chart data from usage series
   const areaData = useMemo(() => {
@@ -358,8 +293,8 @@ export default function DashboardPage() {
 
   // Build horizontal bar data for top models
   const topModelsBars = useMemo(() => {
-    if (!topModels?.data) return []
-    return topModels.data.slice(0, 6).map((m) => ({
+    if (!topModels) return []
+    return topModels.slice(0, 6).map((m) => ({
       label: m.group_key,
       value: m.total_tokens,
       detail: `${formatTokens(m.total_tokens)} Tokens`,
@@ -368,25 +303,15 @@ export default function DashboardPage() {
 
   // Build donut segments from prompt/completion token split
   const donutSegments = useMemo(() => {
-    if (!topModels?.data || topModels.data.length === 0) return []
-    const totalPrompt = topModels.data.reduce((acc, m) => acc + m.prompt_tokens, 0)
-    const totalCompletion = topModels.data.reduce((acc, m) => acc + m.completion_tokens, 0)
+    if (!topModels || topModels.length === 0) return []
+    const totalPrompt = topModels.reduce((acc, m) => acc + m.prompt_tokens, 0)
+    const totalCompletion = topModels.reduce((acc, m) => acc + m.completion_tokens, 0)
     if (totalPrompt + totalCompletion === 0) return []
     return [
       { label: 'Prompt', value: totalPrompt, color: '#8b5cf6' },
       { label: 'Completion', value: totalCompletion, color: '#25252d' },
     ]
   }, [topModels])
-
-  // Build team usage bars (admin only)
-  const teamBars = useMemo(() => {
-    if (!teamUsage?.data) return []
-    return teamUsage.data.slice(0, 6).map((t) => ({
-      label: t.group_key,
-      value: t.total_requests,
-      detail: `${formatNumber(t.total_requests)} Req`,
-    }))
-  }, [teamUsage])
 
   const skeletonValue = '...'
 
@@ -472,14 +397,8 @@ export default function DashboardPage() {
             </div>
           )}
 
-        {/* Token budget section */}
-        {me?.org_id != null && !statsLoading && (
-          <BudgetSection orgId={me.org_id} tokens24h={stats?.tokens_24h ?? 0} />
-        )}
-
         {/* Requests over time */}
-        {orgId !== '' && (
-          <div className="bg-bg-secondary rounded-xl border border-border p-6">
+        <div className="bg-bg-secondary rounded-xl border border-border p-6">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-semibold text-text-primary">{t('dashboard.throughput')}</h2>
               <TimeRangePills value={timeRange} onChange={setTimeRange} />
@@ -506,11 +425,9 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
-        )}
 
-        {/* Top models + token distribution (admin only) */}
-        {canViewOrgUsage && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Top models + token distribution */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Top Models */}
             <div className="bg-bg-secondary rounded-xl border border-border p-6">
               <h2 className="text-lg font-semibold text-text-primary mb-6">Mô hình hàng đầu</h2>
@@ -554,50 +471,25 @@ export default function DashboardPage() {
               )}
             </div>
           </div>
-        )}
 
-        {/* Team usage + model performance (admin only) */}
-        {canViewOrgUsage && isOrgScope && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Usage by Team */}
-            <div className="bg-bg-secondary rounded-xl border border-border p-6">
-              <h2 className="text-lg font-semibold text-text-primary mb-6">Sử dụng theo Nhóm</h2>
-              {teamUsageLoading ? (
-                <div className="space-y-5">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="space-y-1.5">
-                      <div className="h-3 w-24 bg-bg-tertiary rounded animate-pulse" />
-                      <div className="h-2.5 bg-bg-tertiary rounded-full animate-pulse" />
-                    </div>
-                  ))}
-                </div>
-              ) : teamBars.length > 0 ? (
-                <HorizontalBar items={teamBars} color="#6366f1" />
-              ) : (
-                <p className="text-sm text-text-tertiary">Không có dữ liệu sử dụng nhóm trong 24 giờ qua</p>
-              )}
+        {/* Model performance */}
+        <div className="bg-bg-secondary rounded-xl border border-border p-6">
+          <h2 className="text-lg font-semibold text-text-primary mb-6">Hiệu năng Mô hình</h2>
+          {modelsLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-8 bg-bg-tertiary rounded animate-pulse" />
+              ))}
             </div>
-
-            {/* Model Performance */}
-            <div className="bg-bg-secondary rounded-xl border border-border p-6">
-              <h2 className="text-lg font-semibold text-text-primary mb-6">Hiệu năng Mô hình</h2>
-              {modelsLoading ? (
-                <div className="space-y-3">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="h-8 bg-bg-tertiary rounded animate-pulse" />
-                  ))}
-                </div>
-              ) : perfRows.length > 0 ? (
-                <MiniTable<PerfRow>
-                  columns={performanceColumns}
-                  data={perfRows}
-                />
-              ) : (
-                <p className="text-sm text-text-tertiary">Không có dữ liệu hiệu năng</p>
-              )}
-            </div>
-          </div>
-        )}
+          ) : perfRows.length > 0 ? (
+            <MiniTable<PerfRow>
+              columns={performanceColumns}
+              data={perfRows}
+            />
+          ) : (
+            <p className="text-sm text-text-tertiary">Không có dữ liệu hiệu năng</p>
+          )}
+        </div>
       </div>
 
       {/* Update detail dialog */}

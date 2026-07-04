@@ -19,6 +19,7 @@ func RegisterRoutes(app *fiber.App, handler *Handler, keyCache *cache.Cache[stri
 	app.Post("/api/v1/auth/login", handler.Login)
 	app.Post("/api/v1/auth/register", handler.Register)
 	app.Get("/api/v1/auth/providers", handler.AuthProviders)
+	app.Get("/api/v1/public/catalog", handler.PublicCatalog)
 	app.Get("/api/v1/public/models", handler.PublicModels)
 
 	var apiMiddlewares []any
@@ -82,10 +83,6 @@ func RegisterRoutes(app *fiber.App, handler *Handler, keyCache *cache.Cache[stri
 	api.Patch("/models/:model_id/deployments/:deployment_id", auth.RequireRole(auth.RoleSystemAdmin), handler.updateDeployment)
 	api.Delete("/models/:model_id/deployments/:deployment_id", auth.RequireRole(auth.RoleSystemAdmin), handler.deleteDeployment)
 
-	// Model Access Control
-	api.Get("/keys/:key_id/model-access", auth.RequireRole(auth.RoleMember), handler.GetKeyModelAccess)
-	api.Put("/keys/:key_id/model-access", auth.RequireRole(auth.RoleMember), handler.SetKeyModelAccess)
-
 	// Model Aliases
 	api.Post("/model-aliases", auth.RequireRole(auth.RoleMember), handler.CreateOrgAlias)
 	api.Get("/model-aliases", auth.RequireRole(auth.RoleMember), handler.ListOrgAliases)
@@ -95,6 +92,11 @@ func RegisterRoutes(app *fiber.App, handler *Handler, keyCache *cache.Cache[stri
 	api.Get("/usage", auth.RequireRole(auth.RoleSystemAdmin), handler.SystemAdminUsage)
 
 	// Providers (upstream partners) — system_admin only.
+	// Static sub-paths (presets, discover-models, import) are registered before
+	// /:provider_id so Fiber does not treat them as provider_id parameter values.
+	api.Get("/providers/presets", auth.RequireRole(auth.RoleSystemAdmin), handler.ListProviderPresets)
+	api.Post("/providers/discover-models", auth.RequireRole(auth.RoleSystemAdmin), handler.DiscoverProviderModels)
+	api.Post("/providers/import", auth.RequireRole(auth.RoleSystemAdmin), handler.ImportProvider)
 	api.Post("/providers", auth.RequireRole(auth.RoleSystemAdmin), handler.CreateProvider)
 	api.Get("/providers", auth.RequireRole(auth.RoleSystemAdmin), handler.ListProviders)
 	api.Get("/providers/:provider_id", auth.RequireRole(auth.RoleSystemAdmin), handler.GetProvider)

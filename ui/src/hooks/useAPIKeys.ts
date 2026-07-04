@@ -7,10 +7,7 @@ export interface APIKeyResponse {
   key_hint: string
   key_type: string
   name: string
-  org_id: string
-  team_id: string | null
   user_id: string | null
-  service_account_id: string | null
   daily_token_limit: number
   monthly_token_limit: number
   requests_per_minute: number
@@ -30,10 +27,8 @@ export interface PaginatedKeys {
 
 export interface CreateAPIKeyParams {
   name: string
-  key_type: string
-  team_id?: string
+  key_type?: string
   user_id?: string
-  service_account_id?: string
   expires_at?: string
   daily_token_limit?: number
   monthly_token_limit?: number
@@ -41,60 +36,59 @@ export interface CreateAPIKeyParams {
   requests_per_day?: number
 }
 
-export function useAPIKeys(orgId: string, cursor?: string) {
+export function useAPIKeys(cursor?: string) {
   const params = new URLSearchParams({ limit: '20' })
   if (cursor) params.set('cursor', cursor)
   return useQuery({
-    queryKey: ['api-keys', orgId, cursor],
-    queryFn: () => apiClient<PaginatedKeys>(`/orgs/${orgId}/keys?${params}`),
-    enabled: !!orgId,
+    queryKey: ['api-keys', cursor],
+    queryFn: () => apiClient<PaginatedKeys>(`/keys?${params}`),
   })
 }
 
-export function useCreateAPIKey(orgId: string) {
+export function useCreateAPIKey() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (params: CreateAPIKeyParams) =>
-      apiClient<APIKeyResponse>(`/orgs/${orgId}/keys`, {
+      apiClient<APIKeyResponse>('/keys', {
         method: 'POST',
-        body: JSON.stringify(params),
+        body: JSON.stringify({ ...params, key_type: params.key_type ?? 'user_key' }),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['api-keys', orgId] })
+      queryClient.invalidateQueries({ queryKey: ['api-keys'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
     },
   })
 }
 
-export function useDeleteAPIKey(orgId: string) {
+export function useDeleteAPIKey() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (keyId: string) =>
-      apiClient<void>(`/orgs/${orgId}/keys/${keyId}`, { method: 'DELETE' }),
+      apiClient<void>(`/keys/${keyId}`, { method: 'DELETE' }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['api-keys', orgId] })
+      queryClient.invalidateQueries({ queryKey: ['api-keys'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
     },
   })
 }
 
-export function useUpdateAPIKey(orgId: string) {
+export function useUpdateAPIKey() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: ({ keyId, params }: { keyId: string; params: Record<string, unknown> }) =>
-      apiClient<APIKeyResponse>(`/orgs/${orgId}/keys/${keyId}`, {
+      apiClient<APIKeyResponse>(`/keys/${keyId}`, {
         method: 'PATCH',
         body: JSON.stringify(params),
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['api-keys', orgId] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['api-keys'] }),
   })
 }
 
-export function useRotateAPIKey(orgId: string) {
+export function useRotateAPIKey() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (keyId: string) =>
-      apiClient<APIKeyResponse>(`/orgs/${orgId}/keys/${keyId}/rotate`, { method: 'POST' }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['api-keys', orgId] }),
+      apiClient<APIKeyResponse>(`/keys/${keyId}/rotate`, { method: 'POST' }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['api-keys'] }),
   })
 }

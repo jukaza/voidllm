@@ -7,6 +7,7 @@ package router
 import (
 	"math/rand/v2"
 	"sort"
+	"strconv"
 	"sync"
 	"sync/atomic"
 
@@ -91,7 +92,7 @@ func (r *Router) Pick(model proxy.Model) []proxy.Deployment {
 	case "weighted":
 		ordered = r.weighted(candidates)
 	case "priority":
-		ordered = r.priority(candidates)
+		ordered = r.priority(model.Name, candidates)
 	default: // "round-robin" or ""
 		ordered = r.roundRobin(model.Name, candidates)
 	}
@@ -231,16 +232,36 @@ func (r *Router) weighted(candidates []proxy.Deployment) []proxy.Deployment {
 	return append(result, rest...)
 }
 
-// priority sorts candidates by Priority ascending so the lowest numeric value
-// (highest priority) is tried first. A stable sort preserves the original
-// ordering among deployments with equal priority values.
-func (r *Router) priority(candidates []proxy.Deployment) []proxy.Deployment {
-	ordered := make([]proxy.Deployment, len(candidates))
-	copy(ordered, candidates)
-	sort.SliceStable(ordered, func(i, j int) bool {
-		return ordered[i].Priority < ordered[j].Priority
-	})
-	return ordered
+// priority sorts candidates by Priority ascending (lower number = tried first).
+// Deployments sharing the same priority are round-robin rotated within their
+// group so equal-priority channels share load instead of sticking to stable
+// insertion order.
+func (r *Router) priority(modelName string, candidates []proxy.Deployment) []proxy.Deployment {
+	if len(candidates) <= 1 {
+		return candidates
+	}
+
+	groups := make(map[int][]proxy.Deployment)
+	var priorities []int
+	for _, d := range candidates {
+		if _, seen := groups[d.Priority]; !seen {
+			priorities = append(priorities, d.Priority)
+		}
+		groups[d.Priority] = append(groups[d.Priority], d)
+	}
+	sort.Ints(priorities)
+
+	result := make([]proxy.Deployment, 0, len(candidates))
+	for _, p := range priorities {
+		group := groups[p]
+		if len(group) == 1 {
+			result = append(result, group[0])
+			continue
+		}
+		key := modelName + "#p" + strconv.Itoa(p)
+		result = append(result, r.roundRobin(key, group)...)
+	}
+	return result
 }
 
 // getCounter returns the atomic counter for modelName, creating it on first use.

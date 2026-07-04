@@ -2,7 +2,6 @@ package proxy
 
 import (
 	"github.com/gofiber/fiber/v3"
-	"github.com/voidmind-io/voidllm/internal/auth"
 )
 
 // modelEntry is the OpenAI-compatible representation of a single model as
@@ -22,31 +21,14 @@ type modelsResponse struct {
 	Data   []modelEntry `json:"data"`
 }
 
-// ModelsHandler handles GET /v1/models and returns the models the caller is
-// permitted to access in an OpenAI-compatible list format.
-// Sensitive fields (APIKey, BaseURL) are never included in the response.
-// When AccessCache is set, each model is filtered through the in-memory
-// org/team/key access control allowlists. Models that fail the access check
-// are excluded (fail-closed).
+// ModelsHandler handles GET /v1/models and returns all active models in the
+// registry in an OpenAI-compatible list format. Sensitive fields (APIKey,
+// BaseURL) are never included in the response.
 func (p *ProxyHandler) ModelsHandler(c fiber.Ctx) error {
 	allModels := p.Registry.ListInfo()
-	keyInfo := auth.KeyInfoFromCtx(c)
 
-	var accessible []ModelInfo
-	if p.AccessCache == nil || keyInfo == nil {
-		// No access-control available: return everything.
-		accessible = allModels
-	} else {
-		accessible = make([]ModelInfo, 0, len(allModels))
-		for _, m := range allModels {
-			if p.AccessCache.Check("", "", keyInfo.ID, m.Name) {
-				accessible = append(accessible, m)
-			}
-		}
-	}
-
-	data := make([]modelEntry, len(accessible))
-	for i, m := range accessible {
+	data := make([]modelEntry, len(allModels))
+	for i, m := range allModels {
 		data[i] = modelEntry{
 			ID:      m.Name,
 			Object:  "model",

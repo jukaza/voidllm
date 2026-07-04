@@ -10,7 +10,7 @@ import { Select } from '../components/ui/Select'
 import type { SelectOption } from '../components/ui/Select'
 import { Toggle } from '../components/ui/Toggle'
 import { StatCard } from '../components/ui/StatCard'
-import TabSwitcher from '../components/ui/TabSwitcher'
+
 import {
   useModels,
   useCreateModel,
@@ -27,8 +27,9 @@ import type { ModelHealthInfo } from '../hooks/useModelHealth'
 import { useToast } from '../hooks/useToast'
 import { providerBadgeVariant, isKnownProvider } from '../lib/providers'
 import type { ProviderKey } from '../lib/providers'
-import apiClient from '../api/client'
 import { cn } from '../lib/utils'
+import { useProviders } from '../hooks/useProviders'
+import { BrandIcon } from '../components/ui/BrandIcon'
 
 // ---------------------------------------------------------------------------
 // Module-level constants
@@ -60,13 +61,6 @@ const MODEL_TYPE_OPTIONS = [
   { value: 'image', label: 'Image Generation' },
   { value: 'audio_transcription', label: 'Audio Transcription' },
   { value: 'tts', label: 'Text to Speech' },
-]
-
-const STRATEGY_OPTIONS = [
-  { value: 'round-robin', label: 'Round Robin' },
-  { value: 'least-latency', label: 'Least Latency' },
-  { value: 'weighted', label: 'Weighted' },
-  { value: 'priority', label: 'Priority' },
 ]
 
 // Tri-state: 'default' maps to undefined (omit from request), 'true' / 'false' map to boolean.
@@ -450,9 +444,11 @@ interface FormErrors {
 
 interface DeploymentFormEntry {
   name: string
+  providerId: string
   provider: string
   baseUrl: string
   apiKey: string
+  upstreamModel: string
   azureDeployment: string
   azureApiVersion: string
   weight: number
@@ -461,9 +457,11 @@ interface DeploymentFormEntry {
 
 const emptyDeploymentEntry = (): DeploymentFormEntry => ({
   name: '',
-  provider: 'openai',
+  providerId: '',
+  provider: '',
   baseUrl: '',
   apiKey: '',
+  upstreamModel: '',
   azureDeployment: '',
   azureApiVersion: '',
   weight: 1,
@@ -477,29 +475,23 @@ interface InlineDeploymentFormErrors {
 }
 
 function CreateModelDialog({ open, onClose }: CreateModelDialogProps) {
-  const [mode, setMode] = useState<'single' | 'loadbalanced'>('single')
-
-  // Single-endpoint fields
   const [name, setName] = useState('')
   const [type, setType] = useState('chat')
-  const [provider, setProvider] = useState('openai')
-  const [baseUrl, setBaseUrl] = useState('')
-  const [apiKey, setApiKey] = useState('')
   const [aliases, setAliases] = useState('')
   const [maxContextTokens, setMaxContextTokens] = useState('')
   const [inputPricePer1m, setInputPricePer1m] = useState('')
   const [outputPricePer1m, setOutputPricePer1m] = useState('')
-  const [azureDeployment, setAzureDeployment] = useState('')
-  const [azureApiVersion, setAzureApiVersion] = useState('')
   const [timeout, setTimeout] = useState('')
   const [piiFilter, setPiiFilter] = useState('default')
-  const [isPublic, setIsPublic] = useState(false)
+  const [billPerToken, setBillPerToken] = useState(true)
+  const [billPerRequest, setBillPerRequest] = useState(false)
   const [sellInputPer1m, setSellInputPer1m] = useState('')
   const [sellOutputPer1m, setSellOutputPer1m] = useState('')
   const [sellCachedInputPer1m, setSellCachedInputPer1m] = useState('')
+  const [sellPerRequest, setSellPerRequest] = useState('')
 
-  // Load-balanced fields
-  const [strategy, setStrategy] = useState('round-robin')
+  // Channel routing uses priority + round-robin within same priority.
+  const strategy = 'priority'
   const [maxRetries, setMaxRetries] = useState('')
   const [fallbackModelName, setFallbackModelName] = useState('')
   const [deployments, setDeployments] = useState<DeploymentFormEntry[]>([])
@@ -509,29 +501,32 @@ function CreateModelDialog({ open, onClose }: CreateModelDialogProps) {
   const [depFormErrors, setDepFormErrors] = useState<InlineDeploymentFormErrors>({})
 
   const [errors, setErrors] = useState<FormErrors>({})
-  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
-  const [testing, setTesting] = useState(false)
 
   const createModel = useCreateModel()
   const createDeployment = useCreateDeployment()
   const { toast } = useToast()
   const { data: modelsData } = useModels()
+  const { data: providersData } = useProviders()
+
+  const providerOptions: SelectOption[] = useMemo(() => {
+    const items = providersData?.data ?? []
+    return [
+      { value: '', label: '— Select provider source —' },
+      ...items.map((p) => ({
+        value: p.id,
+        label: p.slug ? `${p.name} (${p.slug})` : p.name,
+      })),
+    ]
+  }, [providersData])
 
   function handleClose() {
-    setMode('single')
     setName('')
     setType('chat')
-    setProvider('openai')
-    setBaseUrl('')
-    setApiKey('')
     setAliases('')
     setMaxContextTokens('')
     setInputPricePer1m('')
     setOutputPricePer1m('')
-    setAzureDeployment('')
-    setAzureApiVersion('')
     setTimeout('')
-    setStrategy('round-robin')
     setMaxRetries('')
     setFallbackModelName('')
     setPiiFilter('default')
@@ -541,41 +536,15 @@ function CreateModelDialog({ open, onClose }: CreateModelDialogProps) {
     setDepFormEntry(emptyDeploymentEntry())
     setDepFormErrors({})
     setErrors({})
-    setTestResult(null)
     onClose()
-  }
-
-  function handleProviderChange(value: string) {
-    setProvider(value)
-    setBaseUrl('')
-    setTestResult(null)
-  }
-
-  async function handleTestConnection() {
-    setTesting(true)
-    setTestResult(null)
-    try {
-      const res = await apiClient<{ success: boolean; message: string }>('/models/test-connection', {
-        method: 'POST',
-        body: JSON.stringify({
-          provider,
-          base_url: baseUrl.trim(),
-          api_key: apiKey.trim(),
-        }),
-      })
-      setTestResult(res)
-    } catch (err) {
-      setTestResult({ success: false, message: err instanceof Error ? err.message : 'Test failed' })
-    } finally {
-      setTesting(false)
-    }
   }
 
   function validateDepForm(): boolean {
     const next: InlineDeploymentFormErrors = {}
     if (!depFormEntry.name.trim()) next.name = 'Name is required'
-    if (!depFormEntry.provider) next.provider = 'Provider is required'
-    if (!depFormEntry.baseUrl.trim()) next.base_url = 'Base URL is required'
+    if (!depFormEntry.providerId && !depFormEntry.provider) {
+      next.provider = 'Select a provider source or set protocol'
+    }
     setDepFormErrors(next)
     return Object.keys(next).length === 0
   }
@@ -632,12 +601,7 @@ function CreateModelDialog({ open, onClose }: CreateModelDialogProps) {
       next.name = 'Name is required'
     }
 
-    if (mode === 'single') {
-      if (!provider) next.provider = 'Provider is required'
-      if (!baseUrl.trim()) next.base_url = 'Base URL is required'
-    } else {
-      if (deployments.length === 0) next.deployments = 'At least one deployment is required'
-    }
+    if (deployments.length === 0) next.deployments = 'At least one channel is required'
 
     setErrors(next)
     return Object.keys(next).length === 0
@@ -649,132 +613,81 @@ function CreateModelDialog({ open, onClose }: CreateModelDialogProps) {
 
     const parsedAliases = aliases.split(',').map((a) => a.trim()).filter(Boolean)
 
-    if (mode === 'single') {
-      const params: CreateModelParams = {
-        name: name.trim(),
-        type,
-        provider,
-        base_url: baseUrl.trim(),
-      }
+    const params: CreateModelParams = {
+      name: name.trim(),
+      type,
+      strategy,
+      bill_per_token: billPerToken,
+      bill_per_request: billPerRequest,
+    }
 
-      if (apiKey.trim()) params.api_key = apiKey.trim()
-      if (maxContextTokens.trim()) {
-        const parsed = parseInt(maxContextTokens, 10)
-        if (!isNaN(parsed)) params.max_context_tokens = parsed
-      }
-      if (inputPricePer1m.trim()) {
-        const parsed = parseFloat(inputPricePer1m)
-        if (!isNaN(parsed)) params.input_price_per_1m = parsed
-      }
-      if (outputPricePer1m.trim()) {
-        const parsed = parseFloat(outputPricePer1m)
-        if (!isNaN(parsed)) params.output_price_per_1m = parsed
-      }
-      if (provider === 'azure') {
-        if (azureDeployment.trim()) params.azure_deployment = azureDeployment.trim()
-        if (azureApiVersion.trim()) params.azure_api_version = azureApiVersion.trim()
-      }
-      if (timeout.trim()) params.timeout = timeout.trim()
-      if (parsedAliases.length > 0) params.aliases = parsedAliases
-      const piiFilterValue = piiFilterToParam(piiFilter)
-      if (piiFilterValue !== undefined) params.pii_filter = piiFilterValue
-      params.is_public = isPublic
-      if (sellInputPer1m.trim()) {
-        const parsed = parseFloat(sellInputPer1m)
-        if (!isNaN(parsed)) params.sell_input_per_1m = parsed
-      }
-      if (sellOutputPer1m.trim()) {
-        const parsed = parseFloat(sellOutputPer1m)
-        if (!isNaN(parsed)) params.sell_output_per_1m = parsed
-      }
-      if (sellCachedInputPer1m.trim()) {
-        const parsed = parseFloat(sellCachedInputPer1m)
-        if (!isNaN(parsed)) params.sell_cached_input_per_1m = parsed
-      }
+    if (maxRetries.trim()) {
+      const parsed = parseInt(maxRetries, 10)
+      if (!isNaN(parsed)) params.max_retries = parsed
+    }
+    if (fallbackModelName) params.fallback_model_name = fallbackModelName
+    if (maxContextTokens.trim()) {
+      const parsed = parseInt(maxContextTokens, 10)
+      if (!isNaN(parsed)) params.max_context_tokens = parsed
+    }
+    if (inputPricePer1m.trim()) {
+      const parsed = parseFloat(inputPricePer1m)
+      if (!isNaN(parsed)) params.input_price_per_1m = parsed
+    }
+    if (outputPricePer1m.trim()) {
+      const parsed = parseFloat(outputPricePer1m)
+      if (!isNaN(parsed)) params.output_price_per_1m = parsed
+    }
+    if (timeout.trim()) params.timeout = timeout.trim()
+    if (parsedAliases.length > 0) params.aliases = parsedAliases
+    const piiFilterValueLB = piiFilterToParam(piiFilter)
+    if (piiFilterValueLB !== undefined) params.pii_filter = piiFilterValueLB
+    if (sellInputPer1m.trim()) {
+      const parsedSell = parseFloat(sellInputPer1m)
+      if (!isNaN(parsedSell)) params.sell_input_per_1m = parsedSell
+    }
+    if (sellOutputPer1m.trim()) {
+      const parsedSell = parseFloat(sellOutputPer1m)
+      if (!isNaN(parsedSell)) params.sell_output_per_1m = parsedSell
+    }
+    if (sellCachedInputPer1m.trim()) {
+      const parsedSell = parseFloat(sellCachedInputPer1m)
+      if (!isNaN(parsedSell)) params.sell_cached_input_per_1m = parsedSell
+    }
+    if (sellPerRequest.trim()) {
+      const parsedSell = parseFloat(sellPerRequest)
+      if (!isNaN(parsedSell)) params.sell_per_request = parsedSell
+    }
 
-      createModel.mutate(params, {
-        onSuccess: () => {
-          toast({ variant: 'success', message: 'Model added' })
-          handleClose()
-        },
-        onError: (err) => {
-          toast({
-            variant: 'error',
-            message: err instanceof Error ? err.message : 'Failed to add model',
-          })
-        },
-      })
-    } else {
-      const params: CreateModelParams = {
-        name: name.trim(),
-        type,
-        strategy,
-      }
-
-      if (maxRetries.trim()) {
-        const parsed = parseInt(maxRetries, 10)
-        if (!isNaN(parsed)) params.max_retries = parsed
-      }
-      if (fallbackModelName) params.fallback_model_name = fallbackModelName
-      if (maxContextTokens.trim()) {
-        const parsed = parseInt(maxContextTokens, 10)
-        if (!isNaN(parsed)) params.max_context_tokens = parsed
-      }
-      if (inputPricePer1m.trim()) {
-        const parsed = parseFloat(inputPricePer1m)
-        if (!isNaN(parsed)) params.input_price_per_1m = parsed
-      }
-      if (outputPricePer1m.trim()) {
-        const parsed = parseFloat(outputPricePer1m)
-        if (!isNaN(parsed)) params.output_price_per_1m = parsed
-      }
-      if (timeout.trim()) params.timeout = timeout.trim()
-      if (parsedAliases.length > 0) params.aliases = parsedAliases
-      const piiFilterValueLB = piiFilterToParam(piiFilter)
-      if (piiFilterValueLB !== undefined) params.pii_filter = piiFilterValueLB
-      params.is_public = isPublic
-      if (sellInputPer1m.trim()) {
-        const parsedSell = parseFloat(sellInputPer1m)
-        if (!isNaN(parsedSell)) params.sell_input_per_1m = parsedSell
-      }
-      if (sellOutputPer1m.trim()) {
-        const parsedSell = parseFloat(sellOutputPer1m)
-        if (!isNaN(parsedSell)) params.sell_output_per_1m = parsedSell
-      }
-      if (sellCachedInputPer1m.trim()) {
-        const parsedSell = parseFloat(sellCachedInputPer1m)
-        if (!isNaN(parsedSell)) params.sell_cached_input_per_1m = parsedSell
-      }
-
-      try {
-        const model = await createModel.mutateAsync(params)
-        for (const dep of deployments) {
-          await createDeployment.mutateAsync({
-            modelId: model.id,
-            params: {
-              name: dep.name,
-              provider: dep.provider,
-              base_url: dep.baseUrl,
-              api_key: dep.apiKey || undefined,
-              azure_deployment: dep.azureDeployment || undefined,
-              azure_api_version: dep.azureApiVersion || undefined,
-              weight: dep.weight,
-              priority: dep.priority,
-            },
-          })
-        }
-        toast({ variant: 'success', message: 'Model added' })
-        handleClose()
-      } catch (err) {
-        toast({
-          variant: 'error',
-          message: err instanceof Error ? err.message : 'Failed to add model',
+    try {
+      const model = await createModel.mutateAsync(params)
+      for (const dep of deployments) {
+        await createDeployment.mutateAsync({
+          modelId: model.id,
+          params: {
+            name: dep.name,
+            provider: dep.provider || undefined,
+            base_url: dep.baseUrl || undefined,
+            provider_id: dep.providerId || undefined,
+            upstream_model: dep.upstreamModel || undefined,
+            api_key: dep.apiKey || undefined,
+            azure_deployment: dep.azureDeployment || undefined,
+            azure_api_version: dep.azureApiVersion || undefined,
+            weight: dep.weight,
+            priority: dep.priority,
+          },
         })
       }
+      toast({ variant: 'success', message: 'Model added' })
+      handleClose()
+    } catch (err) {
+      toast({
+        variant: 'error',
+        message: err instanceof Error ? err.message : 'Failed to add model',
+      })
     }
   }
 
-  const isAzure = provider === 'azure'
   const isPending = createModel.isPending || createDeployment.isPending
   const depFormIsAzure = depFormEntry.provider === 'azure'
   const depFormIsOpen = showDeploymentForm || editingDeployment !== null
@@ -792,15 +705,6 @@ function CreateModelDialog({ open, onClose }: CreateModelDialogProps) {
   return (
     <Dialog open={open} onClose={handleClose} title="Add Model">
       <div className="space-y-4">
-        <TabSwitcher
-          tabs={[
-            { key: 'single', label: 'Single Endpoint' },
-            { key: 'loadbalanced', label: 'Load Balanced' },
-          ]}
-          activeKey={mode}
-          onChange={(key) => setMode(key as 'single' | 'loadbalanced')}
-        />
-
         <Input
           label="Name"
           value={name}
@@ -817,77 +721,10 @@ function CreateModelDialog({ open, onClose }: CreateModelDialogProps) {
           disabled={isPending}
         />
 
-        {mode === 'single' ? (
-          <>
-            <Select
-              label="Provider"
-              options={PROVIDER_OPTIONS}
-              value={provider}
-              onChange={handleProviderChange}
-              disabled={isPending}
-            />
-            <Input
-              label="Base URL"
-              value={baseUrl}
-              onChange={(e) => { setBaseUrl(e.target.value); setTestResult(null) }}
-              placeholder={BASE_URL_PLACEHOLDERS[provider] ?? 'https://'}
-              error={errors.base_url}
-              disabled={isPending}
-            />
-            <Input
-              label="API Key"
-              type="password"
-              value={apiKey}
-              onChange={(e) => { setApiKey(e.target.value); setTestResult(null) }}
-              placeholder="sk-..."
-              description="Encrypted at rest, never shown again"
-              disabled={isPending}
-            />
-            <div className="flex items-center gap-3">
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                loading={testing}
-                disabled={!baseUrl.trim()}
-                onClick={handleTestConnection}
-              >
-                Test Connection
-              </Button>
-              {testResult && (
-                <span className={cn('text-sm', testResult.success ? 'text-success' : 'text-error')}>
-                  {testResult.success ? '✓' : '✗'} {testResult.message}
-                </span>
-              )}
-            </div>
-            {isAzure && (
-              <>
-                <Input
-                  label="Azure Deployment"
-                  value={azureDeployment}
-                  onChange={(e) => setAzureDeployment(e.target.value)}
-                  placeholder="e.g. gpt-4o-deployment"
-                  disabled={isPending}
-                />
-                <Input
-                  label="Azure API Version"
-                  value={azureApiVersion}
-                  onChange={(e) => setAzureApiVersion(e.target.value)}
-                  placeholder="e.g. 2024-02-01"
-                  disabled={isPending}
-                />
-              </>
-            )}
-          </>
-        ) : (
-          <>
-            <Select
-              label="Strategy"
-              options={STRATEGY_OPTIONS}
-              value={strategy}
-              onChange={setStrategy}
-              disabled={isPending}
-            />
+        <>
+            <p className="text-xs text-text-tertiary">
+              Routing: priority groups — same priority channels use round-robin.
+            </p>
             <Input
               label="Max Retries"
               type="number"
@@ -935,10 +772,24 @@ function CreateModelDialog({ open, onClose }: CreateModelDialogProps) {
                             disabled={isPending}
                           />
                           <Select
-                            label="Provider"
-                            options={PROVIDER_OPTIONS}
+                            label="Provider source"
+                            options={providerOptions}
+                            value={depFormEntry.providerId}
+                            onChange={(v) => setDepFormEntry((prev) => ({ ...prev, providerId: v }))}
+                            disabled={isPending}
+                          />
+                          <Select
+                            label="Protocol override"
+                            options={[{ value: '', label: 'Inherit from provider' }, ...PROVIDER_OPTIONS]}
                             value={depFormEntry.provider}
                             onChange={(v) => setDepFormEntry((prev) => ({ ...prev, provider: v }))}
+                            disabled={isPending}
+                          />
+                          <Input
+                            label="Upstream model"
+                            value={depFormEntry.upstreamModel}
+                            onChange={(e) => setDepFormEntry((prev) => ({ ...prev, upstreamModel: e.target.value }))}
+                            placeholder="e.g. deepseek-chat (empty = product name)"
                             disabled={isPending}
                           />
                           <Input
@@ -1054,18 +905,31 @@ function CreateModelDialog({ open, onClose }: CreateModelDialogProps) {
                     disabled={isPending}
                   />
                   <Select
-                    label="Provider"
-                    options={PROVIDER_OPTIONS}
+                    label="Provider source"
+                    options={providerOptions}
+                    value={depFormEntry.providerId}
+                    onChange={(v) => setDepFormEntry((prev) => ({ ...prev, providerId: v }))}
+                    disabled={isPending}
+                  />
+                  <Select
+                    label="Protocol override"
+                    options={[{ value: '', label: 'Inherit from provider' }, ...PROVIDER_OPTIONS]}
                     value={depFormEntry.provider}
                     onChange={(v) => setDepFormEntry((prev) => ({ ...prev, provider: v }))}
                     disabled={isPending}
                   />
                   <Input
-                    label="Base URL"
+                    label="Upstream model"
+                    value={depFormEntry.upstreamModel}
+                    onChange={(e) => setDepFormEntry((prev) => ({ ...prev, upstreamModel: e.target.value }))}
+                    placeholder="e.g. deepseek-chat"
+                    disabled={isPending}
+                  />
+                  <Input
+                    label="Base URL override"
                     value={depFormEntry.baseUrl}
                     onChange={(e) => setDepFormEntry((prev) => ({ ...prev, baseUrl: e.target.value }))}
-                    placeholder={BASE_URL_PLACEHOLDERS[depFormEntry.provider] ?? 'https://'}
-                    error={depFormErrors.base_url}
+                    placeholder="Leave empty to inherit from provider"
                     disabled={isPending}
                   />
                   <Input
@@ -1133,8 +997,7 @@ function CreateModelDialog({ open, onClose }: CreateModelDialogProps) {
                 </button>
               )}
             </div>
-          </>
-        )}
+        </>
 
         <Input
           label="Aliases"
@@ -1194,7 +1057,10 @@ function CreateModelDialog({ open, onClose }: CreateModelDialogProps) {
                   <p className="text-sm font-medium text-text-secondary">Storefront (sell pricing)</p>
                   <p className="text-xs text-text-tertiary">Customer-facing prices; wallet is debited at these rates.</p>
                 </div>
-                <Toggle checked={isPublic} onChange={setIsPublic} label="Public" disabled={isPending} />
+                <div className="flex gap-4">
+                  <Toggle checked={billPerToken} onChange={setBillPerToken} label="Per token" disabled={isPending} />
+                  <Toggle checked={billPerRequest} onChange={setBillPerRequest} label="Per request" disabled={isPending} />
+                </div>
               </div>
               <div className="grid grid-cols-3 gap-4">
                 <Input
@@ -1222,6 +1088,16 @@ function CreateModelDialog({ open, onClose }: CreateModelDialogProps) {
                   disabled={isPending}
                 />
               </div>
+              {billPerRequest && (
+                <Input
+                  label="Sell per request (USD)"
+                  type="number"
+                  value={sellPerRequest}
+                  onChange={(e) => setSellPerRequest(e.target.value)}
+                  placeholder="0.01"
+                  disabled={isPending}
+                />
+              )}
             </div>
             <Input
               label="Timeout"
@@ -1293,7 +1169,8 @@ function EditModelDialog({ model, onClose }: EditModelDialogProps) {
   const [timeout, setTimeout] = useState(model.timeout ?? '')
   const [fallbackModelName, setFallbackModelName] = useState(model.fallback_model_name ?? '')
   const [piiFilter, setPiiFilter] = useState(() => piiFilterFromResponse(model.pii_filter))
-  const [isPublic, setIsPublic] = useState(model.is_public ?? false)
+  const [billPerToken, setBillPerToken] = useState(model.bill_per_token !== false)
+  const [billPerRequest, setBillPerRequest] = useState(model.bill_per_request === true)
   const [sellInputPer1m, setSellInputPer1m] = useState(
     model.sell_input_per_1m != null ? String(model.sell_input_per_1m) : '',
   )
@@ -1302,6 +1179,9 @@ function EditModelDialog({ model, onClose }: EditModelDialogProps) {
   )
   const [sellCachedInputPer1m, setSellCachedInputPer1m] = useState(
     model.sell_cached_input_per_1m != null ? String(model.sell_cached_input_per_1m) : '',
+  )
+  const [sellPerRequest, setSellPerRequest] = useState(
+    model.sell_per_request != null ? String(model.sell_per_request) : '',
   )
 
   const updateModel = useUpdateModel()
@@ -1397,7 +1277,8 @@ function EditModelDialog({ model, onClose }: EditModelDialogProps) {
       params.pii_filter = newPiiFilter ?? null
     }
 
-    if (isPublic !== (model.is_public ?? false)) params.is_public = isPublic
+    if (billPerToken !== (model.bill_per_token !== false)) params.bill_per_token = billPerToken
+    if (billPerRequest !== (model.bill_per_request === true)) params.bill_per_request = billPerRequest
     if (sellInputPer1m.trim()) {
       const parsed = parseFloat(sellInputPer1m)
       if (!isNaN(parsed) && parsed !== model.sell_input_per_1m) params.sell_input_per_1m = parsed
@@ -1409,6 +1290,10 @@ function EditModelDialog({ model, onClose }: EditModelDialogProps) {
     if (sellCachedInputPer1m.trim()) {
       const parsed = parseFloat(sellCachedInputPer1m)
       if (!isNaN(parsed) && parsed !== model.sell_cached_input_per_1m) params.sell_cached_input_per_1m = parsed
+    }
+    if (sellPerRequest.trim()) {
+      const parsed = parseFloat(sellPerRequest)
+      if (!isNaN(parsed) && parsed !== model.sell_per_request) params.sell_per_request = parsed
     }
 
     if (Object.keys(params).length === 0) {
@@ -1505,7 +1390,10 @@ function EditModelDialog({ model, onClose }: EditModelDialogProps) {
               <p className="text-sm font-medium text-text-secondary">Storefront (sell pricing)</p>
               <p className="text-xs text-text-tertiary">Customer-facing prices; wallet is debited at these rates.</p>
             </div>
-            <Toggle checked={isPublic} onChange={setIsPublic} label="Public" disabled={updateModel.isPending} />
+            <div className="flex gap-4">
+              <Toggle checked={billPerToken} onChange={setBillPerToken} label="Per token" disabled={updateModel.isPending} />
+              <Toggle checked={billPerRequest} onChange={setBillPerRequest} label="Per request" disabled={updateModel.isPending} />
+            </div>
           </div>
           <div className="grid grid-cols-3 gap-4">
             <Input
@@ -1533,6 +1421,16 @@ function EditModelDialog({ model, onClose }: EditModelDialogProps) {
               disabled={updateModel.isPending}
             />
           </div>
+          {billPerRequest && (
+            <Input
+              label="Sell per request (USD)"
+              type="number"
+              value={sellPerRequest}
+              onChange={(e) => setSellPerRequest(e.target.value)}
+              placeholder="0.01"
+              disabled={updateModel.isPending}
+            />
+          )}
         </div>
         {isAzure && (
           <>
@@ -1638,6 +1536,12 @@ export default function ModelsPage() {
   }, [healthData])
 
   const columns: Column<ModelResponse>[] = [
+    {
+      key: 'logo',
+      header: '',
+      width: '36px',
+      render: (row) => <BrandIcon logo={row.logo} modelName={row.name} size={22} />,
+    },
     {
       key: 'name',
       header: 'Name',

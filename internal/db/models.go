@@ -19,7 +19,8 @@ const modelSelectColumns = "id, name, provider, model_type, base_url, api_key_en
 	"azure_deployment, azure_api_version, gcp_project, gcp_location, " +
 	"is_active, source, created_by, created_at, updated_at, deleted_at, aliases, timeout, " +
 	"strategy, max_retries, fallback_model_id, pii_filter, " +
-	"is_public, sell_input_per_1m, sell_output_per_1m, sell_cached_input_per_1m"
+	"is_public, sell_input_per_1m, sell_output_per_1m, sell_cached_input_per_1m, logo, " +
+	"bill_per_token, bill_per_request, sell_per_request"
 
 // Model represents a model record in the database.
 // This is the storage layer representation; see proxy.Model for the in-memory registry type.
@@ -76,6 +77,15 @@ type Model struct {
 	// SellCachedInputPer1M is the customer-facing price in USD per 1M cached
 	// input tokens. Nil falls back to SellInputPer1M.
 	SellCachedInputPer1M *float64
+	// Logo is the customer-facing logo URL or asset path. Empty = FE falls
+	// back to the logo of the provider on the first active route.
+	Logo string
+	// BillPerToken enables per-token wallet billing when true.
+	BillPerToken bool
+	// BillPerRequest enables a flat per-request wallet charge when true.
+	BillPerRequest bool
+	// SellPerRequest is the customer-facing USD charge per API call.
+	SellPerRequest *float64
 }
 
 // CreateModelParams holds the input for creating a model.
@@ -122,6 +132,14 @@ type CreateModelParams struct {
 	SellOutputPer1M *float64
 	// SellCachedInputPer1M is the customer-facing price in USD per 1M cached input tokens.
 	SellCachedInputPer1M *float64
+	// Logo is the customer-facing logo URL or asset path.
+	Logo string
+	// BillPerToken enables per-token wallet billing. Defaults to true.
+	BillPerToken bool
+	// BillPerRequest enables flat per-request wallet billing. Defaults to false.
+	BillPerRequest bool
+	// SellPerRequest is the customer-facing USD charge per API call.
+	SellPerRequest *float64
 }
 
 // UpdateModelParams holds optional fields for updating a model.
@@ -174,6 +192,14 @@ type UpdateModelParams struct {
 	SellOutputPer1M *float64
 	// SellCachedInputPer1M, when non-nil, replaces the customer-facing cached input price.
 	SellCachedInputPer1M *float64
+	// Logo, when non-nil, replaces the customer-facing logo.
+	Logo *string
+	// BillPerToken, when non-nil, replaces the per-token billing flag.
+	BillPerToken *bool
+	// BillPerRequest, when non-nil, replaces the per-request billing flag.
+	BillPerRequest *bool
+	// SellPerRequest, when non-nil, replaces the per-request sell price.
+	SellPerRequest *float64
 }
 
 // CreateModel inserts a new model and returns the persisted record.
@@ -198,20 +224,28 @@ func (d *DB) CreateModel(ctx context.Context, params CreateModelParams) (*Model,
 		maxRetries = *params.MaxRetries
 	}
 
+	billPerToken := params.BillPerToken
+	billPerRequest := params.BillPerRequest
+	if !billPerToken && !billPerRequest {
+		billPerToken = true
+	}
+
 	p := d.dialect.Placeholder
 	insertQuery := "INSERT INTO models " +
 		"(id, name, provider, model_type, base_url, api_key_encrypted, " +
 		"max_context_tokens, input_price_per_1m, output_price_per_1m, " +
 		"azure_deployment, azure_api_version, gcp_project, gcp_location, " +
 		"is_active, source, created_by, aliases, timeout, strategy, max_retries, " +
-		"fallback_model_id, pii_filter, is_public, sell_input_per_1m, sell_output_per_1m, sell_cached_input_per_1m, " +
+		"fallback_model_id, pii_filter, is_public, sell_input_per_1m, sell_output_per_1m, sell_cached_input_per_1m, logo, " +
+		"bill_per_token, bill_per_request, sell_per_request, " +
 		"created_at, updated_at) " +
 		"VALUES (" +
 		p(1) + ", " + p(2) + ", " + p(3) + ", " + p(4) + ", " + p(5) + ", " + p(6) + ", " +
 		p(7) + ", " + p(8) + ", " + p(9) + ", " +
 		p(10) + ", " + p(11) + ", " + p(12) + ", " + p(13) + ", " +
 		"1, " + p(14) + ", " + p(15) + ", " + p(16) + ", " + p(17) + ", " + p(18) + ", " + p(19) + ", " +
-		p(20) + ", " + p(21) + ", " + p(22) + ", " + p(23) + ", " + p(24) + ", " + p(25) + ", " +
+		p(20) + ", " + p(21) + ", " + p(22) + ", " + p(23) + ", " + p(24) + ", " + p(25) + ", " + p(26) + ", " +
+		p(27) + ", " + p(28) + ", " + p(29) + ", " +
 		"CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
 
 	selectQuery := "SELECT " + modelSelectColumns +
@@ -245,6 +279,10 @@ func (d *DB) CreateModel(ctx context.Context, params CreateModelParams) (*Model,
 			params.SellInputPer1M,
 			params.SellOutputPer1M,
 			params.SellCachedInputPer1M,
+			params.Logo,
+			boolToInt(billPerToken),
+			boolToInt(billPerRequest),
+			params.SellPerRequest,
 		)
 		if execErr != nil {
 			return translateError(execErr)
@@ -464,6 +502,26 @@ func (d *DB) UpdateModel(ctx context.Context, id string, params UpdateModelParam
 		args = append(args, *params.SellCachedInputPer1M)
 		argN++
 	}
+	if params.Logo != nil {
+		setClauses = append(setClauses, "logo = "+p(argN))
+		args = append(args, *params.Logo)
+		argN++
+	}
+	if params.BillPerToken != nil {
+		setClauses = append(setClauses, "bill_per_token = "+p(argN))
+		args = append(args, boolToInt(*params.BillPerToken))
+		argN++
+	}
+	if params.BillPerRequest != nil {
+		setClauses = append(setClauses, "bill_per_request = "+p(argN))
+		args = append(args, boolToInt(*params.BillPerRequest))
+		argN++
+	}
+	if params.SellPerRequest != nil {
+		setClauses = append(setClauses, "sell_per_request = "+p(argN))
+		args = append(args, *params.SellPerRequest)
+		argN++
+	}
 
 	if len(setClauses) == 0 {
 		return d.GetModel(ctx, id)
@@ -642,6 +700,8 @@ func scanModel(scanner interface{ Scan(...any) error }) (*Model, error) {
 	var isActiveInt int
 	var piiFilterInt *int64
 	var isPublicInt int
+	var billPerTokenInt int
+	var billPerRequestInt int
 	err := scanner.Scan(
 		&m.ID, &m.Name, &m.Provider, &m.ModelType, &m.BaseURL, &m.APIKeyEncrypted,
 		&m.MaxContextTokens, &m.InputPricePer1M, &m.OutputPricePer1M,
@@ -650,7 +710,8 @@ func scanModel(scanner interface{ Scan(...any) error }) (*Model, error) {
 		&m.CreatedAt, &m.UpdatedAt, &m.DeletedAt, &m.Aliases, &m.Timeout,
 		&m.Strategy, &m.MaxRetries, &m.FallbackModelID,
 		&piiFilterInt,
-		&isPublicInt, &m.SellInputPer1M, &m.SellOutputPer1M, &m.SellCachedInputPer1M,
+		&isPublicInt, &m.SellInputPer1M, &m.SellOutputPer1M, &m.SellCachedInputPer1M, &m.Logo,
+		&billPerTokenInt, &billPerRequestInt, &m.SellPerRequest,
 	)
 	if err != nil {
 		return nil, err
@@ -658,7 +719,28 @@ func scanModel(scanner interface{ Scan(...any) error }) (*Model, error) {
 	m.IsActive = isActiveInt == 1
 	m.PIIFilter = nullableIntToBoolPtr(piiFilterInt)
 	m.IsPublic = isPublicInt == 1
+	m.BillPerToken = billPerTokenInt == 1
+	m.BillPerRequest = billPerRequestInt == 1
 	return &m, nil
+}
+
+// ListModelNames returns the names of all active, non-deleted models.
+// Used by the provider wizard to mark already-existing products.
+func (d *DB) ListModelNames(ctx context.Context) ([]string, error) {
+	rows, err := d.sql.QueryContext(ctx, "SELECT name FROM models WHERE deleted_at IS NULL")
+	if err != nil {
+		return nil, fmt.Errorf("list model names: %w", err)
+	}
+	defer rows.Close()
+	var names []string
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			return nil, fmt.Errorf("list model names scan: %w", err)
+		}
+		names = append(names, n)
+	}
+	return names, rows.Err()
 }
 
 // GetModelIDByName returns the UUID for a given active model name (case-sensitive).
@@ -951,8 +1033,40 @@ func deploymentAAD(id string) []byte {
 	return []byte("deployment:" + id)
 }
 
+// catalogWhereClause filters models eligible for the public price catalog:
+// active, priced (token and/or per-request billing configured).
+const catalogWhereClause = "is_active = 1 AND deleted_at IS NULL AND (" +
+	"(bill_per_token = 1 AND (sell_input_per_1m > 0 OR sell_output_per_1m > 0 OR sell_cached_input_per_1m > 0)) " +
+	"OR (bill_per_request = 1 AND sell_per_request > 0))"
+
+// ListCatalogModels returns active models with at least one configured sell
+// price, ordered by name. Used by the unauthenticated catalog API.
+func (d *DB) ListCatalogModels(ctx context.Context) ([]Model, error) {
+	query := "SELECT " + modelSelectColumns +
+		" FROM models WHERE " + catalogWhereClause + " ORDER BY name ASC"
+
+	rows, err := d.sql.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("list catalog models query: %w", err)
+	}
+	defer rows.Close()
+
+	var models []Model
+	for rows.Next() {
+		m, scanErr := scanModel(rows)
+		if scanErr != nil {
+			return nil, fmt.Errorf("list catalog models scan: %w", scanErr)
+		}
+		models = append(models, *m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list catalog models rows: %w", err)
+	}
+	return models, nil
+}
+
 // ListPublicModels returns all active models flagged is_public, ordered by
-// name. Used by the unauthenticated storefront price list.
+// name. Deprecated: use ListCatalogModels for the storefront price list.
 func (d *DB) ListPublicModels(ctx context.Context) ([]Model, error) {
 	query := "SELECT " + modelSelectColumns +
 		" FROM models WHERE is_active = 1 AND is_public = 1 AND deleted_at IS NULL ORDER BY name ASC"

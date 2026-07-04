@@ -2,8 +2,7 @@ import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { StatCard } from '../../components/ui/StatCard'
 import { AreaChart } from '../../components/ui/charts'
-import { useMe } from '../../hooks/useMe'
-import { useUsage } from '../../hooks/useUsage'
+import { useMyUsage } from '../../hooks/useUsage'
 import { formatNumber, formatTokens, formatCost } from '../../lib/utils'
 
 function getLast7Days(): { from: string; to: string } {
@@ -61,15 +60,12 @@ function ArrowRightIcon() {
 // ---------------------------------------------------------------------------
 
 export default function UsageOverviewPage() {
-  const { data: me } = useMe()
-  const orgId = me?.org_id ?? ''
-
   const { from: from24h, to: to24h } = useMemo(() => getLast24h(), [])
   const { from: from7d, to: to7d } = useMemo(() => getLast7Days(), [])
 
   // LLM: 24h totals + 7d daily trend
-  const llmTotals = useUsage(orgId, from24h, to24h, 'model')
-  const llmTrend = useUsage(orgId, from7d, to7d, 'day')
+  const llmTotals = useMyUsage(from24h, to24h, 'model')
+  const llmTrend = useMyUsage(from7d, to7d, 'day')
 
   const llmSummary = useMemo(() => {
     if (!llmTotals.data?.data) return { requests: 0, tokens: 0, cost: 0 }
@@ -83,7 +79,7 @@ export default function UsageOverviewPage() {
     )
   }, [llmTotals.data])
 
-  const llmLoading = llmTotals.isLoading && !!orgId
+  const llmLoading = llmTotals.isLoading
 
   return (
     <div className="grid grid-cols-1 gap-6">

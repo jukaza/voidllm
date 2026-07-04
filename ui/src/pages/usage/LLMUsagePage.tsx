@@ -6,7 +6,7 @@ import { Button } from '../../components/ui/Button'
 import { Select } from '../../components/ui/Select'
 import { AreaChart, DonutChart, HorizontalBar } from '../../components/ui/charts'
 import { useMe } from '../../hooks/useMe'
-import { useUsage, useCrossOrgUsage } from '../../hooks/useUsage'
+import { useMyUsage, useCrossOrgUsage } from '../../hooks/useUsage'
 import type { UsageDataPoint } from '../../hooks/useUsage'
 import { formatNumber, formatTokens, formatCost, shortenId } from '../../lib/utils'
 import { exportData } from '../../lib/export'
@@ -179,12 +179,11 @@ export default function LLMUsagePage() {
   const [crossOrg, setCrossOrg] = useState(false)
 
   const { data: me } = useMe()
-  const orgId = me?.org_id ?? ''
   const isSystemAdmin = me?.is_system_admin === true
 
   const { from, to } = useMemo(() => getTimeRange(range), [range])
 
-  const orgUsage = useUsage(orgId, from, to, groupBy)
+  const orgUsage = useMyUsage(from, to, groupBy)
   const crossOrgUsage = useCrossOrgData({ from, to, groupBy, enabled: isSystemAdmin })
 
   const activeResult = crossOrg && isSystemAdmin ? crossOrgUsage : orgUsage
@@ -193,7 +192,7 @@ export default function LLMUsagePage() {
 
   // Daily trend data - only when groupBy is not already 'day'/'hour', and not cross-org
   const needsDailyTrend = !crossOrg && groupBy !== 'day' && groupBy !== 'hour'
-  const dailyUsage = useUsage(orgId, from, to, 'day')
+  const dailyUsage = useMyUsage(from, to, 'day')
   // Use main data directly when groupBy is already day or hour
   const trendData = needsDailyTrend ? dailyUsage.data?.data : usage?.data
 
@@ -230,7 +229,7 @@ export default function LLMUsagePage() {
 
   const columns = useMemo(() => buildColumns(groupBy), [groupBy])
 
-  const isDataLoading = isLoading && (crossOrg ? isSystemAdmin : !!orgId)
+  const isDataLoading = isLoading && (crossOrg ? isSystemAdmin : true)
 
   const totalPrompt = usage?.data?.reduce((s, d) => s + d.prompt_tokens, 0) ?? 0
   const totalCompletion = usage?.data?.reduce((s, d) => s + d.completion_tokens, 0) ?? 0

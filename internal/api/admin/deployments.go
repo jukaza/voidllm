@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/url"
@@ -31,6 +32,19 @@ type createDeploymentRequest struct {
 	// PIIFilter explicitly enables or disables PII anonymization for requests
 	// routed to this deployment. Omit to inherit from the model or network default.
 	PIIFilter *bool `json:"pii_filter,omitempty"`
+	// UpstreamModel is the model name sent upstream. Empty = use the model's
+	// canonical name. Non-empty enables cross-model routes.
+	UpstreamModel string `json:"upstream_model"`
+	// ProviderID links this route to a provider (partner/source).
+	ProviderID        *string `json:"provider_id"`
+	RPMLimit          int     `json:"rpm_limit"`
+	TPMLimit          int     `json:"tpm_limit"`
+	DailyRequestLimit int     `json:"daily_request_limit"`
+	// Cost prices in USD per 1M tokens. Nil = fall back to model-level pricing.
+	CostInputPer1M       *float64 `json:"cost_input_per_1m"`
+	CostOutputPer1M      *float64 `json:"cost_output_per_1m"`
+	CostCachedInputPer1M *float64 `json:"cost_cached_input_per_1m"`
+	CostCacheWritePer1M  *float64 `json:"cost_cache_write_per_1m"`
 }
 
 // updateDeploymentRequest is the JSON body accepted by updateDeployment.
@@ -52,6 +66,18 @@ type updateDeploymentRequest struct {
 	// this deployment. Pass true to force anonymization on, false to force it off.
 	// Omit the field entirely to leave the existing setting unchanged.
 	PIIFilter *bool `json:"pii_filter"`
+	// UpstreamModel, when non-nil, replaces the upstream model name. Pass ""
+	// to revert to the canonical model name.
+	UpstreamModel *string `json:"upstream_model"`
+	// ProviderID, when non-nil, replaces the linked provider. Pass "" to clear.
+	ProviderID           *string  `json:"provider_id"`
+	RPMLimit             *int     `json:"rpm_limit"`
+	TPMLimit             *int     `json:"tpm_limit"`
+	DailyRequestLimit    *int     `json:"daily_request_limit"`
+	CostInputPer1M       *float64 `json:"cost_input_per_1m"`
+	CostOutputPer1M      *float64 `json:"cost_output_per_1m"`
+	CostCachedInputPer1M *float64 `json:"cost_cached_input_per_1m"`
+	CostCacheWritePer1M  *float64 `json:"cost_cache_write_per_1m"`
 }
 
 // deploymentResponse is the JSON representation of a deployment returned by the API.
@@ -77,6 +103,17 @@ type deploymentResponse struct {
 	PIIFilter *bool  `json:"pii_filter,omitempty"`
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at"`
+	// UpstreamModel is the model name sent upstream; empty means the
+	// canonical model name is used.
+	UpstreamModel        string   `json:"upstream_model"`
+	ProviderID           *string  `json:"provider_id,omitempty"`
+	RPMLimit             int      `json:"rpm_limit"`
+	TPMLimit             int      `json:"tpm_limit"`
+	DailyRequestLimit    int      `json:"daily_request_limit"`
+	CostInputPer1M       *float64 `json:"cost_input_per_1m,omitempty"`
+	CostOutputPer1M      *float64 `json:"cost_output_per_1m,omitempty"`
+	CostCachedInputPer1M *float64 `json:"cost_cached_input_per_1m,omitempty"`
+	CostCacheWritePer1M  *float64 `json:"cost_cache_write_per_1m,omitempty"`
 }
 
 // deploymentAAD returns the additional authenticated data used when encrypting
@@ -89,22 +126,53 @@ func deploymentAAD(id string) []byte {
 // deploymentToResponse converts a db.Deployment to its API wire representation.
 func deploymentToResponse(d *db.Deployment) deploymentResponse {
 	return deploymentResponse{
-		ID:              d.ID,
-		ModelID:         d.ModelID,
-		Name:            d.Name,
-		Provider:        d.Provider,
-		BaseURL:         d.BaseURL,
-		AzureDeployment: d.AzureDeployment,
-		AzureAPIVersion: d.AzureAPIVersion,
-		GCPProject:      d.GCPProject,
-		GCPLocation:     d.GCPLocation,
-		Weight:          d.Weight,
-		Priority:        d.Priority,
-		IsActive:        d.IsActive,
-		PIIFilter:       d.PIIFilter,
-		CreatedAt:       d.CreatedAt,
-		UpdatedAt:       d.UpdatedAt,
+		ID:                   d.ID,
+		ModelID:              d.ModelID,
+		Name:                 d.Name,
+		Provider:             d.Provider,
+		BaseURL:              d.BaseURL,
+		AzureDeployment:      d.AzureDeployment,
+		AzureAPIVersion:      d.AzureAPIVersion,
+		GCPProject:           d.GCPProject,
+		GCPLocation:          d.GCPLocation,
+		Weight:               d.Weight,
+		Priority:             d.Priority,
+		IsActive:             d.IsActive,
+		PIIFilter:            d.PIIFilter,
+		CreatedAt:            d.CreatedAt,
+		UpdatedAt:            d.UpdatedAt,
+		UpstreamModel:        d.UpstreamModel,
+		ProviderID:           d.ProviderID,
+		RPMLimit:             d.RPMLimit,
+		TPMLimit:             d.TPMLimit,
+		DailyRequestLimit:    d.DailyRequestLimit,
+		CostInputPer1M:       d.CostInputPer1M,
+		CostOutputPer1M:      d.CostOutputPer1M,
+		CostCachedInputPer1M: d.CostCachedInputPer1M,
+		CostCacheWritePer1M:  d.CostCacheWritePer1M,
 	}
+}
+
+// inheritDeploymentFromProvider overlays protocol/base_url/api_key from the
+// linked provider when those fields are left empty on the request.
+func (h *Handler) inheritDeploymentFromProvider(ctx context.Context, req *createDeploymentRequest) error {
+	if req.ProviderID == nil || *req.ProviderID == "" {
+		return nil
+	}
+	prov, err := h.DB.GetProvider(ctx, *req.ProviderID)
+	if err != nil {
+		return err
+	}
+	provKey := ""
+	if prov.APIKeyEncrypted != nil {
+		if key, decErr := crypto.DecryptString(*prov.APIKeyEncrypted, h.EncryptionKey, providerAAD(prov.ID)); decErr == nil {
+			provKey = key
+		}
+	}
+	req.Provider, req.BaseURL, req.APIKey = db.OverlayProviderConnection(
+		req.Provider, req.BaseURL, req.APIKey, prov, provKey,
+	)
+	return nil
 }
 
 // validateDeploymentBaseURL returns a non-empty error message if baseURL is
@@ -162,8 +230,17 @@ func (h *Handler) createDeployment(c fiber.Ctx) error {
 	if req.Name == "" {
 		return apierror.BadRequest(c, "name is required")
 	}
+
+	if err := h.inheritDeploymentFromProvider(ctx, &req); err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			return apierror.NotFound(c, "provider not found")
+		}
+		h.Log.ErrorContext(ctx, "create deployment: resolve provider", slog.String("error", err.Error()))
+		return apierror.InternalError(c, "failed to resolve provider")
+	}
+
 	if req.Provider == "" {
-		return apierror.BadRequest(c, "provider is required")
+		return apierror.BadRequest(c, "provider is required (set provider or provider_id)")
 	}
 	if !provider.ValidProviders[req.Provider] {
 		return apierror.BadRequest(c, "provider must be one of: "+strings.Join(provider.Names(), ", "))
@@ -174,18 +251,27 @@ func (h *Handler) createDeployment(c fiber.Ctx) error {
 
 	// Insert without API key to obtain the stable deployment ID used as AAD.
 	dep, err := h.DB.CreateDeployment(ctx, db.CreateDeploymentParams{
-		ModelID:         modelID,
-		Name:            req.Name,
-		Provider:        req.Provider,
-		BaseURL:         req.BaseURL,
-		APIKeyEncrypted: nil,
-		AzureDeployment: req.AzureDeployment,
-		AzureAPIVersion: req.AzureAPIVersion,
-		GCPProject:      req.GCPProject,
-		GCPLocation:     req.GCPLocation,
-		Weight:          req.Weight,
-		Priority:        req.Priority,
-		PIIFilter:       req.PIIFilter,
+		ModelID:              modelID,
+		Name:                 req.Name,
+		Provider:             req.Provider,
+		BaseURL:              req.BaseURL,
+		APIKeyEncrypted:      nil,
+		AzureDeployment:      req.AzureDeployment,
+		AzureAPIVersion:      req.AzureAPIVersion,
+		GCPProject:           req.GCPProject,
+		GCPLocation:          req.GCPLocation,
+		Weight:               req.Weight,
+		Priority:             req.Priority,
+		PIIFilter:            req.PIIFilter,
+		UpstreamModel:        req.UpstreamModel,
+		ProviderID:           req.ProviderID,
+		RPMLimit:             req.RPMLimit,
+		TPMLimit:             req.TPMLimit,
+		DailyRequestLimit:    req.DailyRequestLimit,
+		CostInputPer1M:       req.CostInputPer1M,
+		CostOutputPer1M:      req.CostOutputPer1M,
+		CostCachedInputPer1M: req.CostCachedInputPer1M,
+		CostCacheWritePer1M:  req.CostCacheWritePer1M,
 	})
 	if err != nil {
 		if errors.Is(err, db.ErrConflict) {
@@ -345,17 +431,26 @@ func (h *Handler) updateDeployment(c fiber.Ctx) error {
 	}
 
 	params := db.UpdateDeploymentParams{
-		Name:            req.Name,
-		Provider:        req.Provider,
-		BaseURL:         req.BaseURL,
-		AzureDeployment: req.AzureDeployment,
-		AzureAPIVersion: req.AzureAPIVersion,
-		GCPProject:      req.GCPProject,
-		GCPLocation:     req.GCPLocation,
-		Weight:          req.Weight,
-		Priority:        req.Priority,
-		PIIFilter:       piiFilter,
-		ClearPIIFilter:  clearPIIFilter,
+		Name:                 req.Name,
+		Provider:             req.Provider,
+		BaseURL:              req.BaseURL,
+		AzureDeployment:      req.AzureDeployment,
+		AzureAPIVersion:      req.AzureAPIVersion,
+		GCPProject:           req.GCPProject,
+		GCPLocation:          req.GCPLocation,
+		Weight:               req.Weight,
+		Priority:             req.Priority,
+		PIIFilter:            piiFilter,
+		ClearPIIFilter:       clearPIIFilter,
+		UpstreamModel:        req.UpstreamModel,
+		ProviderID:           req.ProviderID,
+		RPMLimit:             req.RPMLimit,
+		TPMLimit:             req.TPMLimit,
+		DailyRequestLimit:    req.DailyRequestLimit,
+		CostInputPer1M:       req.CostInputPer1M,
+		CostOutputPer1M:      req.CostOutputPer1M,
+		CostCachedInputPer1M: req.CostCachedInputPer1M,
+		CostCacheWritePer1M:  req.CostCacheWritePer1M,
 	}
 
 	if req.APIKey != nil {

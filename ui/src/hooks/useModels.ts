@@ -9,6 +9,8 @@ export interface DeploymentResponse {
   base_url: string
   azure_deployment?: string
   azure_api_version?: string
+  upstream_model?: string
+  provider_id?: string | null
   weight: number
   priority: number
   is_active: boolean
@@ -38,10 +40,13 @@ export interface ModelResponse {
   max_retries?: number
   fallback_model_name?: string
   pii_filter?: boolean
-  is_public: boolean
+  bill_per_token?: boolean
+  bill_per_request?: boolean
+  sell_per_request?: number | null
   sell_input_per_1m?: number | null
   sell_output_per_1m?: number | null
   sell_cached_input_per_1m?: number | null
+  logo?: string
   deployments?: DeploymentResponse[]
 }
 
@@ -68,17 +73,22 @@ export interface CreateModelParams {
   max_retries?: number
   fallback_model_name?: string
   pii_filter?: boolean
-  is_public?: boolean
+  bill_per_token?: boolean
+  bill_per_request?: boolean
+  sell_per_request?: number
   sell_input_per_1m?: number
   sell_output_per_1m?: number
   sell_cached_input_per_1m?: number
+  logo?: string
 }
 
 export interface CreateDeploymentParams {
   name: string
-  provider: string
-  base_url: string
+  provider?: string
+  base_url?: string
   api_key?: string
+  provider_id?: string
+  upstream_model?: string
   azure_deployment?: string
   azure_api_version?: string
   weight?: number
@@ -90,6 +100,8 @@ export interface UpdateDeploymentParams {
   provider?: string
   base_url?: string
   api_key?: string
+  provider_id?: string | null
+  upstream_model?: string
   azure_deployment?: string
   azure_api_version?: string
   weight?: number
@@ -111,10 +123,13 @@ export interface UpdateModelParams {
   aliases?: string[]
   fallback_model_name?: string | null
   pii_filter?: boolean | null
-  is_public?: boolean
+  bill_per_token?: boolean
+  bill_per_request?: boolean
+  sell_per_request?: number
   sell_input_per_1m?: number
   sell_output_per_1m?: number
   sell_cached_input_per_1m?: number
+  logo?: string
 }
 
 export function useModels(cursor?: string) {

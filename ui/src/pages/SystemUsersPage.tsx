@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { PageHeader } from '../components/ui/PageHeader'
 import { Table } from '../components/ui/Table'
@@ -7,14 +7,12 @@ import { Dialog, ConfirmDialog } from '../components/ui/Dialog'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
-import { Select } from '../components/ui/Select'
 import { Toggle } from '../components/ui/Toggle'
 import { TimeAgo } from '../components/ui/TimeAgo'
 import { StatCard } from '../components/ui/StatCard'
 import { useMe } from '../hooks/useMe'
 import { useUsers, useCreateUser, useDeleteUser } from '../hooks/useUsers'
 import type { UserResponse, CreateUserParams } from '../hooks/useUsers'
-import { useOrgs } from '../hooks/useOrgs'
 import { useToast } from '../hooks/useToast'
 
 // ---------------------------------------------------------------------------
@@ -74,39 +72,21 @@ function CreateUserDialog({ open, onClose }: CreateUserDialogProps) {
   const [displayName, setDisplayName] = useState('')
   const [password, setPassword] = useState('')
   const [isSystemAdmin, setIsSystemAdmin] = useState(false)
-  const [orgId, setOrgId] = useState('')
-
   const [emailError, setEmailError] = useState<string | undefined>()
   const [displayNameError, setDisplayNameError] = useState<string | undefined>()
   const [passwordError, setPasswordError] = useState<string | undefined>()
-  const [orgError, setOrgError] = useState<string | undefined>()
 
   const createUser = useCreateUser()
-  const { data: orgsData } = useOrgs()
   const { toast } = useToast()
-
-  const orgOptions = useMemo(
-    () => (orgsData?.data ?? []).map((o) => ({ value: o.id, label: o.name })),
-    [orgsData?.data],
-  )
-
-  // Auto-select first org when list loads and nothing is selected yet
-  React.useEffect(() => {
-    if (orgOptions.length > 0 && orgId === '') {
-      setOrgId(orgOptions[0].value)
-    }
-  }, [orgOptions, orgId])
 
   function handleClose() {
     setEmail('')
     setDisplayName('')
     setPassword('')
     setIsSystemAdmin(false)
-    setOrgId(orgOptions.length > 0 ? orgOptions[0].value : '')
     setEmailError(undefined)
     setDisplayNameError(undefined)
     setPasswordError(undefined)
-    setOrgError(undefined)
     onClose()
   }
 
@@ -148,13 +128,6 @@ function CreateUserDialog({ open, onClose }: CreateUserDialogProps) {
       setPasswordError(undefined)
     }
 
-    if (!orgId) {
-      setOrgError('Organization is required')
-      valid = false
-    } else {
-      setOrgError(undefined)
-    }
-
     if (!valid) return
 
     const params: CreateUserParams = {
@@ -162,8 +135,6 @@ function CreateUserDialog({ open, onClose }: CreateUserDialogProps) {
       display_name: trimmedName,
       password,
       is_system_admin: isSystemAdmin,
-      org_id: orgId,
-      role: 'member',
     }
 
     createUser.mutate(params, {
@@ -217,18 +188,6 @@ function CreateUserDialog({ open, onClose }: CreateUserDialogProps) {
             label="System Admin"
           />
         </div>
-        <Select
-          label="Organization"
-          options={orgOptions}
-          value={orgId}
-          onChange={(v) => {
-            setOrgId(v)
-            if (v) setOrgError(undefined)
-          }}
-          placeholder="Select an organization..."
-          error={orgError}
-          disabled={createUser.isPending}
-        />
         <div className="flex justify-end gap-2 pt-2">
           <Button
             variant="secondary"

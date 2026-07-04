@@ -63,7 +63,7 @@ type DeploymentPicker interface {
 // with the upstream API key, and streams responses without buffering.
 type ProxyHandler struct {
 	Registry          *Registry
-	AccessCache       *ModelAccessCache        // in-memory model access control; nil disables access checks
+
 	AliasCache        *AliasCache              // in-memory scoped alias resolution; nil disables alias lookup
 	CircuitBreakers   *circuitbreaker.Registry // per-model circuit breaker registry; nil disables circuit breaking
 	Router            DeploymentPicker         // deployment selector; nil falls back to single-deployment behavior
@@ -162,6 +162,7 @@ func (s *streamUsageExtractor) observe(line []byte) {
 			PromptTokensDetails *struct {
 				CachedTokens int `json:"cached_tokens"`
 			} `json:"prompt_tokens_details"`
+			CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
 		} `json:"usage"`
 	}
 	if jsonx.Unmarshal(data, &chunk) == nil && chunk.Usage != nil {
@@ -174,6 +175,7 @@ func (s *streamUsageExtractor) observe(line []byte) {
 			CompletionTokens: chunk.Usage.CompletionTokens,
 			TotalTokens:      chunk.Usage.TotalTokens,
 			CachedTokens:     cached,
+			CacheWriteTokens: chunk.Usage.CacheCreationInputTokens,
 		}
 	}
 }
@@ -413,24 +415,6 @@ func (p *ProxyHandler) Handle(c fiber.Ctx) error {
 			break
 		}
 
-		// Access control check for the fallback target. This must happen before
-		// committing to the hop so that a key without access to the fallback model
-		// cannot exploit the chain to bypass access policy. The check mirrors the
-		// one in resolveModel. We never surface a "forbidden" error to the client
-		// here — instead we silently stop the chain and preserve the primary's
-		// error, so the existence of the fallback target is not disclosed.
-		if p.AccessCache != nil && keyInfo != nil {
-			if !p.AccessCache.Check("", "", keyInfo.ID, next.Name) {
-				p.Log.LogAttrs(c.Context(), slog.LevelInfo, "fallback target not permitted by access policy",
-					slog.String("requested", requestedModelName),
-					slog.String("target", next.Name),
-				)
-				// Preserve lastErr from the failed primary; do not leak
-				// "forbidden" to the client.
-				break
-			}
-		}
-
 		// Rewrite the model field in both the original and anonymized bodies
 		// so that the next hop uses the correct model name regardless of
 		// which body variant is ultimately sent. The rewrite only modifies
@@ -499,6 +483,21 @@ func (p *ProxyHandler) Handle(c fiber.Ctx) error {
 		metrics.CircuitBreakerRejectionsTotal.WithLabelValues(currentModel.Name).Inc()
 		return apierror.Send(c, fiber.StatusServiceUnavailable,
 			"circuit_open", "upstream temporarily unavailable")
+	}
+
+	// An upstream 401/403 is a failure of OUR upstream credentials, never the
+	// customer's. Forwarding it verbatim would tell the customer their key is
+	// bad (it is not) and leak provider error details. Mask it as a 502.
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+		cancelUpstream()
+		p.Log.LogAttrs(c.Context(), slog.LevelError, "upstream credential failure masked from client",
+			slog.String("model", currentModel.Name),
+			slog.String("deployment", usedDep.Name),
+			slog.Int("status", resp.StatusCode),
+		)
+		return apierror.Send(c, fiber.StatusBadGateway, "upstream_unavailable", "upstream provider is unavailable")
 	}
 
 	if isStreamingResponse(resp) {
@@ -873,15 +872,6 @@ func (p *ProxyHandler) resolveModel(c fiber.Ctx, keyInfo *auth.KeyInfo, modelNam
 		return Model{}, errResponseSent
 	}
 
-	if p.AccessCache != nil && keyInfo != nil {
-		if !p.AccessCache.Check("", "", keyInfo.ID, model.Name) {
-			if err := apierror.Send(c, fiber.StatusForbidden, "model_access_denied", "model access denied"); err != nil {
-				return Model{}, err
-			}
-			return Model{}, errResponseSent
-		}
-	}
-
 	return model, nil
 }
 
@@ -904,13 +894,28 @@ func (p *ProxyHandler) buildUpstreamRequest(c fiber.Ctx, model Model, body []byt
 
 	adapter := GetAdapter(model.Provider)
 
+	// upstreamName is the model identifier actually sent to the upstream
+	// endpoint. A route (deployment) may serve the product model under a
+	// different upstream name (cross-model route); in that case the request
+	// body and any name-bearing URL (Gemini/Vertex) must carry the upstream
+	// name while everything customer-facing keeps the canonical name.
+	upstreamName := model.Name
+	if model.UpstreamModel != "" {
+		upstreamName = model.UpstreamModel
+	}
+	// adapterModel is the model view handed to the adapter: identical to
+	// model except Name is the upstream name, so TransformRequest/TransformURL
+	// build provider-native payloads with the right identifier.
+	adapterModel := model
+	adapterModel.Name = upstreamName
+
 	// Determine if body needs mutation.
-	needsModelReplace := envelope.Model != model.Name
+	needsModelReplace := envelope.Model != upstreamName
 	needsStreamOpts := envelope.Stream && (adapter == nil || isAzureAdapter(adapter))
 
 	var modifiedBody []byte
 	if needsModelReplace || needsStreamOpts {
-		modifiedBody = mutateRequestBody(body, model.Name, needsStreamOpts)
+		modifiedBody = mutateRequestBody(body, upstreamName, needsStreamOpts)
 	} else {
 		// No JSON parse/serialize needed — model name is already canonical
 		// and no stream_options injection required. A defensive copy is still
@@ -921,7 +926,7 @@ func (p *ProxyHandler) buildUpstreamRequest(c fiber.Ctx, model Model, body []byt
 
 	if adapter != nil {
 		var transformErr error
-		modifiedBody, transformErr = adapter.TransformRequest(modifiedBody, model)
+		modifiedBody, transformErr = adapter.TransformRequest(modifiedBody, adapterModel)
 		if transformErr != nil {
 			p.Log.LogAttrs(c.Context(), slog.LevelWarn, "adapter transform request failed",
 				slog.String("error", transformErr.Error()),
@@ -935,7 +940,7 @@ func (p *ProxyHandler) buildUpstreamRequest(c fiber.Ctx, model Model, body []byt
 
 	var upstreamURL string
 	if adapter != nil {
-		upstreamURL = adapter.TransformURL(model.BaseURL, upstreamPath, model)
+		upstreamURL = adapter.TransformURL(model.BaseURL, upstreamPath, adapterModel)
 	} else {
 		upstreamURL = strings.TrimRight(model.BaseURL, "/") + "/" + upstreamPath
 	}
@@ -999,7 +1004,7 @@ func (p *ProxyHandler) buildUpstreamRequest(c fiber.Ctx, model Model, body []byt
 	setUpstreamHeaders(req, c, model)
 
 	if adapter != nil {
-		adapter.SetHeaders(req, model)
+		adapter.SetHeaders(req, adapterModel)
 	}
 
 	return req, upstreamCancel, adapter, nil
@@ -1072,6 +1077,9 @@ func (p *ProxyHandler) handleStreamingResponse(c fiber.Ctx, resp *http.Response,
 		defer streamTimer.Stop()
 
 		extractor := &streamUsageExtractor{}
+		// rewriteLine masks the upstream model name with the customer-facing
+		// product name on cross-model routes. Nil when no rewrite is needed.
+		rewriteLine := newStreamModelRewriter(model.UpstreamModel, requestedModelName)
 		scanner := bufio.NewScanner(resp.Body)
 		scanner.Buffer(make([]byte, 64*1024), 4*1024*1024) // up to 4MB per SSE line
 
@@ -1155,6 +1163,9 @@ func (p *ProxyHandler) handleStreamingResponse(c fiber.Ctx, resp *http.Response,
 							return false
 						}
 						continue
+					}
+					if rewriteLine != nil {
+						b = rewriteLine(b)
 					}
 					if _, err := w.Write(b); err != nil {
 						return false
@@ -1394,6 +1405,9 @@ func (p *ProxyHandler) handleStreamingResponse(c fiber.Ctx, resp *http.Response,
 							continue
 						}
 						extractor.observe(al)
+						if rewriteLine != nil {
+							al = rewriteLine(al)
+						}
 						if _, err := w.Write(al); err != nil {
 							break plainScanLoop
 						}
@@ -1412,6 +1426,9 @@ func (p *ProxyHandler) handleStreamingResponse(c fiber.Ctx, resp *http.Response,
 				// extractor can parse usage from all of them.
 				extractor.observe(line)
 
+				if rewriteLine != nil {
+					line = rewriteLine(line)
+				}
 				if _, err := w.Write(line); err != nil {
 					break // client disconnected
 				}
@@ -1538,6 +1555,12 @@ func (p *ProxyHandler) handleBufferedResponse(c fiber.Ctx, resp *http.Response, 
 		usageBody = responseBody // already OpenAI-shaped
 	}
 
+	// Cross-model routes must never leak the upstream model name to the
+	// customer: rewrite the response "model" field back to the product name.
+	if model.UpstreamModel != "" && resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		finalBody = rewriteModelInResponse(finalBody, model.UpstreamModel, requestedModelName)
+	}
+
 	// PII restore: replace pseudonyms with original values on all responses,
 	// including 4xx and 5xx. Provider error messages sometimes echo back
 	// parts of the request (e.g. the model name or request fields); if a
@@ -1584,16 +1607,48 @@ func (p *ProxyHandler) logUsageEvent(keyInfo *auth.KeyInfo, model Model, ui Usag
 
 	var cost *float64
 	if model.Pricing.InputPer1M > 0 || model.Pricing.OutputPer1M > 0 {
-		c := float64(ui.PromptTokens)/1_000_000*model.Pricing.InputPer1M +
+		// Cost is computed from the route that actually served the request:
+		// applyDeployment overlays per-deployment cost prices onto Pricing.
+		// Cache-hit prompt tokens are costed at the cached rate when set;
+		// cache-write tokens add the provider's write surcharge when set.
+		costCachedRate := model.Pricing.CachedInputPer1M
+		if costCachedRate == 0 {
+			costCachedRate = model.Pricing.InputPer1M
+		}
+		freshPrompt := ui.PromptTokens - ui.CachedTokens
+		if freshPrompt < 0 {
+			freshPrompt = 0
+		}
+		c := float64(freshPrompt)/1_000_000*model.Pricing.InputPer1M +
+			float64(ui.CachedTokens)/1_000_000*costCachedRate +
 			float64(ui.CompletionTokens)/1_000_000*model.Pricing.OutputPer1M
+		if model.Pricing.CacheWritePer1M > 0 && ui.CacheWriteTokens > 0 {
+			c += float64(ui.CacheWriteTokens) / 1_000_000 * model.Pricing.CacheWritePer1M
+		}
 		cost = &c
 	}
 
-	// Revenue: what the customer's wallet is charged, from the model's sell
-	// prices. Cached prompt tokens are billed at the cached rate when
-	// configured, falling back to the full input rate.
+	// Revenue: what the customer's wallet is charged. Per-request and per-token
+	// modes stack when both are enabled on the model.
 	var revenue *float64
-	if model.SellInputPer1M != nil || model.SellOutputPer1M != nil {
+	var rev float64
+	hasRevenue := false
+
+	billPerToken := model.BillPerToken
+	billPerRequest := model.BillPerRequest
+	// Legacy registry entries may omit billing flags; infer token billing when
+	// sell prices are configured and no explicit mode is enabled.
+	if !billPerToken && !billPerRequest &&
+		(model.SellInputPer1M != nil || model.SellOutputPer1M != nil) {
+		billPerToken = true
+	}
+
+	if billPerRequest && model.SellPerRequest != nil && *model.SellPerRequest > 0 {
+		rev += *model.SellPerRequest
+		hasRevenue = true
+	}
+
+	if billPerToken && (model.SellInputPer1M != nil || model.SellOutputPer1M != nil) {
 		sellIn, sellOut := 0.0, 0.0
 		if model.SellInputPer1M != nil {
 			sellIn = *model.SellInputPer1M
@@ -1609,10 +1664,14 @@ func (p *ProxyHandler) logUsageEvent(keyInfo *auth.KeyInfo, model Model, ui Usag
 		if freshPrompt < 0 {
 			freshPrompt = 0
 		}
-		r := float64(freshPrompt)/1_000_000*sellIn +
+		rev += float64(freshPrompt)/1_000_000*sellIn +
 			float64(ui.CachedTokens)/1_000_000*cachedRate +
 			float64(ui.CompletionTokens)/1_000_000*sellOut
-		revenue = &r
+		hasRevenue = true
+	}
+
+	if hasRevenue {
+		revenue = &rev
 	}
 
 	var tps *float64
@@ -1666,6 +1725,10 @@ func deploymentKey(modelName, deploymentName string) string {
 // It is safe to call on a copy returned by resolveModel because that copy has
 // its own backing arrays and no pointer aliasing with the registry's internal
 // state.
+//
+// Cost prices configured on the deployment overlay the model-level Pricing so
+// that downstream cost accounting (logUsageEvent) always reflects the route
+// that actually served the request.
 func applyDeployment(model *Model, dep Deployment) {
 	model.Provider = dep.Provider
 	model.BaseURL = dep.BaseURL
@@ -1674,18 +1737,45 @@ func applyDeployment(model *Model, dep Deployment) {
 	model.AzureAPIVersion = dep.AzureAPIVersion
 	model.GCPProject = dep.GCPProject
 	model.GCPLocation = dep.GCPLocation
+	model.UpstreamModel = dep.UpstreamModel
+	if dep.CostInputPer1M != nil {
+		model.Pricing.InputPer1M = *dep.CostInputPer1M
+	}
+	if dep.CostOutputPer1M != nil {
+		model.Pricing.OutputPer1M = *dep.CostOutputPer1M
+	}
+	if dep.CostCachedInputPer1M != nil {
+		model.Pricing.CachedInputPer1M = *dep.CostCachedInputPer1M
+	}
+	if dep.CostCacheWritePer1M != nil {
+		model.Pricing.CacheWritePer1M = *dep.CostCacheWritePer1M
+	}
 }
 
 // isRetryable reports whether an HTTP status code from an upstream response
-// should cause the proxy to attempt the next deployment candidate. 5xx errors
-// indicate a server-side problem that a different backend may not share.
-// 4xx errors are client errors that will recur regardless of which deployment
-// is used, so they are not retried.
+// should cause the proxy to attempt the next deployment candidate.
+//
+//   - 5xx: server-side problem a different backend may not share.
+//   - 429: the upstream account/key is rate-limited or out of quota; another
+//     route (different provider account) is unaffected.
+//   - 401/403: the upstream key is invalid, expired, or lacks permission for
+//     the requested model. These are OUR credentials, not the customer's —
+//     the customer's request is fine and another route may serve it.
+//
+// Other 4xx (400, 404, 413, 422...) are genuine client errors that will recur
+// on any deployment and are not retried.
 func isRetryable(statusCode int) bool {
-	return statusCode == http.StatusInternalServerError ||
-		statusCode == http.StatusBadGateway ||
-		statusCode == http.StatusServiceUnavailable ||
-		statusCode == http.StatusGatewayTimeout
+	switch statusCode {
+	case http.StatusInternalServerError,
+		http.StatusBadGateway,
+		http.StatusServiceUnavailable,
+		http.StatusGatewayTimeout,
+		http.StatusTooManyRequests,
+		http.StatusUnauthorized,
+		http.StatusForbidden:
+		return true
+	}
+	return statusCode >= 500 && statusCode < 600
 }
 
 // extractUsage parses token counts from a non-streaming OpenAI-format response
@@ -1700,6 +1790,7 @@ func extractUsage(body []byte) UsageInfo {
 			PromptTokensDetails *struct {
 				CachedTokens int `json:"cached_tokens"`
 			} `json:"prompt_tokens_details"`
+			CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
 		} `json:"usage"`
 	}
 	if jsonx.Unmarshal(body, &resp) != nil || resp.Usage == nil {
@@ -1714,6 +1805,7 @@ func extractUsage(body []byte) UsageInfo {
 		CompletionTokens: resp.Usage.CompletionTokens,
 		TotalTokens:      resp.Usage.TotalTokens,
 		CachedTokens:     cached,
+		CacheWriteTokens: resp.Usage.CacheCreationInputTokens,
 	}
 }
 
@@ -1741,9 +1833,13 @@ func mutateRequestBody(body []byte, canonicalModel string, injectUsage bool) []b
 // fallback to the next model in the chain.
 //
 // Network / DNS / dial / timeout errors are eligible. Context cancellation is
-// NOT eligible — the client went away and there is no point retrying. 5xx
-// responses are eligible; 4xx are not (bad request or auth failure will recur
-// on any backend).
+// NOT eligible — the client went away and there is no point retrying. 5xx and
+// 429 responses are eligible. 401/403 are also eligible: they indicate a
+// failure of OUR upstream credentials for that route, not a problem with the
+// customer's request, so another model/route may still serve it (mirrors
+// isRetryable's treatment of the same statuses within a model's deployment
+// candidates). Other 4xx (400, 404, 413, 422...) are genuine client errors
+// that will recur on any backend and are not eligible.
 func isFallbackEligible(statusCode int, err error) bool {
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
@@ -1751,7 +1847,63 @@ func isFallbackEligible(statusCode int, err error) bool {
 		}
 		return true
 	}
+	if statusCode == http.StatusUnauthorized || statusCode == http.StatusForbidden {
+		return true
+	}
 	return statusCode >= 500 && statusCode < 600
+}
+
+// rewriteModelInResponse overwrites the "model" field of an upstream response
+// body with the customer-facing product name. Used on cross-model routes so
+// the upstream model identity never leaks to the customer. If the body is not
+// JSON or has no model field it is returned unchanged; upstreamName is
+// accepted for symmetry with the stream rewriter but the field is overwritten
+// regardless of its current value (providers may return versioned names, e.g.
+// requesting "gpt-4o" answers "gpt-4o-2024-11-20").
+func rewriteModelInResponse(body []byte, upstreamName, productName string) []byte {
+	_ = upstreamName
+	var doc map[string]jsonx.RawMessage
+	if jsonx.Unmarshal(body, &doc) != nil {
+		return body
+	}
+	if _, ok := doc["model"]; !ok {
+		return body
+	}
+	nameJSON, err := jsonx.Marshal(productName)
+	if err != nil {
+		return body
+	}
+	doc["model"] = jsonx.RawMessage(nameJSON)
+	out, err := jsonx.Marshal(doc)
+	if err != nil {
+		return body
+	}
+	return out
+}
+
+// newStreamModelRewriter returns a per-line rewriter that replaces the
+// upstream model name with the product name inside SSE data lines, or nil
+// when no rewrite is needed (hot paths skip on nil). The replacement is a
+// targeted byte substitution on the "model" JSON field — a full JSON parse
+// per chunk would be too expensive on the streaming hot path. Both compact
+// and spaced JSON encodings are handled.
+func newStreamModelRewriter(upstreamName, productName string) func([]byte) []byte {
+	if upstreamName == "" || upstreamName == productName {
+		return nil
+	}
+	oldCompact := []byte(`"model":"` + upstreamName + `"`)
+	newCompact := []byte(`"model":"` + productName + `"`)
+	oldSpaced := []byte(`"model": "` + upstreamName + `"`)
+	newSpaced := []byte(`"model": "` + productName + `"`)
+	return func(line []byte) []byte {
+		if bytes.Contains(line, oldCompact) {
+			return bytes.Replace(line, oldCompact, newCompact, 1)
+		}
+		if bytes.Contains(line, oldSpaced) {
+			return bytes.Replace(line, oldSpaced, newSpaced, 1)
+		}
+		return line
+	}
 }
 
 // rewriteModelInBody replaces the "model" field inside a JSON request body

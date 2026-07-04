@@ -3,12 +3,16 @@ package admin
 import (
 	"errors"
 	"log/slog"
+	"regexp"
+	"strings"
 
 	"github.com/gofiber/fiber/v3"
 
 	"github.com/voidmind-io/voidllm/internal/apierror"
 	"github.com/voidmind-io/voidllm/internal/auth"
 	"github.com/voidmind-io/voidllm/internal/db"
+	"github.com/voidmind-io/voidllm/internal/provider"
+	"github.com/voidmind-io/voidllm/pkg/crypto"
 )
 
 // providerRequest is the JSON body for creating/updating a provider.
@@ -17,18 +21,57 @@ type providerRequest struct {
 	ContactInfo *string `json:"contact_info"`
 	Status      *string `json:"status"`
 	Notes       *string `json:"notes"`
+	// Slug is a short unique handle used to label routes ("openai", "ds").
+	// Set to empty string to clear.
+	Slug *string `json:"slug"`
+	// Protocol is the default wire protocol for routes created from this
+	// provider. One of provider.ValidProviders.
+	Protocol *string `json:"protocol"`
+	Logo     *string `json:"logo"`
+	BaseURL  *string `json:"base_url"`
+	// APIKey is the default upstream API key in plaintext; it is encrypted
+	// before storage and never returned. Set to empty string to clear.
+	APIKey *string `json:"api_key"`
+}
+
+// slugRe constrains slugs to short lowercase identifiers safe for display
+// and for use as route labels.
+var slugRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
+
+func providerAAD(id string) []byte {
+	return []byte("provider:" + id)
 }
 
 func providerToJSON(p *db.Provider) fiber.Map {
+	slug := ""
+	if p.Slug != nil {
+		slug = *p.Slug
+	}
 	return fiber.Map{
 		"id":           p.ID,
 		"name":         p.Name,
 		"contact_info": p.ContactInfo,
 		"status":       p.Status,
 		"notes":        p.Notes,
+		"slug":         slug,
+		"protocol":     p.Protocol,
+		"logo":         p.Logo,
+		"base_url":     p.BaseURL,
+		"has_api_key":  p.APIKeyEncrypted != nil,
 		"created_at":   p.CreatedAt,
 		"updated_at":   p.UpdatedAt,
 	}
+}
+
+// validateProviderFields checks slug/protocol values shared by create and update.
+func validateProviderFields(req *providerRequest) string {
+	if req.Slug != nil && *req.Slug != "" && !slugRe.MatchString(*req.Slug) {
+		return "slug must be 1-32 lowercase letters, digits, or hyphens"
+	}
+	if req.Protocol != nil && !provider.ValidProviders[*req.Protocol] {
+		return "protocol must be one of: " + strings.Join(provider.Names(), ", ")
+	}
+	return ""
 }
 
 // CreateProvider handles POST /api/v1/providers (system_admin).
@@ -47,22 +90,57 @@ func (h *Handler) CreateProvider(c fiber.Ctx) error {
 		}
 		status = *req.Status
 	}
-	contact, notes := "", ""
+	if msg := validateProviderFields(&req); msg != "" {
+		return apierror.BadRequest(c, msg)
+	}
+	contact, notes, protocol, logo, baseURL := "", "", "openai", "", ""
 	if req.ContactInfo != nil {
 		contact = *req.ContactInfo
 	}
 	if req.Notes != nil {
 		notes = *req.Notes
 	}
+	if req.Protocol != nil {
+		protocol = *req.Protocol
+	}
+	if req.Logo != nil {
+		logo = *req.Logo
+	}
+	if req.BaseURL != nil {
+		baseURL = *req.BaseURL
+	}
+	var slug *string
+	if req.Slug != nil && *req.Slug != "" {
+		slug = req.Slug
+	}
 
-	provider, err := h.DB.CreateProvider(c.Context(), db.CreateProviderParams{
+	created, err := h.DB.CreateProvider(c.Context(), db.CreateProviderParams{
 		Name: *req.Name, ContactInfo: contact, Status: status, Notes: notes,
+		Slug: slug, Protocol: protocol, Logo: logo, BaseURL: baseURL,
 	})
 	if err != nil {
+		if errors.Is(err, db.ErrConflict) {
+			return apierror.Send(c, fiber.StatusConflict, "conflict", "slug already in use")
+		}
 		h.Log.ErrorContext(c.Context(), "create provider", slog.String("error", err.Error()))
 		return apierror.InternalError(c, "failed to create provider")
 	}
-	return c.Status(fiber.StatusCreated).JSON(providerToJSON(provider))
+
+	// The API key is encrypted with the provider ID as AAD, so it can only be
+	// stored after the row exists and its ID is known.
+	if req.APIKey != nil && *req.APIKey != "" {
+		enc, encErr := crypto.EncryptString(*req.APIKey, h.EncryptionKey, providerAAD(created.ID))
+		if encErr != nil {
+			h.Log.ErrorContext(c.Context(), "encrypt provider api key", slog.String("error", encErr.Error()))
+			return apierror.InternalError(c, "failed to store api key")
+		}
+		created, err = h.DB.UpdateProvider(c.Context(), created.ID, db.UpdateProviderParams{APIKeyEncrypted: &enc})
+		if err != nil {
+			h.Log.ErrorContext(c.Context(), "store provider api key", slog.String("error", err.Error()))
+			return apierror.InternalError(c, "failed to store api key")
+		}
+	}
+	return c.Status(fiber.StatusCreated).JSON(providerToJSON(created))
 }
 
 // ListProviders handles GET /api/v1/providers (system_admin).
@@ -113,18 +191,41 @@ func (h *Handler) UpdateProvider(c fiber.Ctx) error {
 	if req.Status != nil && *req.Status != "active" && *req.Status != "paused" {
 		return apierror.BadRequest(c, `status must be "active" or "paused"`)
 	}
+	if msg := validateProviderFields(&req); msg != "" {
+		return apierror.BadRequest(c, msg)
+	}
 
-	provider, err := h.DB.UpdateProvider(c.Context(), c.Params("provider_id"), db.UpdateProviderParams{
+	providerID := c.Params("provider_id")
+	params := db.UpdateProviderParams{
 		Name: req.Name, ContactInfo: req.ContactInfo, Status: req.Status, Notes: req.Notes,
-	})
+		Slug: req.Slug, Protocol: req.Protocol, Logo: req.Logo, BaseURL: req.BaseURL,
+	}
+	if req.APIKey != nil {
+		if *req.APIKey == "" {
+			empty := ""
+			params.APIKeyEncrypted = &empty // clears the stored key
+		} else {
+			enc, encErr := crypto.EncryptString(*req.APIKey, h.EncryptionKey, providerAAD(providerID))
+			if encErr != nil {
+				h.Log.ErrorContext(c.Context(), "encrypt provider api key", slog.String("error", encErr.Error()))
+				return apierror.InternalError(c, "failed to store api key")
+			}
+			params.APIKeyEncrypted = &enc
+		}
+	}
+
+	updated, err := h.DB.UpdateProvider(c.Context(), providerID, params)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
 			return apierror.NotFound(c, "provider not found")
 		}
+		if errors.Is(err, db.ErrConflict) {
+			return apierror.Send(c, fiber.StatusConflict, "conflict", "slug already in use")
+		}
 		h.Log.ErrorContext(c.Context(), "update provider", slog.String("error", err.Error()))
 		return apierror.InternalError(c, "failed to update provider")
 	}
-	return c.JSON(providerToJSON(provider))
+	return c.JSON(providerToJSON(updated))
 }
 
 // DeleteProvider handles DELETE /api/v1/providers/:provider_id (system_admin).
