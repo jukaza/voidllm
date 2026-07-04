@@ -16,6 +16,8 @@ VoidLLM is a single binary that combines a **public storefront**, **OpenAI-compa
 
 Sub-2ms proxy overhead. Zero-knowledge by architecture: prompts and responses never touch disk.
 
+> **Current phase:** API routing and key issuance first. Wallet top-up enforcement is **off by default** (`settings.wallet.enforce_balance: false`) so customers can call the proxy immediately after signup. Turn billing on when you are ready to go live with prepaid balances.
+
 ![VoidLLM Dashboard](docs/screenshots/VoidLLM-Dashboard.jpg)
 
 <details>
@@ -44,8 +46,10 @@ One deployment. No separate frontend server — the UI is embedded in the Go bin
 ## Customer journey
 
 1. **Sign up** at `/register` — account, wallet, and first API key are created automatically
-2. **Top up** — customer requests a top-up; you approve it in the admin queue
+2. **Get an API key** — issued on signup; create more from the dashboard
 3. **Call the API** — point any OpenAI SDK at your VoidLLM base URL
+
+When you enable `settings.wallet.enforce_balance: true`, add a top-up step: customers request credits, you approve them in the admin queue, and empty wallets receive `402`.
 
 ```bash
 curl http://localhost:8080/v1/chat/completions \
@@ -175,6 +179,8 @@ settings:
   encryption_key: ${VOIDLLM_ENCRYPTION_KEY}
   bootstrap:
     admin_email: admin@voidllm.local
+  wallet:
+    enforce_balance: false   # true = require positive balance (402 when empty)
 ```
 
 Supported upstream providers: `openai` · `anthropic` · `azure` · `vllm` · `ollama` · `custom`

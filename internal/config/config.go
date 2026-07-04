@@ -407,6 +407,7 @@ type SettingsConfig struct {
 	AdminKey      string `yaml:"admin_key" json:"-"`
 	EncryptionKey string `yaml:"encryption_key" json:"-"`
 	Bootstrap      BootstrapConfig      `yaml:"bootstrap"`
+	Wallet         WalletConfig         `yaml:"wallet"`
 	Usage          UsageConfig          `yaml:"usage"`
 	Audit          AuditConfig          `yaml:"audit"`
 	OTel           OTelConfig           `yaml:"otel"`
@@ -440,6 +441,22 @@ func (s SettingsConfig) GetSoftLimitThreshold() float64 {
 		return 0.9
 	}
 	return *s.SoftLimitThreshold
+}
+
+// WalletConfig controls prepaid-wallet billing on the proxy hot path.
+type WalletConfig struct {
+	// EnforceBalance rejects proxy requests when the user's wallet balance is
+	// zero or negative (HTTP 402). Defaults to false so early deployments can
+	// issue API keys and route traffic before top-up flows are live.
+	EnforceBalance *bool `yaml:"enforce_balance"`
+}
+
+// ShouldEnforceBalance returns false when enforce_balance is unset or false.
+func (w WalletConfig) ShouldEnforceBalance() bool {
+	if w.EnforceBalance == nil {
+		return false
+	}
+	return *w.EnforceBalance
 }
 
 // UsageConfig holds settings for the async usage logging subsystem.

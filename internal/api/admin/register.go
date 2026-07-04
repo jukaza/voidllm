@@ -99,7 +99,7 @@ func (h *Handler) Register(c fiber.Ctx) error {
 		return apierror.InternalError(c, "signup failed")
 	}
 
-	// Empty prepaid wallet; requests are rejected with 402 until topped up.
+	// Empty prepaid wallet; debits apply only when settings.wallet.enforce_balance is true.
 	if _, err := h.DB.CreateWallet(ctx, user.ID, ""); err != nil {
 		h.Log.ErrorContext(ctx, "register: create wallet", slog.String("error", err.Error()))
 		return apierror.InternalError(c, "signup failed")

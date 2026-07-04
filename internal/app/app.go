@@ -506,7 +506,12 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 
 	// Step 8: start usage logger (always) and audit logger (if enabled).
 	usageLogger = usage.NewLogger(database, cfg.Settings.Usage, log, tokenCounter)
-	usageLogger.SetWallet(walletService)
+	if cfg.Settings.Wallet.ShouldEnforceBalance() {
+		usageLogger.SetWallet(walletService)
+		log.LogAttrs(ctx, slog.LevelInfo, "wallet billing enforcement enabled")
+	} else {
+		log.LogAttrs(ctx, slog.LevelInfo, "wallet billing enforcement disabled — API keys work without top-up")
+	}
 	usageLogger.Start()
 
 	metrics.RegisterDBCollectors(database.SQL())
@@ -662,7 +667,9 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 	proxyHandler.UsageLogger = usageLogger
 	proxyHandler.RateLimiter = rateLimiter
 	proxyHandler.TokenCounter = tokenCounter
-	proxyHandler.Wallet = walletService
+	if cfg.Settings.Wallet.ShouldEnforceBalance() {
+		proxyHandler.Wallet = walletService
+	}
 	proxyHandler.UpstreamLimiter = upstreamLimiter
 	proxyHandler.ShutdownState = shutdownState
 	proxyHandler.Tracer = tracer
