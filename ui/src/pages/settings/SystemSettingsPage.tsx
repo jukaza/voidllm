@@ -11,9 +11,10 @@ import { useToast } from '../../hooks/useToast'
 import { useTranslation } from '../../lib/i18n'
 import { NoticeListEditor } from './NoticeListEditor'
 import { PaymentSettingsTab } from './PaymentSettingsTab'
+import { EmailSettingsTab } from './EmailSettingsTab'
 import type { SiteAnnouncement } from '../../lib/announcements'
 
-type SettingsTab = 'system' | 'legal' | 'notice' | 'payment'
+type SettingsTab = 'system' | 'legal' | 'notice' | 'payment' | 'email'
 
 function SectionCard({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
   return (
@@ -71,6 +72,7 @@ export default function SystemSettingsPage() {
   const tabs = [
     { key: 'system', label: t('settings.tab_system') },
     { key: 'payment', label: t('settings.tab_payment') },
+    { key: 'email', label: t('settings.tab_email') },
     { key: 'legal', label: t('settings.tab_legal') },
     { key: 'notice', label: t('settings.tab_notice') },
   ]
@@ -176,6 +178,8 @@ export default function SystemSettingsPage() {
       )}
 
       {tab === 'payment' && <PaymentSettingsTab />}
+
+      {tab === 'email' && <EmailSettingsTab />}
 
       {tab === 'legal' && (
         <SectionCard title={t('settings.legal_docs')} description={t('settings.legal_docs_hint')}>
