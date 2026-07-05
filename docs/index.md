@@ -38,6 +38,10 @@ Privacy-first LLM proxy and AI gateway. Self-hosted, single binary, sub-500us ov
 - [Overview](api/overview.md) - authentication, endpoints, error codes
 - [OpenAPI Spec](api/swagger.yaml) - full API specification
 
+## Frontend (đang triển khai)
+
+- [Cài đặt hệ thống & Tài khoản (FE)](fe-settings-account.md) - redesign `/settings` và `/account`, Live/Preview, roadmap backend (tiếng Việt)
+
 ## Resources
 
 - [Troubleshooting](troubleshooting.md) - common issues and solutions

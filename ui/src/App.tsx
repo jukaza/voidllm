@@ -20,7 +20,7 @@ import AnalyticsOverviewPage from './pages/analytics/AnalyticsOverviewPage'
 import RequestLogsPage from './pages/analytics/RequestLogsPage'
 import ProfitPage from './pages/analytics/ProfitPage'
 import ChannelsPage from './pages/analytics/ChannelsPage'
-import ProfilePage from './pages/ProfilePage'
+import AccountSettingsPage from './pages/account/AccountSettingsPage'
 import PlaygroundPage from './pages/PlaygroundPage'
 import SystemUsersPage from './pages/SystemUsersPage'
 import CatalogPage from './pages/CatalogPage'
@@ -104,7 +104,8 @@ export default function App() {
                 <Route path="/usage" element={<Navigate to="/analytics" replace />} />
                 <Route path="/usage/*" element={<Navigate to="/analytics" replace />} />
                 <Route path="/cost-reports" element={<Navigate to="/analytics/profit" replace />} />
-                <Route path="/profile" element={<ProfilePage />} />
+                <Route path="/account" element={<AccountSettingsPage />} />
+                <Route path="/profile" element={<Navigate to="/account" replace />} />
                 <Route path="/users" element={<SystemUsersPage />} />
                 <Route path="/settings" element={<SystemSettingsPage />} />
                 <Route path="/settings/*" element={<Navigate to="/settings" replace />} />

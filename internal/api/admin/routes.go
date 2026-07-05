@@ -151,7 +151,5 @@ func RegisterRoutes(app *fiber.App, handler *Handler, keyCache *cache.Cache[stri
 	api.Put("/admin/settings/site", auth.RequireRole(auth.RoleSystemAdmin), handler.UpdateAdminSite)
 	api.Get("/admin/settings/payment", auth.RequireRole(auth.RoleSystemAdmin), handler.GetAdminPaymentSettings)
 	api.Put("/admin/settings/payment", auth.RequireRole(auth.RoleSystemAdmin), handler.UpdateAdminPaymentSettings)
-	api.Get("/admin/settings/email", auth.RequireRole(auth.RoleSystemAdmin), handler.GetAdminEmailSettings)
-	api.Put("/admin/settings/email", auth.RequireRole(auth.RoleSystemAdmin), handler.UpdateAdminEmailSettings)
 
 }

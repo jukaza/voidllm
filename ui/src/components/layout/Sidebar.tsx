@@ -153,6 +153,15 @@ function IconWallet() {
   )
 }
 
+function IconUser() {
+  return (
+    <svg {...iconProps}>
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </svg>
+  )
+}
+
 function buildNavigation(t: any): NavGroup[] {
   return [
     {
@@ -168,6 +177,7 @@ function buildNavigation(t: any): NavGroup[] {
       items: [
         { label: t('sidebar.catalog'), path: '/catalog', icon: <IconCatalog /> },
         { label: t('sidebar.keys'), path: '/keys', icon: <IconKey /> },
+        { label: t('sidebar.account'), path: '/account', icon: <IconUser /> },
         { label: t('sidebar.analytics'), path: '/analytics', icon: <IconBarChart /> },
       ],
     },
@@ -304,7 +314,7 @@ export function Sidebar() {
 
         <div className="flex items-center gap-1.5 min-w-0">
           <Link
-            to="/profile"
+            to="/account"
             className="min-w-0 flex-1 truncate text-[11px] text-text-secondary hover:text-text-primary transition-colors no-underline"
             title={data?.display_name || data?.email || '...'}
           >
@@ -339,10 +349,10 @@ export function Sidebar() {
             </button>
           </div>
           <Link
-            to="/profile"
+            to="/account"
             className="flex-1 py-1 rounded-md border border-white/10 text-[10px] text-text-secondary text-center no-underline transition-colors hover:border-accent/40 hover:text-text-primary"
           >
-            {t('sidebar.profile')}
+            {t('sidebar.account')}
           </Link>
           <button
             type="button"

@@ -15,16 +15,25 @@ import {
   type TierBonus,
 } from '../../hooks/usePaymentSettings'
 import { formatCost } from '../../lib/utils'
+import { LiveBadge } from './components/PreviewBadge'
+import { SettingsSectionCard } from './components/SettingsSectionCard'
+import { SettingsTabFooter } from './components/SettingsTabFooter'
 
-function SectionCard({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
+function SectionCard({
+  title,
+  description,
+  children,
+  badge,
+}: {
+  title: string
+  description?: string
+  children: React.ReactNode
+  badge?: React.ReactNode
+}) {
   return (
-    <div className="rounded-lg border border-border bg-bg-secondary mb-6">
-      <div className="px-6 py-4 border-b border-border">
-        <h2 className="text-sm font-semibold text-text-primary">{title}</h2>
-        {description && <p className="mt-1 text-xs text-text-tertiary">{description}</p>}
-      </div>
-      <div className="p-6 space-y-5">{children}</div>
-    </div>
+    <SettingsSectionCard title={title} description={description} badge={badge} className="mb-6">
+      {children}
+    </SettingsSectionCard>
   )
 }
 
@@ -219,7 +228,11 @@ export function PaymentSettingsTab() {
         </div>
       </SectionCard>
 
-      <SectionCard title={t('settings.payment_sepay_title')} description={t('settings.payment_sepay_desc')}>
+      <SectionCard
+        title={t('settings.payment_sepay_title')}
+        description={t('settings.payment_sepay_desc')}
+        badge={<LiveBadge />}
+      >
         <Toggle
           checked={form.sepay.enabled}
           onChange={(v) => setForm({ ...form, sepay: { ...form.sepay, enabled: v } })}
@@ -607,11 +620,7 @@ export function PaymentSettingsTab() {
         </div>
       </SectionCard>
 
-      <div className="flex justify-end">
-        <Button loading={update.isPending} onClick={save}>
-          {t('common.save')}
-        </Button>
-      </div>
+      <SettingsTabFooter mode="live" loading={update.isPending} onSave={save} />
     </div>
   )
 }
