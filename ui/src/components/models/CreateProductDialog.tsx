@@ -54,6 +54,7 @@ export function CreateProductDialog({ open, onClose }: CreateProductDialogProps)
   const [sellPerRequest, setSellPerRequest] = useState('')
   const [sellMinPerRequest, setSellMinPerRequest] = useState('')
   const [isPublic, setIsPublic] = useState(false)
+  const [aliases, setAliases] = useState('')
   const [strategy, setStrategy] = useState('fallback')
   const [stickyLimit, setStickyLimit] = useState('')
   const [rpmLimit, setRpmLimit] = useState('')
@@ -90,6 +91,7 @@ export function CreateProductDialog({ open, onClose }: CreateProductDialogProps)
     setSellPerRequest('')
     setSellMinPerRequest('')
     setIsPublic(false)
+    setAliases('')
     setStrategy('fallback')
     setStickyLimit('')
     setRpmLimit('')
@@ -149,11 +151,17 @@ export function CreateProductDialog({ open, onClose }: CreateProductDialogProps)
     const hasAnySellPrice =
       hasSellInput || hasSellOutput || hasSellCached || hasSellCacheWrite || hasSellPerReq
 
+    const aliasList = aliases.split(',').map((a) => a.trim()).filter(Boolean)
+
     const params: CreateModelParams = {
       name: name.trim(),
       type: 'chat',
       strategy: 'priority',
       is_public: isPublic,
+    }
+
+    if (aliasList.length > 0) {
+      params.aliases = aliasList
     }
 
     if (logo.trim()) {
@@ -345,6 +353,14 @@ export function CreateProductDialog({ open, onClose }: CreateProductDialogProps)
                 disabled={isPending}
               />
               <Toggle checked={isPublic} onChange={setIsPublic} label={t('models.public_storefront')} disabled={isPending} size="sm" />
+              <Input
+                label={t('models.col_aliases')}
+                value={aliases}
+                onChange={(e) => setAliases(e.target.value)}
+                placeholder="gpt-4o-mini, smart-chat"
+                description={t('models.col_aliases_hint')}
+                disabled={isPending}
+              />
               <Input
                 label={t('models.rpm_limit')}
                 type="number"

@@ -6,7 +6,11 @@ import React, {
   useRef,
   useState,
 } from 'react'
+import ReactDOM from 'react-dom'
 import { cn } from '../../lib/utils'
+
+const DROPDOWN_MAX_HEIGHT = 240
+const MENU_MIN_WIDTH_WITH_DESC = 280
 
 export interface SelectOption {
   value: string
@@ -55,7 +59,9 @@ export const Select = React.forwardRef<HTMLButtonElement, SelectProps>(
     const [dropAbove, setDropAbove] = useState(false)
 
     const containerRef = useRef<HTMLDivElement>(null)
+    const dropdownRef = useRef<HTMLDivElement>(null)
     const searchInputRef = useRef<HTMLInputElement>(null)
+    const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({})
     // Internal ref for the trigger — needed for focus-return and viewport flip
     const internalRef = useRef<HTMLButtonElement>(null)
 
@@ -107,11 +113,49 @@ export const Select = React.forwardRef<HTMLButtonElement, SelectProps>(
       closeDropdownRef.current = closeDropdown
     }, [closeDropdown])
 
-    // Outside click closes dropdown (no focus return — user clicked elsewhere)
+    const updateMenuPosition = useCallback(() => {
+      const el = internalRef.current
+      if (!el) return
+
+      const rect = el.getBoundingClientRect()
+      const hasDescription = options.some(
+        (o) => o.description != null && o.description !== '',
+      )
+      const menuWidth = hasDescription
+        ? Math.max(rect.width, MENU_MIN_WIDTH_WITH_DESC)
+        : rect.width
+
+      let left = rect.left
+      if (left + menuWidth > window.innerWidth - 8) {
+        left = Math.max(8, window.innerWidth - menuWidth - 8)
+      }
+
+      const spaceBelow = window.innerHeight - rect.bottom
+      const spaceAbove = rect.top
+      const openAbove = spaceBelow < DROPDOWN_MAX_HEIGHT && spaceAbove > spaceBelow
+
+      setDropAbove(openAbove)
+      setMenuStyle({
+        position: 'fixed',
+        left,
+        width: menuWidth,
+        zIndex: 200,
+        maxHeight: DROPDOWN_MAX_HEIGHT,
+        ...(openAbove
+          ? { bottom: window.innerHeight - rect.top + 4 }
+          : { top: rect.bottom + 4 }),
+      })
+    }, [options])
+
+    // Outside click closes dropdown (portal menu is outside containerRef)
     useEffect(() => {
       if (!isOpen) return
       const handleMouseDown = (e: MouseEvent) => {
-        if (!containerRef.current?.contains(e.target as Node)) {
+        const target = e.target as Node
+        if (
+          !containerRef.current?.contains(target) &&
+          !dropdownRef.current?.contains(target)
+        ) {
           closeDropdownRef.current()
         }
       }
@@ -143,20 +187,19 @@ export const Select = React.forwardRef<HTMLButtonElement, SelectProps>(
       }
     }, [isOpen, searchable])
 
-    // Fix 5: Check viewport space and flip dropdown above if needed.
-    // The setState call is deferred via rAF to avoid calling setState
-    // synchronously inside an effect body (react-hooks/set-state-in-effect).
+    // Portal menu: position on open and keep aligned while scrolling/resizing.
     useEffect(() => {
-      if (!isOpen || !internalRef.current) return
-      const el = internalRef.current
-      const rafId = requestAnimationFrame(() => {
-        const rect = el.getBoundingClientRect()
-        const spaceBelow = window.innerHeight - rect.bottom
-        const dropdownHeight = 240 // max-h-60 = 15rem = 240px
-        setDropAbove(spaceBelow < dropdownHeight && rect.top > dropdownHeight)
-      })
-      return () => cancelAnimationFrame(rafId)
-    }, [isOpen])
+      if (!isOpen) return
+      const rafId = requestAnimationFrame(updateMenuPosition)
+      const onReposition = () => updateMenuPosition()
+      window.addEventListener('resize', onReposition)
+      window.addEventListener('scroll', onReposition, true)
+      return () => {
+        cancelAnimationFrame(rafId)
+        window.removeEventListener('resize', onReposition)
+        window.removeEventListener('scroll', onReposition, true)
+      }
+    }, [isOpen, updateMenuPosition, filteredOptions.length, search])
 
     const handleTriggerKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
       if (disabled) return
@@ -280,79 +323,80 @@ export const Select = React.forwardRef<HTMLButtonElement, SelectProps>(
           </svg>
         </button>
 
-        {isOpen && (
-          <div
-            id={listboxId}
-            role="listbox"
-            aria-label={label}
-            // Fix 5: aria-activedescendant on search input when searchable
-            aria-activedescendant={
-              searchable && filteredOptions.length > 0
-                ? optionId(clampedHighlight)
-                : undefined
-            }
-            className={cn(
-              'absolute left-0 w-full bg-bg-secondary border border-border rounded-md shadow-lg z-40 max-h-60 overflow-y-auto',
-              // Fix 5: position above or below based on viewport space
-              dropAbove ? 'bottom-full mb-1' : 'top-full mt-1',
-            )}
-            onKeyDown={handleDropdownKeyDown}
-            tabIndex={-1}
-          >
-            {searchable && (
-              <div className="sticky top-0 bg-bg-secondary">
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  value={search}
-                  onChange={(e) => {
-                    setSearch(e.target.value)
-                    setHighlightIndex(0)
-                  }}
-                  placeholder="Search..."
-                  className="w-full px-3 py-2 text-sm bg-transparent border-b border-border text-text-primary placeholder:text-text-tertiary focus:outline-none"
-                />
-              </div>
-            )}
-
-            {filteredOptions.length > 0 ? (
-              filteredOptions.map((opt, i) => (
-                <div
-                  key={opt.value}
-                  id={optionId(i)}
-                  role="option"
-                  aria-selected={opt.value === value}
-                  onClick={() => handleOptionClick(opt.value)}
-                  onMouseEnter={() => setHighlightIndex(i)}
-                  className={cn(
-                    'px-3 py-2 text-sm cursor-pointer transition-colors',
-                    i === clampedHighlight && 'bg-bg-tertiary',
-                    opt.value === value && 'text-accent bg-accent/5',
-                    opt.value !== value && 'text-text-primary',
-                  )}
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    {opt.icon != null ? (
-                      <span className="shrink-0 leading-none">{opt.icon}</span>
-                    ) : null}
-                    <span className="min-w-0">
-                      {opt.label}
-                      {opt.description != null && (
-                        <span className="block text-xs text-text-tertiary mt-0.5">
-                          {opt.description}
-                        </span>
-                      )}
-                    </span>
-                  </div>
+        {isOpen &&
+          ReactDOM.createPortal(
+            <div
+              ref={dropdownRef}
+              id={listboxId}
+              role="listbox"
+              aria-label={label}
+              aria-activedescendant={
+                searchable && filteredOptions.length > 0
+                  ? optionId(clampedHighlight)
+                  : undefined
+              }
+              style={menuStyle}
+              className={cn(
+                'void-scroll overflow-y-auto rounded-md border border-border bg-bg-secondary shadow-xl shadow-black/30',
+                dropAbove ? 'origin-bottom' : 'origin-top',
+              )}
+              onKeyDown={handleDropdownKeyDown}
+              tabIndex={-1}
+            >
+              {searchable && (
+                <div className="sticky top-0 z-10 bg-bg-secondary">
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    value={search}
+                    onChange={(e) => {
+                      setSearch(e.target.value)
+                      setHighlightIndex(0)
+                    }}
+                    placeholder="Search..."
+                    className="w-full border-b border-border bg-transparent px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none"
+                  />
                 </div>
-              ))
-            ) : (
-              <div className="px-3 py-2 text-sm text-text-tertiary">
-                No results
-              </div>
-            )}
-          </div>
-        )}
+              )}
+
+              {filteredOptions.length > 0 ? (
+                filteredOptions.map((opt, i) => (
+                  <div
+                    key={opt.value}
+                    id={optionId(i)}
+                    role="option"
+                    aria-selected={opt.value === value}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => handleOptionClick(opt.value)}
+                    onMouseEnter={() => setHighlightIndex(i)}
+                    className={cn(
+                      'cursor-pointer px-3 py-2 text-sm transition-colors',
+                      i === clampedHighlight && 'bg-bg-tertiary',
+                      opt.value === value && 'bg-accent/5 text-accent',
+                      opt.value !== value && 'text-text-primary',
+                    )}
+                  >
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      {opt.icon != null ? (
+                        <span className="shrink-0 leading-none">{opt.icon}</span>
+                      ) : null}
+                      <span className="min-w-0">
+                        {opt.label}
+                        {opt.description != null && (
+                          <span className="mt-0.5 block text-xs leading-snug text-text-tertiary">
+                            {opt.description}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="px-3 py-2 text-sm text-text-tertiary">No results</div>
+              )}
+            </div>,
+            document.body,
+          )}
 
         {error != null && (
           <p id={errorId} role="alert" className="mt-1.5 text-xs text-error">

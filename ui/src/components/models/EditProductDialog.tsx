@@ -192,7 +192,8 @@ export function EditProductDialog({ model, onClose }: EditProductDialogProps) {
           label={t('models.col_aliases')}
           value={aliases}
           onChange={(e) => setAliases(e.target.value)}
-          description={t('models.aliases_hint')}
+          placeholder="gpt-4o-mini, smart-chat"
+          description={t('models.col_aliases_hint')}
           disabled={isPending || isYaml}
         />
 

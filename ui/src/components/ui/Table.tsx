@@ -1,10 +1,13 @@
 import React from 'react'
 import { cn } from '../../lib/utils'
 import { Button } from './Button'
+import { ColumnHint } from './ColumnHint'
 
 export interface Column<T> {
   key: string
   header: string
+  /** Optional native tooltip on the column header (e.g. field explanation). */
+  headerHint?: string
   render: (row: T) => React.ReactNode
   sortable?: boolean
   width?: string
@@ -165,6 +168,9 @@ export function Table<T>({
                 >
                   <span className="inline-flex items-center gap-1">
                     {col.header}
+                    {col.headerHint != null && (
+                      <ColumnHint text={col.headerHint} label={col.header} />
+                    )}
                     {col.sortable && <SortIndicator column={col.key} sort={sort} />}
                   </span>
                 </th>

@@ -4,6 +4,7 @@ import { Table } from '../components/ui/Table'
 import type { Column } from '../components/ui/Table'
 import { ConfirmDialog } from '../components/ui/Dialog'
 import { Badge } from '../components/ui/Badge'
+import { BillingModeBadge } from '../components/ui/BillingModeBadge'
 import { Button } from '../components/ui/Button'
 import { Toggle } from '../components/ui/Toggle'
 import { StatCard } from '../components/ui/StatCard'
@@ -173,6 +174,38 @@ function MinPerRequestToggle({ model }: { model: ModelResponse }) {
   )
 }
 
+function PublicToggle({ model }: { model: ModelResponse }) {
+  const updateModel = useUpdateModel()
+  const { toast } = useToast()
+  const { t } = useTranslation()
+
+  if (model.source !== 'api') {
+    return <span className="text-text-tertiary">—</span>
+  }
+
+  return (
+    <Toggle
+      checked={model.is_public === true}
+      size="sm"
+      disabled={updateModel.isPending && updateModel.variables?.modelId === model.id}
+      onChange={(on) => {
+        updateModel.mutate(
+          { modelId: model.id, params: { is_public: on } },
+          {
+            onError: (err) => {
+              toast({
+                variant: 'error',
+                message: err instanceof Error ? err.message : t('models.product_update_failed'),
+              })
+            },
+          },
+        )
+      }}
+      aria-label={t('models.public_storefront')}
+    />
+  )
+}
+
 function StrategySelect({ modelId, value }: { modelId: string; value: string }) {
   const updateModel = useUpdateModel()
   const { toast } = useToast()
@@ -193,10 +226,11 @@ function StrategySelect({ modelId, value }: { modelId: string; value: string }) 
   )
 
   return (
-    <div className="w-[160px]">
+    <div className="min-w-[11rem]">
       <Select
         options={strategyOptions}
         value={current}
+        fullWidth={false}
         onChange={(next) => {
           if (next === current) return
           updateModel.mutate(
@@ -274,12 +308,7 @@ export default function ModelsPage() {
       header: t('models.col_billing'),
       render: (row) => {
         if (row.source !== 'api') return <span className="text-text-tertiary">—</span>
-        const mode = billingModeFromModel(row)
-        return (
-          <Badge variant={mode === 'token' ? 'info' : 'warning'}>
-            {mode === 'token' ? t('models.bill_per_token') : t('models.bill_per_request')}
-          </Badge>
-        )
+        return <BillingModeBadge mode={billingModeFromModel(row)} />
       },
     },
     {
@@ -315,19 +344,33 @@ export default function ModelsPage() {
     {
       key: 'public',
       header: t('models.col_public'),
-      render: (row) =>
-        row.is_public ? (
-          <Badge variant="success">{t('models.col_public')}</Badge>
-        ) : (
-          <span className="text-text-tertiary">—</span>
-        ),
+      headerHint: t('models.col_public_hint'),
+      render: (row) => <PublicToggle model={row} />,
     },
     {
       key: 'aliases',
       header: t('models.col_aliases'),
+      headerHint: t('models.col_aliases_hint'),
       render: (row) => {
         const list = row.aliases ?? []
-        if (list.length === 0) return <span className="text-text-tertiary">—</span>
+        if (list.length === 0) {
+          if (row.source !== 'api') {
+            return <span className="text-text-tertiary">—</span>
+          }
+          return (
+            <div className="min-w-[7.5rem]">
+              <p className="text-xs text-text-tertiary">{t('models.aliases_empty')}</p>
+              <p className="text-[10px] text-text-tertiary/70">{t('models.aliases_example')}</p>
+              <button
+                type="button"
+                onClick={() => setEditModel(row)}
+                className="mt-1 text-[11px] font-medium text-accent hover:opacity-80"
+              >
+                {t('models.aliases_add')}
+              </button>
+            </div>
+          )
+        }
         return (
           <div className="flex flex-wrap gap-1">
             {list.slice(0, 2).map((a) => (
@@ -391,7 +434,7 @@ export default function ModelsPage() {
         )
       },
     },
-  ], [t, toggleModel, deleteModel, deleteModelId, toast])
+  ], [t, toggleModel, deleteModel, deleteModelId, toast, setEditModel])
 
   function handleDelete() {
     if (!deleteModelId) return
