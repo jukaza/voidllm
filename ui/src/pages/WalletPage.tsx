@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { PageHeader } from '../components/ui/PageHeader'
 import { StatCard } from '../components/ui/StatCard'
@@ -9,13 +10,16 @@ import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { Dialog } from '../components/ui/Dialog'
 import { TimeAgo } from '../components/ui/TimeAgo'
+import { SePayPaymentDialog } from '../components/wallet/SePayPaymentDialog'
 import {
   useMyWallet,
   useMyTransactions,
   useMyTopups,
   useCreateTopup,
 } from '../hooks/useWallet'
+import { usePublicTopupConfig, useTopupQuote } from '../hooks/usePaymentSettings'
 import type { TransactionItem, TopupRequestItem } from '../hooks/useWallet'
+import type { SepayOrder } from '../hooks/usePaymentSettings'
 import { useToast } from '../hooks/useToast'
 import { useTranslation } from '../lib/i18n'
 import { formatCost } from '../lib/utils'
@@ -39,40 +43,50 @@ const txTypeBadge: Record<string, 'success' | 'error' | 'info' | 'warning'> = {
 
 const topupStatusBadge: Record<string, 'success' | 'error' | 'warning'> = {
   pending: 'warning',
-  approved: 'success',
-  rejected: 'error',
+  completed: 'success',
+  expired: 'error',
+  failed: 'error',
 }
 
 export default function WalletPage() {
   const { t } = useTranslation()
   const { toast } = useToast()
+  const queryClient = useQueryClient()
   const { data: wallet, isLoading: walletLoading } = useMyWallet()
+  const { data: topupConfig } = usePublicTopupConfig()
 
   const [txCursor, setTxCursor] = useState('')
   const { data: txData, isLoading: txLoading } = useMyTransactions(txCursor)
 
   const [topupCursor] = useState('')
-  const { data: topupData } = useMyTopups(topupCursor)
+  const { data: topupData, refetch: refetchTopups } = useMyTopups(topupCursor)
 
   const createTopup = useCreateTopup()
   const [topupOpen, setTopupOpen] = useState(false)
   const [amount, setAmount] = useState('')
-  const [paymentRef, setPaymentRef] = useState('')
+  const [sepayOpen, setSepayOpen] = useState(false)
+  const [sepayOrder, setSepayOrder] = useState<SepayOrder | null>(null)
+
+  const parsedAmount = useMemo(() => {
+    const v = parseFloat(amount)
+    return Number.isFinite(v) && v > 0 ? v : null
+  }, [amount])
+
+  const { data: quote } = useTopupQuote(topupOpen ? parsedAmount : null)
 
   function submitTopup() {
-    const value = parseFloat(amount)
-    if (isNaN(value) || value <= 0) {
+    if (!parsedAmount) {
       toast({ variant: 'error', message: t('wallet.invalid_amount') })
       return
     }
     createTopup.mutate(
-      { amount: value, payment_ref: paymentRef },
+      { amount: parsedAmount },
       {
-        onSuccess: () => {
-          toast({ variant: 'success', message: t('wallet.topup_submitted') })
+        onSuccess: (order) => {
           setTopupOpen(false)
           setAmount('')
-          setPaymentRef('')
+          setSepayOrder(order)
+          setSepayOpen(true)
         },
         onError: (e) => toast({ variant: 'error', message: e.message }),
       },
@@ -136,16 +150,31 @@ export default function WalletPage() {
       render: (row) => <TimeAgo date={row.created_at} />,
     },
     {
-      key: 'amount',
-      header: t('wallet.col_amount'),
+      key: 'pay_amount',
+      header: t('wallet.col_pay_amount'),
       align: 'right',
-      render: (row) => <span>{formatCost(row.amount)}</span>,
+      render: (row) => <span>{formatCost(row.pay_amount ?? row.amount)}</span>,
     },
     {
-      key: 'payment_ref',
+      key: 'credit_amount',
+      header: t('wallet.col_credit_amount'),
+      align: 'right',
+      render: (row) => (
+        <span className="text-success">
+          {formatCost(row.credit_amount ?? row.amount)}
+          {(row.bonus_amount ?? 0) > 0 && (
+            <span className="text-text-tertiary text-xs ml-1">
+              (+{formatCost(row.bonus_amount ?? 0)})
+            </span>
+          )}
+        </span>
+      ),
+    },
+    {
+      key: 'trade_no',
       header: t('wallet.col_payment_ref'),
       render: (row) => (
-        <code className="text-xs text-text-secondary">{row.payment_ref || '—'}</code>
+        <code className="text-xs text-text-secondary">{row.trade_no || row.payment_ref || '—'}</code>
       ),
     },
     {
@@ -155,12 +184,9 @@ export default function WalletPage() {
         <Badge variant={topupStatusBadge[row.status] ?? 'warning'}>{row.status}</Badge>
       ),
     },
-    {
-      key: 'note',
-      header: t('wallet.col_note'),
-      render: (row) => <span className="text-text-tertiary text-xs">{row.note || '—'}</span>,
-    },
   ]
+
+  const presets = topupConfig?.amount_presets ?? []
 
   return (
     <>
@@ -168,7 +194,9 @@ export default function WalletPage() {
         title={t('wallet.title')}
         description={t('wallet.subtitle')}
         actions={
-          <Button onClick={() => setTopupOpen(true)}>{t('wallet.topup_button')}</Button>
+          <Button onClick={() => setTopupOpen(true)} disabled={topupConfig?.enabled === false}>
+            {t('wallet.topup_button')}
+          </Button>
         }
       />
 
@@ -229,25 +257,53 @@ export default function WalletPage() {
       >
         <div className="space-y-4">
           <p className="text-sm text-text-tertiary">{t('wallet.topup_instructions')}</p>
+          {presets.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {presets.map((preset) => (
+                <Button
+                  key={preset}
+                  size="sm"
+                  variant={parsedAmount === preset ? 'primary' : 'secondary'}
+                  onClick={() => setAmount(String(preset))}
+                >
+                  {formatCost(preset)}
+                </Button>
+              ))}
+            </div>
+          )}
           <Input
             label={t('wallet.topup_amount')}
             type="number"
             min="0"
-            step="1"
+            step="1000"
             suffix="₫"
             inputMode="numeric"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             placeholder="100000"
           />
-          <Input
-            label={t('wallet.topup_ref')}
-            value={paymentRef}
-            onChange={(e) => setPaymentRef(e.target.value)}
-            placeholder={t('wallet.topup_ref_placeholder')}
-          />
+          {quote && quote.bonus_amount > 0 && (
+            <p className="text-sm text-success">
+              {t('wallet.topup_quote', {
+                pay: formatCost(quote.pay_amount),
+                credit: formatCost(quote.credit_amount),
+                bonus: formatCost(quote.bonus_amount),
+              })}
+            </p>
+          )}
         </div>
       </Dialog>
+
+      <SePayPaymentDialog
+        open={sepayOpen}
+        onClose={() => setSepayOpen(false)}
+        order={sepayOrder}
+        onSuccess={() => {
+          void refetchTopups()
+          void queryClient.invalidateQueries({ queryKey: ['my-wallet'] })
+          void queryClient.invalidateQueries({ queryKey: ['my-transactions'] })
+        }}
+      />
     </>
   )
 }

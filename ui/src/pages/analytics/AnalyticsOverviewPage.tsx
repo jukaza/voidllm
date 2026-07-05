@@ -7,6 +7,7 @@ import { useAPIKeys } from '../../hooks/useAPIKeys'
 import { formatCost, formatNumber, formatTokens } from '../../lib/utils'
 import { useTranslation } from '../../lib/i18n'
 import { useUsageLive } from '../../hooks/useUsageLive'
+import { PillGroup } from '../../components/ui/PillGroup'
 
 type PeriodDays = 1 | 7 | 15 | 30
 type ChartMetric = 'requests' | 'payment' | 'tokens'
@@ -53,40 +54,6 @@ function formatMetric(n: number, metric: ChartMetric): string {
   if (metric === 'payment') return formatCost(n)
   if (metric === 'tokens') return formatTokens(n)
   return formatNumber(n)
-}
-
-function PillGroup<T extends string | number>({
-  options,
-  value,
-  onChange,
-  label,
-}: {
-  options: { value: T; label: string }[]
-  value: T
-  onChange: (v: T) => void
-  label?: string
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      {label && <span className="text-xs text-text-tertiary">{label}</span>}
-      <div className="flex items-center gap-1">
-        {options.map((opt) => (
-          <button
-            key={String(opt.value)}
-            type="button"
-            onClick={() => onChange(opt.value)}
-            className={
-              value === opt.value
-                ? 'px-3 py-1 rounded-md text-xs font-medium bg-accent/20 text-accent border border-accent/30'
-                : 'px-3 py-1 rounded-md text-xs font-medium text-text-tertiary hover:text-text-secondary hover:bg-bg-tertiary border border-transparent transition-colors'
-            }
-          >
-            {opt.label}
-          </button>
-        ))}
-      </div>
-    </div>
-  )
 }
 
 export default function AnalyticsOverviewPage() {

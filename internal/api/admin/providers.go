@@ -9,7 +9,6 @@ import (
 	"github.com/gofiber/fiber/v3"
 
 	"github.com/voidmind-io/voidllm/internal/apierror"
-	"github.com/voidmind-io/voidllm/internal/auth"
 	"github.com/voidmind-io/voidllm/internal/db"
 	"github.com/voidmind-io/voidllm/internal/provider"
 	voidredis "github.com/voidmind-io/voidllm/internal/redis"
@@ -293,7 +292,7 @@ func (h *Handler) ListTopups(c fiber.Ctx) error {
 		return apierror.BadRequest(c, err.Error())
 	}
 	status := c.Query("status", "")
-	if status != "" && status != "pending" && status != "approved" && status != "rejected" {
+	if status != "" && status != "pending" && status != "completed" && status != "expired" && status != "failed" {
 		return apierror.BadRequest(c, "invalid status filter")
 	}
 
@@ -315,49 +314,6 @@ func (h *Handler) ListTopups(c fiber.Ctx) error {
 		cursor = reqs[len(reqs)-1].ID
 	}
 	return c.JSON(fiber.Map{"data": items, "has_more": hasMore, "cursor": cursor})
-}
-
-// reviewTopupRequestBody is the JSON body for POST /topups/:topup_id/review.
-type reviewTopupRequestBody struct {
-	Status string `json:"status"` // "approved" | "rejected"
-	Note   string `json:"note"`
-}
-
-// ReviewTopup handles POST /api/v1/topups/:topup_id/review (system_admin).
-// Approval credits the customer's wallet atomically with the ledger entry.
-func (h *Handler) ReviewTopup(c fiber.Ctx) error {
-	keyInfo := auth.KeyInfoFromCtx(c)
-	if keyInfo == nil {
-		return apierror.Send(c, fiber.StatusForbidden, "forbidden", "no identity")
-	}
-
-	var req reviewTopupRequestBody
-	if err := c.Bind().JSON(&req); err != nil {
-		return apierror.BadRequest(c, "invalid request body")
-	}
-	if req.Status != "approved" && req.Status != "rejected" {
-		return apierror.BadRequest(c, `status must be "approved" or "rejected"`)
-	}
-
-	topupID := c.Params("topup_id")
-	newBalance, err := h.DB.ReviewTopupRequest(c.Context(), topupID, keyInfo.UserID, req.Status, req.Note)
-	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
-			return apierror.NotFound(c, "top-up request not found or already reviewed")
-		}
-		h.Log.ErrorContext(c.Context(), "review topup", slog.String("error", err.Error()))
-		return apierror.InternalError(c, "failed to review top-up request")
-	}
-
-	// Sync the in-memory wallet cache with the credited balance.
-	if req.Status == "approved" && h.Wallet != nil {
-		tr, getErr := h.DB.GetTopupRequest(c.Context(), topupID)
-		if getErr == nil {
-			h.Wallet.SetBalance(tr.UserID, newBalance)
-		}
-	}
-
-	return c.JSON(fiber.Map{"status": req.Status, "balance": newBalance})
 }
 
 // adjustWalletRequestBody is the JSON body for POST /users/:user_id/wallet/adjust.

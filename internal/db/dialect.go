@@ -27,6 +27,8 @@ type Dialect interface {
 	TimestampLTE(column, placeholder string) string
 	// MetaProviderSlug returns a SQL expression extracting provider_slug from usage_events.meta JSON.
 	MetaProviderSlug() string
+	// DayTruncVN returns a SQL expression that buckets a timestamp column by calendar day in Asia/Ho_Chi_Minh (UTC+7).
+	DayTruncVN(column string) string
 }
 
 // SQLiteDialect implements Dialect for SQLite.
@@ -64,6 +66,10 @@ func (SQLiteDialect) MetaProviderSlug() string {
 	return "COALESCE(json_extract(meta, '$.provider_slug'), '')"
 }
 
+func (SQLiteDialect) DayTruncVN(column string) string {
+	return "strftime('%Y-%m-%d', datetime(" + column + ", '+7 hours'))"
+}
+
 // PostgresDialect implements Dialect for PostgreSQL.
 type PostgresDialect struct{}
 
@@ -99,4 +105,8 @@ func (PostgresDialect) TimestampLTE(column, placeholder string) string {
 
 func (PostgresDialect) MetaProviderSlug() string {
 	return "COALESCE(meta::json->>'provider_slug', '')"
+}
+
+func (PostgresDialect) DayTruncVN(column string) string {
+	return "to_char((" + column + ")::timestamptz AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD')"
 }

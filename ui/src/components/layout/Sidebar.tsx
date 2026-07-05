@@ -178,7 +178,7 @@ function buildNavigation(t: any): NavGroup[] {
         { label: t('sidebar.users'), path: '/users', icon: <IconPersonPlus /> },
         { label: t('sidebar.providers'), path: '/providers', icon: <IconBuilding /> },
         { label: t('sidebar.models'), path: '/models', icon: <IconCube /> },
-        { label: t('sidebar.topups'), path: '/marketplace', icon: <IconWallet /> },
+        { label: t('sidebar.finance'), path: '/finance', icon: <IconWallet /> },
         { label: t('sidebar.settings'), path: '/settings', icon: <IconSettings /> },
       ],
     },

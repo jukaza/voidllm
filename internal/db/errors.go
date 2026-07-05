@@ -22,6 +22,9 @@ var ErrNoPassword = errors.New("no password")
 // It indicates that a referenced record (e.g. organization) does not exist.
 var ErrForeignKey = errors.New("foreign key violation")
 
+// ErrAmountMismatch is returned when a SePay transfer amount does not match the order.
+var ErrAmountMismatch = errors.New("amount mismatch")
+
 // translateError maps low-level driver errors to domain sentinels.
 // sql.ErrNoRows becomes ErrNotFound, UNIQUE constraint violations become ErrConflict,
 // FOREIGN KEY constraint violations become ErrForeignKey,

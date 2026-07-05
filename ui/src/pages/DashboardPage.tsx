@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { PageHeader } from '../components/ui/PageHeader'
 import { Banner } from '../components/ui/Banner'
@@ -9,7 +9,8 @@ import { useDashboardStats } from '../hooks/useDashboardStats'
 import type { BudgetWarning } from '../hooks/useDashboardStats'
 import { useUpdateCheck } from '../hooks/useUpdateCheck'
 import { useMe } from '../hooks/useMe'
-import { useMyWallet, useAdminTopups } from '../hooks/useWallet'
+import { useMyWallet } from '../hooks/useWallet'
+import { financeRangeISO, useFinanceSummary } from '../hooks/useFinance'
 import { useUsageLive } from '../hooks/useUsageLive'
 import { formatNumber, formatCost, formatTokens } from '../lib/utils'
 import { useTranslation } from '../lib/i18n'
@@ -142,7 +143,8 @@ export default function DashboardPage() {
 
   const isAdmin = me?.is_system_admin ?? false
   const { live, connected } = useUsageLive()
-  const { data: pendingTopups } = useAdminTopups('pending', '', 5)
+  const financeRange = useMemo(() => financeRangeISO(7), [])
+  const { data: financeSummary } = useFinanceSummary(financeRange.from, financeRange.to)
 
   const availableVersion = updateInfo?.available_version
   const [manualDismiss, setManualDismiss] = useState(false)
@@ -162,7 +164,7 @@ export default function DashboardPage() {
   const showGettingStarted =
     !statsLoading && ((stats?.active_keys ?? 0) === 0 || (stats?.requests_24h ?? 0) === 0)
   const lowBalance = wallet != null && wallet.balance <= 0
-  const pendingTopupCount = pendingTopups?.data?.length ?? 0
+  const pendingTopupCount = financeSummary?.totals.pending_topup_count ?? 0
   const displayName = me?.display_name || me?.email?.split('@')[0] || ''
 
   return (
@@ -184,7 +186,7 @@ export default function DashboardPage() {
         )}
 
         {isAdmin && pendingTopupCount > 0 && (
-          <Link to="/marketplace" className="block no-underline">
+          <Link to="/finance/topups?status=pending" className="block no-underline">
             <Banner
               variant="info"
               title={t('dashboard.pending_topups', { count: pendingTopupCount })}

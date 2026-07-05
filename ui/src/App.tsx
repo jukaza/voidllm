@@ -5,7 +5,10 @@ import LandingPage from './pages/storefront/LandingPage'
 import RegisterPage from './pages/storefront/RegisterPage'
 import DashboardPage from './pages/DashboardPage'
 import KeysPage from './pages/KeysPage'
-import MarketplacePage from './pages/MarketplacePage'
+import FinanceLayout from './pages/finance/FinanceLayout'
+import FinanceOverviewPage from './pages/finance/FinanceOverviewPage'
+import FinanceTopupsPage from './pages/finance/FinanceTopupsPage'
+import FinanceLedgerPage from './pages/finance/FinanceLedgerPage'
 import ProvidersPage from './pages/ProvidersPage'
 import ProviderDetailPage from './pages/ProviderDetailPage'
 import ProviderNewPage from './pages/ProviderNewPage'
@@ -83,7 +86,13 @@ export default function App() {
                 <Route path="/providers/new" element={<ProviderNewPage />} />
                 <Route path="/providers/wizard" element={<ProviderWizardPage />} />
                 <Route path="/providers/:id" element={<ProviderDetailPage />} />
-                <Route path="/marketplace" element={<MarketplacePage />} />
+                <Route path="/finance" element={<FinanceLayout />}>
+                  <Route index element={<FinanceOverviewPage />} />
+                  <Route path="topups" element={<FinanceTopupsPage />} />
+                  <Route path="ledger" element={<FinanceLedgerPage />} />
+                </Route>
+                <Route path="/marketplace" element={<Navigate to="/finance/topups" replace />} />
+                <Route path="/marketplace/*" element={<Navigate to="/finance/topups" replace />} />
                 <Route path="/wallet" element={<WalletPage />} />
                 <Route path="/models" element={<ModelsLayout />} />
                 <Route path="/analytics" element={<AnalyticsLayout />}>

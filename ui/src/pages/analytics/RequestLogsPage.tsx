@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Table } from '../../components/ui/Table'
 import type { Column } from '../../components/ui/Table'
@@ -33,12 +33,19 @@ export default function RequestLogsPage() {
   const { t } = useTranslation()
   const isAdmin = me?.is_system_admin ?? false
 
-  const [range, setRange] = useState<TimeRange>('7d')
+  const initialRequestId = searchParams.get('request_id')
+  const [range, setRange] = useState<TimeRange>(initialRequestId ? '30d' : '7d')
   const [model, setModel] = useState('')
-  const [requestId, setRequestId] = useState(searchParams.get('request_id') ?? '')
-  const [selectedId, setSelectedId] = useState<string | null>(
-    searchParams.get('request_id'),
-  )
+  const [requestId, setRequestId] = useState(initialRequestId ?? '')
+  const [selectedId, setSelectedId] = useState<string | null>(initialRequestId)
+
+  useEffect(() => {
+    const rid = searchParams.get('request_id')
+    if (!rid) return
+    setRequestId(rid)
+    setSelectedId(rid)
+    setRange('30d')
+  }, [searchParams])
 
   const { from, to } = useMemo(() => getTimeRange(range), [range])
 

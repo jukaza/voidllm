@@ -9,3 +9,6 @@ export type { HorizontalBarProps, HorizontalBarItem } from './HorizontalBar'
 
 export { MiniTable } from './MiniTable'
 export type { MiniTableProps, MiniTableColumn } from './MiniTable'
+
+export { MultiAreaChart } from './MultiAreaChart'
+export type { MultiAreaChartProps, MultiAreaChartSeries } from './MultiAreaChart'

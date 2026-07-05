@@ -242,39 +242,6 @@ func (h *Handler) MyTransactions(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": items, "has_more": hasMore, "cursor": cursor})
 }
 
-// topupRequestBody is the JSON body for POST /me/topups.
-type topupRequestBody struct {
-	Amount     float64 `json:"amount"`
-	PaymentRef string  `json:"payment_ref"`
-}
-
-// CreateMyTopup handles POST /api/v1/me/topups — a customer submits a manual
-// top-up (bank transfer) for admin review.
-func (h *Handler) CreateMyTopup(c fiber.Ctx) error {
-	keyInfo := auth.KeyInfoFromCtx(c)
-	if keyInfo == nil || keyInfo.UserID == "" {
-		return apierror.Send(c, fiber.StatusForbidden, "forbidden", "no user identity on this key")
-	}
-
-	var req topupRequestBody
-	if err := c.Bind().JSON(&req); err != nil {
-		return apierror.BadRequest(c, "invalid request body")
-	}
-	if req.Amount <= 0 {
-		return apierror.BadRequest(c, "amount must be positive")
-	}
-	if req.Amount > 1_000_000 {
-		return apierror.BadRequest(c, "amount exceeds the maximum accepted per top-up")
-	}
-
-	tr, err := h.DB.CreateTopupRequest(c.Context(), keyInfo.UserID, req.Amount, req.PaymentRef)
-	if err != nil {
-		h.Log.ErrorContext(c.Context(), "create topup", slog.String("error", err.Error()))
-		return apierror.InternalError(c, "failed to create top-up request")
-	}
-	return c.Status(fiber.StatusCreated).JSON(topupToJSON(tr))
-}
-
 // MyTopups handles GET /api/v1/me/topups — the customer's own top-up history.
 func (h *Handler) MyTopups(c fiber.Ctx) error {
 	keyInfo := auth.KeyInfoFromCtx(c)
@@ -306,20 +273,6 @@ func (h *Handler) MyTopups(c fiber.Ctx) error {
 		cursor = reqs[len(reqs)-1].ID
 	}
 	return c.JSON(fiber.Map{"data": items, "has_more": hasMore, "cursor": cursor})
-}
-
-func topupToJSON(t *db.TopupRequest) fiber.Map {
-	return fiber.Map{
-		"id":          t.ID,
-		"user_id":     t.UserID,
-		"amount":      t.Amount,
-		"payment_ref": t.PaymentRef,
-		"status":      t.Status,
-		"reviewed_by": t.ReviewedBy,
-		"reviewed_at": t.ReviewedAt,
-		"note":        t.Note,
-		"created_at":  t.CreatedAt,
-	}
 }
 
 // catalogModelItem is one row of the public model catalog (sell prices only).

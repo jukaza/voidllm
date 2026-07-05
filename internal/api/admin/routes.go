@@ -22,6 +22,8 @@ func RegisterRoutes(app *fiber.App, handler *Handler, keyCache *cache.Cache[stri
 	app.Get("/api/v1/public/catalog", handler.PublicCatalog)
 	app.Get("/api/v1/public/models", handler.PublicModels)
 	app.Get("/api/v1/public/site", handler.GetPublicSite)
+	app.Get("/api/v1/public/topup-config", handler.GetPublicTopupConfig)
+	app.Post("/api/v1/webhooks/sepay", handler.SepayWebhook)
 
 	var apiMiddlewares []any
 	apiMiddlewares = append(apiMiddlewares, auth.Middleware(keyCache, hmacSecret))
@@ -40,6 +42,8 @@ func RegisterRoutes(app *fiber.App, handler *Handler, keyCache *cache.Cache[stri
 	api.Get("/me/wallet", handler.MyWallet)
 	api.Get("/me/transactions", handler.MyTransactions)
 	api.Post("/me/topups", handler.CreateMyTopup)
+	api.Post("/me/topups/quote", handler.QuoteTopup)
+	api.Get("/me/topups/:trade_no/status", handler.GetTopupStatus)
 	api.Get("/me/topups", handler.MyTopups)
 
 	// Own usage — no role restriction; any authenticated key sees its own data.
@@ -127,9 +131,14 @@ func RegisterRoutes(app *fiber.App, handler *Handler, keyCache *cache.Cache[stri
 	api.Patch("/providers/:provider_id", auth.RequireRole(auth.RoleSystemAdmin), handler.UpdateProvider)
 	api.Delete("/providers/:provider_id", auth.RequireRole(auth.RoleSystemAdmin), handler.DeleteProvider)
 
-	// Top-up review queue and wallet administration — system_admin only.
+	// Finance monitoring — system_admin only.
+	api.Get("/admin/finance/summary", auth.RequireRole(auth.RoleSystemAdmin), handler.FinanceSummary)
+	api.Get("/admin/finance/topups", auth.RequireRole(auth.RoleSystemAdmin), handler.FinanceTopups)
+	api.Post("/admin/finance/topups/:topup_id/review", auth.RequireRole(auth.RoleSystemAdmin), handler.FinanceReviewTopup)
+	api.Get("/admin/finance/transactions", auth.RequireRole(auth.RoleSystemAdmin), handler.FinanceTransactions)
+
+	// Top-up list (deprecated — use /admin/finance/topups).
 	api.Get("/topups", auth.RequireRole(auth.RoleSystemAdmin), handler.ListTopups)
-	api.Post("/topups/:topup_id/review", auth.RequireRole(auth.RoleSystemAdmin), handler.ReviewTopup)
 	api.Get("/users/:user_id/wallet", auth.RequireRole(auth.RoleSystemAdmin), handler.GetUserWallet)
 	api.Post("/users/:user_id/wallet/adjust", auth.RequireRole(auth.RoleSystemAdmin), handler.AdjustWallet)
 
@@ -140,5 +149,7 @@ func RegisterRoutes(app *fiber.App, handler *Handler, keyCache *cache.Cache[stri
 	// Site branding and legal settings — system_admin only.
 	api.Get("/admin/settings/site", auth.RequireRole(auth.RoleSystemAdmin), handler.GetAdminSite)
 	api.Put("/admin/settings/site", auth.RequireRole(auth.RoleSystemAdmin), handler.UpdateAdminSite)
+	api.Get("/admin/settings/payment", auth.RequireRole(auth.RoleSystemAdmin), handler.GetAdminPaymentSettings)
+	api.Put("/admin/settings/payment", auth.RequireRole(auth.RoleSystemAdmin), handler.UpdateAdminPaymentSettings)
 
 }

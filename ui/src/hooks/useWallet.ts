@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import apiClient from '../api/client'
-import { useMe } from './useMe'
+import type { SepayOrder } from './usePaymentSettings'
 
 export interface WalletResponse {
   balance: number
@@ -22,7 +22,11 @@ export interface TopupRequestItem {
   user_id: string
   amount: number
   payment_ref: string
-  status: 'pending' | 'approved' | 'rejected'
+  status: 'pending' | 'completed' | 'expired' | 'failed'
+  trade_no?: string
+  pay_amount?: number
+  credit_amount?: number
+  bonus_amount?: number
   reviewed_by?: string | null
   reviewed_at?: string | null
   note: string
@@ -66,45 +70,14 @@ export function useMyTopups(cursor: string, limit = 25) {
 export function useCreateTopup() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (params: { amount: number; payment_ref: string }) =>
-      apiClient<TopupRequestItem>('/me/topups', {
+    mutationFn: (params: { amount: number }) =>
+      apiClient<SepayOrder>('/me/topups', {
         method: 'POST',
         body: JSON.stringify(params),
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['my-topups'] })
-    },
-  })
-}
-
-// ---------------------------------------------------------------------------
-// Admin-side hooks
-// ---------------------------------------------------------------------------
-
-export function useAdminTopups(status: string, cursor: string, limit = 25) {
-  const { data: me } = useMe()
-  const isAdmin = me?.is_system_admin ?? false
-
-  return useQuery({
-    queryKey: ['admin-topups', status, cursor, limit],
-    queryFn: () =>
-      apiClient<Paginated<TopupRequestItem>>(
-        `/topups?limit=${limit}${status ? `&status=${status}` : ''}${cursor ? `&cursor=${cursor}` : ''}`,
-      ),
-    enabled: isAdmin,
-  })
-}
-
-export function useReviewTopup() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (params: { topupId: string; status: 'approved' | 'rejected'; note?: string }) =>
-      apiClient<{ status: string; balance: number }>(`/topups/${params.topupId}/review`, {
-        method: 'POST',
-        body: JSON.stringify({ status: params.status, note: params.note ?? '' }),
-      }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['admin-topups'] })
+      void queryClient.invalidateQueries({ queryKey: ['my-wallet'] })
     },
   })
 }
@@ -118,7 +91,9 @@ export function useAdjustWallet() {
         body: JSON.stringify({ amount: params.amount, description: params.description }),
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['admin-topups'] })
+      void queryClient.invalidateQueries({ queryKey: ['finance-topups'] })
+      void queryClient.invalidateQueries({ queryKey: ['finance-summary'] })
+      void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
     },
   })
 }

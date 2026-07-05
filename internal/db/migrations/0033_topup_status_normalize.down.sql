@@ -1,0 +1,2 @@
+-- Migration: 0033_topup_status_normalize.down.sql
+-- Irreversible data migration; no-op on rollback.

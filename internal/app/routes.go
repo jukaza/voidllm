@@ -27,6 +27,24 @@ func (a *Application) warnIfSinglePortTLS(adminPort int) {
 	}
 }
 
+// trustProxyFiberConfig enables trusted reverse-proxy client IP resolution for
+// webhook IP whitelist and audit logging. ProxyHeader is only honored when the
+// direct TCP peer is listed in TrustProxyConfig.Proxies.
+func trustProxyFiberConfig(cfg fiber.Config) fiber.Config {
+	cfg.TrustProxy = true
+	cfg.ProxyHeader = fiber.HeaderXForwardedFor
+	cfg.TrustProxyConfig = fiber.TrustProxyConfig{
+		Proxies: []string{
+			"127.0.0.0/8",
+			"10.0.0.0/8",
+			"172.16.0.0/12",
+			"192.168.0.0/16",
+			"::1/128",
+		},
+	}
+	return cfg
+}
+
 // devCORSMiddleware returns a Fiber handler that sets permissive CORS headers
 // for every response. It is only installed when dev mode is active so that the
 // Vite development server can reach both the proxy and admin apps without
@@ -49,7 +67,7 @@ func devCORSMiddleware() fiber.Handler {
 // on separate Fiber apps. The resulting apps are stored in a.proxyApp and
 // a.adminApp. setupRoutes must be called after all dependencies are initialised.
 func (a *Application) setupRoutes() {
-	a.proxyApp = fiber.New(fiber.Config{
+	a.proxyApp = fiber.New(trustProxyFiberConfig(fiber.Config{
 		ReadTimeout:    a.cfg.Server.Proxy.ReadTimeout,
 		WriteTimeout:   a.cfg.Server.Proxy.WriteTimeout,
 		IdleTimeout:    a.cfg.Server.Proxy.IdleTimeout,
@@ -57,7 +75,7 @@ func (a *Application) setupRoutes() {
 		ReadBufferSize: 16384, // 16 KB — default 4 KB too small for browser headers
 		JSONEncoder:    func(v any) ([]byte, error) { return jsonx.Marshal(v) },
 		JSONDecoder:    func(data []byte, v any) error { return jsonx.Unmarshal(data, v) },
-	})
+	}))
 
 	// RequestID middleware must be FIRST so that all downstream handlers
 	// (including error responses) can include the trace ID.
@@ -96,14 +114,14 @@ func (a *Application) setupRoutes() {
 	}
 
 	// Dual-port mode: proxy and admin run on separate ports.
-	a.adminApp = fiber.New(fiber.Config{
+	a.adminApp = fiber.New(trustProxyFiberConfig(fiber.Config{
 		ReadTimeout:    30 * time.Second,
 		WriteTimeout:   30 * time.Second,
 		IdleTimeout:    60 * time.Second,
 		ReadBufferSize: 16384, // 16 KB — default 4 KB too small for browser headers
 		JSONEncoder:    func(v any) ([]byte, error) { return jsonx.Marshal(v) },
 		JSONDecoder:    func(data []byte, v any) error { return jsonx.Unmarshal(data, v) },
-	})
+	}))
 
 	// Request ID middleware on the admin app in dual-port mode.
 	a.adminApp.Use(apierror.RequestIDMiddleware())
