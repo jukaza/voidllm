@@ -90,9 +90,16 @@ const variantIcon: Record<ToastMessage['variant'], () => React.ReactNode> = {
 }
 
 const variantClasses: Record<ToastMessage['variant'], string> = {
-  success: 'bg-success/10 border-success/30',
-  error: 'bg-error/10 border-error/30',
-  info: 'bg-accent/10 border-accent/30',
+  success:
+    'bg-bg-secondary/95 border-white/10 border-l-success bg-success/10 border-success/30',
+  error: 'bg-bg-secondary/95 border-white/10 border-l-error bg-error/10 border-error/30',
+  info: 'bg-bg-secondary/95 border-white/10 border-l-accent bg-accent/10 border-accent/30',
+}
+
+const progressClasses: Record<ToastMessage['variant'], string> = {
+  success: 'bg-success/70',
+  error: 'bg-error/70',
+  info: 'bg-accent/70',
 }
 
 // ---------------------------------------------------------------------------
@@ -124,20 +131,35 @@ function ToastItem({ toast, onDismiss }: ToastItemProps) {
       role={toast.variant === 'error' ? 'alert' : 'status'}
       aria-live={toast.variant === 'error' ? 'assertive' : 'polite'}
       className={cn(
-        'flex items-center gap-3 rounded-lg px-4 py-3 shadow-lg border text-text-primary',
-        'min-w-[280px] max-w-[420px]',
+        'toast-enter relative flex items-start gap-3 overflow-hidden rounded-xl border border-l-4 px-4 py-3',
+        'min-w-[280px] max-w-[420px] text-text-primary shadow-2xl shadow-black/45 backdrop-blur-md',
         variantClasses[toast.variant],
       )}
     >
-      {variantIcon[toast.variant]()}
-      <span className="flex-1 text-sm">{toast.message}</span>
+      <span className="mt-0.5 shrink-0">{variantIcon[toast.variant]()}</span>
+      <span className="flex-1 pt-0.5 text-sm leading-relaxed">{toast.message}</span>
       <button
+        type="button"
         onClick={() => onDismiss(toast.id)}
-        className="text-text-tertiary hover:text-text-primary transition-colors shrink-0"
+        className={cn(
+          'shrink-0 rounded-md p-1 text-text-tertiary transition-colors',
+          'hover:bg-white/5 hover:text-text-primary',
+        )}
         aria-label="Dismiss notification"
       >
         <CloseIcon />
       </button>
+      {toast.duration > 0 && (
+        <div
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 bg-white/5"
+          aria-hidden="true"
+        >
+          <div
+            className={cn('toast-progress h-full w-full', progressClasses[toast.variant])}
+            style={{ animationDuration: `${toast.duration}ms` }}
+          />
+        </div>
+      )}
     </div>
   )
 }
@@ -156,7 +178,7 @@ function ToastContainer({ toasts, onDismiss }: ToastContainerProps) {
 
   return ReactDOM.createPortal(
     <div
-      className="fixed bottom-4 right-4 z-50 flex flex-col gap-2"
+      className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2.5 sm:bottom-6 sm:right-6"
       aria-label="Notifications"
     >
       {toasts.map((t) => (

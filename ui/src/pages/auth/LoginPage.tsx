@@ -8,6 +8,7 @@ import { Banner } from '../../components/ui/Banner'
 import { LOCAL_STORAGE_KEY } from '../../lib/constants'
 import type { MeResponse } from '../../hooks/useMe'
 import { useTranslation } from '../../lib/i18n'
+import { BrandMark } from '../../components/brand/BrandMark'
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -51,9 +52,9 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-bg-primary px-4">
       <div className="w-full max-w-sm bg-bg-secondary border border-white/5 rounded-xl p-8">
-        <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold gradient-text">VoidLLM</h1>
-          <p className="mt-2 text-sm text-text-tertiary">{t('login.subtitle')}</p>
+        <div className="mb-8 flex flex-col items-center gap-3">
+          <BrandMark nameClassName="gradient-text text-3xl font-bold" />
+          <p className="text-sm text-text-tertiary">{t('login.subtitle')}</p>
         </div>
 
         <form onSubmit={(e) => void handleSubmit(e)} className="space-y-5">

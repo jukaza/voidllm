@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { Input } from '../../components/ui/Input'
 import { Button } from '../../components/ui/Button'
 import { Banner } from '../../components/ui/Banner'
+import { BrandMark } from '../../components/brand/BrandMark'
 import { LOCAL_STORAGE_KEY } from '../../lib/constants'
 import type { MeResponse } from '../../hooks/useMe'
+import { useSiteConfig } from '../../hooks/useSiteConfig'
 import { useTranslation } from '../../lib/i18n'
 
 interface RegisterResponse {
@@ -19,23 +21,42 @@ export default function RegisterPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { t } = useTranslation()
+  const { data: site, isLoading: siteLoading } = useSiteConfig()
 
   const [email, setEmail] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [password, setPassword] = useState('')
+  const [acceptTerms, setAcceptTerms] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+
+  if (!siteLoading && site && !site.register_enabled) {
+    return <Navigate to="/login" replace />
+  }
+
+  const termsRequired = site?.user_agreement_enabled ?? false
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setError(null)
+
+    if (termsRequired && !acceptTerms) {
+      setError(t('register.terms_required'))
+      return
+    }
+
     setLoading(true)
 
     try {
       const res = await fetch('/api/v1/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, display_name: displayName }),
+        body: JSON.stringify({
+          email,
+          password,
+          display_name: displayName,
+          accept_terms: acceptTerms,
+        }),
       })
 
       if (!res.ok) {
@@ -58,9 +79,9 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-bg-primary px-4">
       <div className="w-full max-w-sm bg-bg-secondary border border-white/5 rounded-xl p-8">
-        <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold gradient-text">VoidLLM</h1>
-          <p className="mt-2 text-sm text-text-tertiary">{t('register.subtitle')}</p>
+        <div className="mb-8 flex flex-col items-center gap-3">
+          <BrandMark nameClassName="gradient-text text-3xl font-bold" />
+          <p className="text-sm text-text-tertiary">{t('register.subtitle')}</p>
         </div>
 
         <form onSubmit={(e) => void handleSubmit(e)} className="space-y-5">
@@ -90,6 +111,31 @@ export default function RegisterPage() {
             placeholder="••••••••"
             description={t('register.password_hint')}
           />
+
+          {termsRequired && (
+            <label className="flex items-start gap-2 text-xs text-text-secondary cursor-pointer">
+              <input
+                type="checkbox"
+                checked={acceptTerms}
+                onChange={(e) => setAcceptTerms(e.target.checked)}
+                className="mt-0.5 accent-accent"
+              />
+              <span>
+                {t('register.accept_terms')}{' '}
+                <Link to="/legal/terms" target="_blank" className="text-accent no-underline">
+                  {t('register.terms_link')}
+                </Link>
+                {site?.privacy_policy_enabled && (
+                  <>
+                    {' '}{t('register.and')}{' '}
+                    <Link to="/legal/privacy" target="_blank" className="text-accent no-underline">
+                      {t('register.privacy_link')}
+                    </Link>
+                  </>
+                )}
+              </span>
+            </label>
+          )}
 
           {error !== null && <Banner variant="error" title={error} />}
 

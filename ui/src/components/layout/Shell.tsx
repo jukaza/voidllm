@@ -1,5 +1,6 @@
 import { Outlet } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
+import { AppTopBar } from './AppTopBar'
 
 export function Shell() {
   return (
@@ -11,9 +12,12 @@ export function Shell() {
         Skip to content
       </a>
       <Sidebar />
-      <main id="main-content" className="ml-[260px] max-w-[calc(100%-260px)] p-8">
-        <Outlet />
-      </main>
+      <div className="ml-[13rem] max-w-[calc(100%-13rem)] flex min-h-screen flex-col">
+        <AppTopBar />
+        <main id="main-content" className="flex-1 p-8">
+          <Outlet />
+        </main>
+      </div>
     </div>
   )
 }

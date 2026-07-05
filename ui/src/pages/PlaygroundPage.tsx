@@ -12,6 +12,7 @@ import apiClient from '../api/client'
 import { LOCAL_STORAGE_KEY } from '../lib/constants'
 import { cn } from '../lib/utils'
 import { useTranslation } from '../lib/i18n'
+import { Markdown } from '../components/ui/Markdown'
 
 interface AvailableModel {
   name: string
@@ -51,12 +52,8 @@ const typeLabels: Record<string, string> = {
 }
 const supportedTypes = ['chat', 'completion', 'embedding']
 
-// ---------------------------------------------------------------------------
-// Simple markdown renderer: splits on ``` code fences, no external library
-// ---------------------------------------------------------------------------
 function AssistantMessageContent({ content }: { content: string }) {
   if (!content) {
-    // Typing indicator while empty assistant message awaits first delta
     return (
       <div className="flex gap-1 items-center py-0.5">
         <span
@@ -75,32 +72,7 @@ function AssistantMessageContent({ content }: { content: string }) {
     )
   }
 
-  // Split on triple-backtick fences (optionally with language hint)
-  const parts = content.split(/(```[\s\S]*?```)/g)
-
-  return (
-    <div className="space-y-2">
-      {parts.map((part, idx) => {
-        if (part.startsWith('```')) {
-          // Strip leading ``` + optional language tag and trailing ```
-          const inner = part.replace(/^```[^\n]*\n?/, '').replace(/```$/, '')
-          return (
-            <pre
-              key={idx}
-              className="bg-bg-primary rounded-lg p-4 font-mono text-xs border border-border overflow-x-auto leading-relaxed"
-            >
-              {inner}
-            </pre>
-          )
-        }
-        return part ? (
-          <p key={idx} className="whitespace-pre-wrap leading-relaxed">
-            {part}
-          </p>
-        ) : null
-      })}
-    </div>
-  )
+  return <Markdown>{content}</Markdown>
 }
 
 // ---------------------------------------------------------------------------
@@ -526,7 +498,7 @@ export default function PlaygroundPage() {
           </div>
 
           {/* Scrollable config body */}
-          <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
+          <div className="void-scroll flex-1 overflow-y-auto px-5 py-5 space-y-5">
 
             {/* Model selector */}
             <div>
@@ -724,7 +696,7 @@ export default function PlaygroundPage() {
           {!isEmbedding && (
             <>
               {/* Chat messages — scrollable */}
-              <div className="flex-1 min-h-0 overflow-y-auto px-5 py-5 space-y-5">
+              <div className="void-scroll flex-1 min-h-0 overflow-y-auto px-5 py-5 space-y-5">
                 {chatHistory.length === 0 && !loading && (
                   <div className="flex items-center justify-center py-20">
                     <p className="text-sm text-text-tertiary">
@@ -918,7 +890,7 @@ export default function PlaygroundPage() {
 
           {/* ---- EMBEDDING PANEL ---- */}
           {isEmbedding && (
-            <div className="flex-1 min-h-0 overflow-y-auto px-5 py-5 space-y-4">
+            <div className="void-scroll flex-1 min-h-0 overflow-y-auto px-5 py-5 space-y-4">
 
               {/* Error banner */}
               {error !== null && (

@@ -21,6 +21,7 @@ func RegisterRoutes(app *fiber.App, handler *Handler, keyCache *cache.Cache[stri
 	app.Get("/api/v1/auth/providers", handler.AuthProviders)
 	app.Get("/api/v1/public/catalog", handler.PublicCatalog)
 	app.Get("/api/v1/public/models", handler.PublicModels)
+	app.Get("/api/v1/public/site", handler.GetPublicSite)
 
 	var apiMiddlewares []any
 	apiMiddlewares = append(apiMiddlewares, auth.Middleware(keyCache, hmacSecret))
@@ -135,5 +136,9 @@ func RegisterRoutes(app *fiber.App, handler *Handler, keyCache *cache.Cache[stri
 	// Update check — any authenticated user may read the cached update status.
 	// Version info is not sensitive; no additional role gate required.
 	api.Get("/system/update-check", handler.GetUpdateStatus)
+
+	// Site branding and legal settings — system_admin only.
+	api.Get("/admin/settings/site", auth.RequireRole(auth.RoleSystemAdmin), handler.GetAdminSite)
+	api.Put("/admin/settings/site", auth.RequireRole(auth.RoleSystemAdmin), handler.UpdateAdminSite)
 
 }

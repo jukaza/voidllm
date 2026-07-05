@@ -3,9 +3,10 @@ import { NavLink, Link } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useMe } from '../../hooks/useMe'
 import { useMyWallet } from '../../hooks/useWallet'
-import { formatCost } from '../../lib/utils'
+import { cn, formatCost } from '../../lib/utils'
 import { LOCAL_STORAGE_KEY } from '../../lib/constants'
 import { useTranslation } from '../../lib/i18n'
+import { BrandMark } from '../brand/BrandMark'
 
 function formatRole(role?: string): string {
   if (!role) return '...'
@@ -41,7 +42,7 @@ function hasMinRole(userRole: string, minRole?: string): boolean {
 }
 
 const iconProps = {
-  className: 'h-5 w-5 shrink-0',
+  className: 'h-4 w-4 shrink-0',
   viewBox: '0 0 24 24',
   fill: 'none',
   stroke: 'currentColor',
@@ -133,6 +134,15 @@ function IconPersonPlus() {
   )
 }
 
+function IconSettings() {
+  return (
+    <svg {...iconProps}>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+    </svg>
+  )
+}
+
 function IconWallet() {
   return (
     <svg {...iconProps}>
@@ -158,11 +168,6 @@ function buildNavigation(t: any): NavGroup[] {
       items: [
         { label: t('sidebar.catalog'), path: '/catalog', icon: <IconCatalog /> },
         { label: t('sidebar.keys'), path: '/keys', icon: <IconKey /> },
-      ],
-    },
-    {
-      label: t('sidebar.analytics'),
-      items: [
         { label: t('sidebar.analytics'), path: '/analytics', icon: <IconBarChart /> },
       ],
     },
@@ -174,6 +179,7 @@ function buildNavigation(t: any): NavGroup[] {
         { label: t('sidebar.providers'), path: '/providers', icon: <IconBuilding /> },
         { label: t('sidebar.models'), path: '/models', icon: <IconCube /> },
         { label: t('sidebar.topups'), path: '/marketplace', icon: <IconWallet /> },
+        { label: t('sidebar.settings'), path: '/settings', icon: <IconSettings /> },
       ],
     },
   ]
@@ -221,25 +227,32 @@ export function Sidebar() {
   return (
     <aside
       aria-label="Main navigation"
-      className="w-[260px] bg-bg-secondary border-r border-white/5 flex flex-col fixed h-screen z-50"
+      className="w-[13rem] bg-bg-secondary border-r border-white/5 flex flex-col fixed h-screen z-50"
     >
       {/* Logo */}
-      <div className="px-4 py-4 border-b border-white/5 shrink-0">
-        <a href="/" className="flex items-center gap-2 no-underline">
-          <img src="/logo.svg" alt="VoidLLM" className="h-7 w-7" />
-          <span className="gradient-text text-xl font-bold">VoidLLM</span>
+      <div className="px-3 py-2.5 border-b border-white/5 shrink-0">
+        <a href="/" className="no-underline">
+          <BrandMark
+            nameClassName="gradient-text text-base font-bold truncate"
+            iconClassName="h-6 w-6 shrink-0"
+          />
         </a>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 flex flex-col gap-0.5 p-3 overflow-y-auto">
+      <nav className="void-scroll flex-1 flex flex-col gap-px px-2 py-2 overflow-y-auto">
         {visibleGroups.map((group, groupIndex) => (
             <div key={group.label || `group-${groupIndex}`}>
               {groupIndex > 0 && (
-                <div className="h-px bg-white/10 my-2" />
+                <div className="h-px bg-white/10 my-1.5 mx-1" />
               )}
               {group.label && (
-                <div className="text-[11px] uppercase tracking-wider text-text-tertiary/50 px-3 mb-1 mt-1">
+                <div
+                  className={cn(
+                    'px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-text-tertiary/60',
+                    groupIndex > 0 && 'mt-0.5',
+                  )}
+                >
                   {group.label}
                 </div>
               )}
@@ -248,10 +261,10 @@ export function Sidebar() {
                   <NavLink
                     key={item.path}
                     to={item.path}
-                    className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm opacity-50 hover:opacity-70 transition-opacity"
+                    className="flex items-center gap-2 px-2 py-1.5 rounded-md text-[13px] opacity-50 hover:opacity-70 transition-opacity"
                   >
                     {item.icon}
-                    <span className="flex-1">{item.label}</span>
+                    <span className="flex-1 truncate">{item.label}</span>
                     <LockIcon />
                   </NavLink>
                 ) : (
@@ -260,16 +273,16 @@ export function Sidebar() {
                     to={item.path}
                     end={item.end !== undefined ? item.end : item.path === '/'}
                     className={({ isActive }) =>
-                      [
-                        'flex items-center gap-3 px-3 py-2 rounded-lg text-sm no-underline transition-all duration-200',
+                      cn(
+                        'flex items-center gap-2 px-2 py-1.5 rounded-md text-[13px] no-underline transition-colors duration-150',
                         isActive
-                          ? 'bg-accent/15 text-accent'
+                          ? 'bg-accent/15 text-accent font-medium'
                           : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary',
-                      ].join(' ')
+                      )
                     }
                   >
                     {item.icon}
-                    <span className="flex-1">{item.label}</span>
+                    <span className="flex-1 truncate">{item.label}</span>
                   </NavLink>
                 )
               )}
@@ -278,64 +291,67 @@ export function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="shrink-0 border-t border-white/5 p-3">
-        {/* Language selector */}
-        <div className="flex items-center justify-between mb-3 px-1">
-          <span className="text-[11px] text-text-tertiary uppercase tracking-wider">{t('sidebar.language')}</span>
-          <div className="flex gap-1 bg-white/5 p-0.5 rounded border border-white/5">
-            <button
-              onClick={() => setLanguage('vi')}
-              className={`px-2 py-0.5 text-[10px] font-bold rounded-sm cursor-pointer transition-colors ${
-                language === 'vi' ? 'bg-accent text-white' : 'text-text-secondary hover:text-text-primary'
-              }`}
-            >
-              VI
-            </button>
-            <button
-              onClick={() => setLanguage('en')}
-              className={`px-2 py-0.5 text-[10px] font-bold rounded-sm cursor-pointer transition-colors ${
-                language === 'en' ? 'bg-accent text-white' : 'text-text-secondary hover:text-text-primary'
-              }`}
-            >
-              EN
-            </button>
-          </div>
-        </div>
-
+      <div className="shrink-0 border-t border-white/5 px-2 py-2 space-y-1.5">
         <Link
           to="/wallet"
-          className="mb-3 flex items-center justify-between rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 no-underline transition-colors hover:border-accent/30 hover:bg-accent/5"
+          className="flex items-center justify-between gap-2 rounded-md border border-white/5 bg-white/[0.02] px-2 py-1.5 no-underline transition-colors hover:border-accent/30 hover:bg-accent/5"
         >
-          <span className="text-[11px] text-text-tertiary">{t('wallet.balance')}</span>
-          <span className="text-sm font-semibold text-text-primary tabular-nums">
+          <span className="text-[10px] text-text-tertiary truncate">{t('wallet.balance')}</span>
+          <span className="text-xs font-semibold text-text-primary tabular-nums shrink-0">
             {wallet != null ? formatCost(wallet.balance) : '—'}
           </span>
         </Link>
 
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5 min-w-0">
           <Link
             to="/profile"
-            className="text-xs text-text-secondary truncate max-w-[140px] hover:text-text-primary transition-colors no-underline"
-            title={t('common.view_profile')}
+            className="min-w-0 flex-1 truncate text-[11px] text-text-secondary hover:text-text-primary transition-colors no-underline"
+            title={data?.display_name || data?.email || '...'}
           >
             {data?.display_name || data?.email || '...'}
           </Link>
-          <span className="rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent uppercase">{formatRole(data?.role)}</span>
+          <span className="shrink-0 rounded bg-accent/15 px-1 py-px text-[9px] font-semibold text-accent uppercase">
+            {formatRole(data?.role)}
+          </span>
         </div>
-        <div className="flex gap-2">
+
+        <div className="flex items-center gap-1">
+          <div className="flex gap-px rounded border border-white/5 bg-white/5 p-px">
+            <button
+              type="button"
+              onClick={() => setLanguage('vi')}
+              className={cn(
+                'px-1.5 py-px text-[9px] font-bold rounded-sm cursor-pointer transition-colors',
+                language === 'vi' ? 'bg-accent text-white' : 'text-text-tertiary hover:text-text-primary',
+              )}
+            >
+              VI
+            </button>
+            <button
+              type="button"
+              onClick={() => setLanguage('en')}
+              className={cn(
+                'px-1.5 py-px text-[9px] font-bold rounded-sm cursor-pointer transition-colors',
+                language === 'en' ? 'bg-accent text-white' : 'text-text-tertiary hover:text-text-primary',
+              )}
+            >
+              EN
+            </button>
+          </div>
           <Link
             to="/profile"
-            className="flex-1 py-1.5 bg-transparent border border-white/10 rounded-md text-xs text-text-secondary cursor-pointer transition-colors duration-200 hover:border-accent/40 hover:text-text-primary text-center no-underline"
+            className="flex-1 py-1 rounded-md border border-white/10 text-[10px] text-text-secondary text-center no-underline transition-colors hover:border-accent/40 hover:text-text-primary"
           >
             {t('sidebar.profile')}
           </Link>
           <button
+            type="button"
             onClick={() => {
               localStorage.removeItem(LOCAL_STORAGE_KEY)
               queryClient.clear()
               window.location.href = '/login'
             }}
-            className="flex-1 py-1.5 bg-transparent border border-white/10 rounded-md text-xs text-text-secondary cursor-pointer transition-colors duration-200 hover:border-error hover:text-error"
+            className="flex-1 py-1 rounded-md border border-white/10 text-[10px] text-text-secondary cursor-pointer transition-colors hover:border-error hover:text-error"
           >
             {t('sidebar.logout')}
           </button>

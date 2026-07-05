@@ -105,10 +105,7 @@ export function Drawer({
           </button>
         </div>
 
-        <div
-          className="flex-1 overflow-y-auto px-6 py-5"
-          style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.15) transparent' }}
-        >
+        <div className="void-scroll flex-1 overflow-y-auto px-6 py-5">
           {children}
         </div>
 

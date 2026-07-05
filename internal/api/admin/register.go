@@ -12,6 +12,7 @@ import (
 	"github.com/voidmind-io/voidllm/internal/apierror"
 	"github.com/voidmind-io/voidllm/internal/auth"
 	"github.com/voidmind-io/voidllm/internal/db"
+	"github.com/voidmind-io/voidllm/internal/site"
 	"github.com/voidmind-io/voidllm/pkg/keygen"
 )
 
@@ -20,6 +21,7 @@ type registerRequest struct {
 	Email       string `json:"email"`
 	Password    string `json:"password"`
 	DisplayName string `json:"display_name"`
+	AcceptTerms bool   `json:"accept_terms"`
 }
 
 // registerResponse is returned on successful public signup. It carries a
@@ -61,6 +63,20 @@ func (h *Handler) Register(c fiber.Ctx) error {
 		return apierror.BadRequest(c, "display_name is required")
 	}
 
+	ctx := c.Context()
+
+	siteCfg, err := site.Load(ctx, h.DB)
+	if err != nil {
+		h.Log.ErrorContext(ctx, "register: load site settings", slog.String("error", err.Error()))
+		return apierror.InternalError(c, "signup failed")
+	}
+	if !siteCfg.RegisterEnabled {
+		return apierror.Send(c, fiber.StatusForbidden, "forbidden", "registration is disabled")
+	}
+	if siteCfg.UserAgreementEnabled && !req.AcceptTerms {
+		return apierror.BadRequest(c, "you must accept the terms of service")
+	}
+
 	// Reuse the login throttle for signup abuse protection: one bucket per IP
 	// plus a per-email lockout, same thresholds as login brute-force.
 	if h.LoginThrottle != nil {
@@ -69,8 +85,6 @@ func (h *Handler) Register(c fiber.Ctx) error {
 				"too many signup attempts, try again later")
 		}
 	}
-
-	ctx := c.Context()
 
 	passwordHashBytes, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {

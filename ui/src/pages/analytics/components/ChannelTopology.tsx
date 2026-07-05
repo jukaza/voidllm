@@ -4,6 +4,14 @@ import type { LiveSnapshot } from '../../../hooks/useUsageLive'
 import { BrandIcon } from '../../../components/ui/BrandIcon'
 import { formatCost, formatNumber } from '../../../lib/utils'
 import { useTranslation } from '../../../lib/i18n'
+import { useSiteConfig } from '../../../hooks/useSiteConfig'
+
+function ChannelHubLabel() {
+  const { data } = useSiteConfig()
+  return (
+    <span className="text-sm font-bold text-text-primary">{data?.system_name ?? 'VoidLLM'}</span>
+  )
+}
 
 interface ChannelTopologyProps {
   channels: ChannelUsageRow[]
@@ -81,7 +89,7 @@ export function ChannelTopology({ channels, live }: ChannelTopologyProps) {
       <div
         className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 flex items-center justify-center gap-2 rounded-xl border-2 border-accent/40 bg-accent/10 px-5 py-2.5"
       >
-        <span className="text-sm font-bold text-text-primary">VoidLLM</span>
+        <ChannelHubLabel />
         {live && live.active_count > 0 && (
           <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-[10px] font-bold text-white">
             {live.active_count}

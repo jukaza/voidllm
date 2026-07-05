@@ -21,6 +21,8 @@ import ProfilePage from './pages/ProfilePage'
 import PlaygroundPage from './pages/PlaygroundPage'
 import SystemUsersPage from './pages/SystemUsersPage'
 import CatalogPage from './pages/CatalogPage'
+import SystemSettingsPage from './pages/settings/SystemSettingsPage'
+import LegalPage from './pages/storefront/LegalPage'
 import { ToastProvider } from './hooks/useToast'
 import { Shell } from './components/layout/Shell'
 import { PageHeader } from './components/ui/PageHeader'
@@ -70,29 +72,33 @@ export default function App() {
               <Route path="/" element={<HomeRoute />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
+              <Route path="/legal/:kind" element={<LegalPage />} />
+              <Route path="/system-settings/*" element={<Navigate to="/settings" replace />} />
               <Route element={<RequireAuth />}>
-                <Route path="dashboard" element={<DashboardPage />} />
-                <Route path="playground" element={<PlaygroundPage />} />
-                <Route path="catalog" element={<CatalogPage />} />
-                <Route path="keys" element={<KeysPage />} />
-                <Route path="providers" element={<ProvidersPage />} />
-                <Route path="providers/new" element={<ProviderNewPage />} />
-                <Route path="providers/wizard" element={<ProviderWizardPage />} />
-                <Route path="providers/:id" element={<ProviderDetailPage />} />
-                <Route path="marketplace" element={<MarketplacePage />} />
-                <Route path="wallet" element={<WalletPage />} />
-                <Route path="models" element={<ModelsLayout />} />
-                <Route path="analytics" element={<AnalyticsLayout />}>
+                <Route path="/dashboard" element={<DashboardPage />} />
+                <Route path="/playground" element={<PlaygroundPage />} />
+                <Route path="/catalog" element={<CatalogPage />} />
+                <Route path="/keys" element={<KeysPage />} />
+                <Route path="/providers" element={<ProvidersPage />} />
+                <Route path="/providers/new" element={<ProviderNewPage />} />
+                <Route path="/providers/wizard" element={<ProviderWizardPage />} />
+                <Route path="/providers/:id" element={<ProviderDetailPage />} />
+                <Route path="/marketplace" element={<MarketplacePage />} />
+                <Route path="/wallet" element={<WalletPage />} />
+                <Route path="/models" element={<ModelsLayout />} />
+                <Route path="/analytics" element={<AnalyticsLayout />}>
                   <Route index element={<AnalyticsOverviewPage />} />
                   <Route path="logs" element={<RequestLogsPage />} />
                   <Route path="channels" element={<ChannelsPage />} />
                   <Route path="profit" element={<ProfitPage />} />
                 </Route>
-                <Route path="usage" element={<Navigate to="/analytics" replace />} />
-                <Route path="usage/*" element={<Navigate to="/analytics" replace />} />
-                <Route path="cost-reports" element={<Navigate to="/analytics/profit" replace />} />
-                <Route path="profile" element={<ProfilePage />} />
-                <Route path="users" element={<SystemUsersPage />} />
+                <Route path="/usage" element={<Navigate to="/analytics" replace />} />
+                <Route path="/usage/*" element={<Navigate to="/analytics" replace />} />
+                <Route path="/cost-reports" element={<Navigate to="/analytics/profit" replace />} />
+                <Route path="/profile" element={<ProfilePage />} />
+                <Route path="/users" element={<SystemUsersPage />} />
+                <Route path="/settings" element={<SystemSettingsPage />} />
+                <Route path="/settings/*" element={<Navigate to="/settings" replace />} />
                 <Route
                   path="*"
                   element={

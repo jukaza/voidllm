@@ -139,10 +139,7 @@ export function Dialog({
           </button>
         </div>
 
-        <div
-          className={cn('flex-1 overflow-y-auto', className)}
-          style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.15) transparent' }}
-        >{children}</div>
+        <div className={cn('void-scroll flex-1 overflow-y-auto', className)}>{children}</div>
 
         {footer != null && <div className="mt-6">{footer}</div>}
       </div>

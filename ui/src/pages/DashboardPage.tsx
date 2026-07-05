@@ -13,6 +13,7 @@ import { useMyWallet, useAdminTopups } from '../hooks/useWallet'
 import { useUsageLive } from '../hooks/useUsageLive'
 import { formatNumber, formatCost, formatTokens } from '../lib/utils'
 import { useTranslation } from '../lib/i18n'
+import { useSiteConfig } from '../hooks/useSiteConfig'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -134,7 +135,9 @@ export default function DashboardPage() {
   const { data: stats, isLoading: statsLoading } = useDashboardStats()
   const { data: wallet, isLoading: walletLoading } = useMyWallet()
   const { data: updateInfo } = useUpdateCheck()
+  const { data: site } = useSiteConfig()
   const { t } = useTranslation()
+  const systemName = site?.system_name ?? 'VoidLLM'
   const [showUpdateDialog, setShowUpdateDialog] = useState(false)
 
   const isAdmin = me?.is_system_admin ?? false
@@ -193,7 +196,7 @@ export default function DashboardPage() {
           <div onClick={() => setShowUpdateDialog(true)} className="cursor-pointer">
             <Banner
               variant="info"
-              title={`VoidLLM ${updateInfo.available_version} is available (current: ${updateInfo.current_version})`}
+              title={`${systemName} ${updateInfo.available_version} is available (current: ${updateInfo.current_version})`}
               onDismiss={(e) => {
                 e.stopPropagation()
                 dismissUpdate()
@@ -304,7 +307,7 @@ export default function DashboardPage() {
         <Dialog
           open={showUpdateDialog}
           onClose={() => setShowUpdateDialog(false)}
-          title={`VoidLLM ${updateInfo.available_version ?? ''}`}
+          title={`${systemName} ${updateInfo.available_version ?? ''}`}
           footer={
             <div className="flex gap-3">
               {updateInfo.release_url != null && (
