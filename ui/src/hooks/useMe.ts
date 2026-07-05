@@ -7,6 +7,11 @@ export interface MeResponse {
   display_name: string
   role: string
   is_system_admin: boolean
+  has_password: boolean
+  auth_provider: string
+  two_fa_enabled: boolean
+  two_fa_available: boolean
+  active_session_count: number
 }
 
 export function useMe() {

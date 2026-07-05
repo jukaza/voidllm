@@ -50,8 +50,8 @@ Khi wire backend cho trường Preview: thêm API → bỏ draft field → đổ
 
 | Tab | File | Live API | Preview (draft) |
 |-----|------|----------|-----------------|
-| General | `GeneralSettingsTab.tsx` | `GET/PUT /admin/settings/site` (tên, logo, footer, about, …) | `site_subtitle`, contact fields (`support_email`, telegram, discord, `doc_url`) |
-| Security | `SecuritySettingsTab.tsx` | `register_enabled` qua site API | Turnstile, OAuth provider config |
+| General | `GeneralSettingsTab.tsx` | `GET/PUT /admin/settings/site` + `POST/DELETE /admin/settings/site/logo` (upload logo, tên, phụ đề, footer, homepage, Zalo/Telegram, docs, API base) | — (tab Live hoàn toàn) |
+| Security | `SecuritySettingsTab.tsx` | `register_enabled`, Turnstile, OAuth, policy 2FA/session/password | — |
 | Features | `FeaturesSettingsTab.tsx` | — | `enforce_balance`, `initial_wallet_balance`, catalog/playground toggles |
 | Payment | `PaymentSettingsTab.tsx` | `GET/PUT /admin/settings/payment` | — |
 | Legal & Notice | `LegalNoticeSettingsTab.tsx` | Site legal + notice list API | — |
@@ -89,8 +89,8 @@ Khi wire backend cho trường Preview: thêm API → bỏ draft field → đổ
 | Tab | File | Live | Preview |
 |-----|------|------|---------|
 | Profile | `ProfileTab.tsx` | Email read-only (`GET /me`) | Display name (`PATCH /me` chưa có) |
-| Security | `SecurityTab.tsx` | Đổi mật khẩu `POST /me/password` | 2FA, sessions |
-| Connections | `ConnectionsTab.tsx` | — | OAuth bind Google/GitHub/OIDC |
+| Security | `SecurityTab.tsx` | Mật khẩu, 2FA TOTP, phiên đăng nhập (API Live) | — |
+| Connections | `ConnectionsTab.tsx` | OAuth bind Google/GitHub | — |
 | Preferences | `PreferencesTab.tsx` | Ngôn ngữ `setLanguage` | `record_ip` |
 
 ### Hero & stats (Live)
@@ -106,9 +106,10 @@ Link nhanh: Wallet, Analytics, Keys.
 
 ### Dialogs (`ui/src/pages/account/components/`)
 
-- `ChangePasswordDialog.tsx` — **Live**
-- `TwoFactorDialog.tsx` — Preview
-- `SessionsDialog.tsx` — Preview
+- `ChangePasswordDialog.tsx` — **Live** (`POST /me/password`)
+- `SetPasswordDialog.tsx` — **Live** (`POST /me/password/set`, OAuth-only)
+- `TwoFactorDialog.tsx` — **Live** (`POST /me/2fa/*`, khi admin bật `allow_user_enable`)
+- `SessionsDialog.tsx` — **Live** (`GET/DELETE /me/sessions`)
 - `SecurityActionTiles.tsx` — tiles mở dialog
 
 ### Đã bỏ so với bản demo cũ
@@ -141,7 +142,7 @@ Quyết định: **không triển khai SMTP / gửi mail / thông báo email** t
 ### Vẫn giữ (không phải “tính năng email”)
 
 - **Email đăng nhập** — login, register, profile read-only, cột user trong admin/finance
-- **`support_email`** — trường liên hệ preview trong tab General (không gửi mail)
+- **`support_zalo` / `support_telegram`** — kênh hỗ trợ cộng đồng trên landing footer (không email)
 
 ---
 
@@ -152,8 +153,10 @@ Quyết định: **không triển khai SMTP / gửi mail / thông báo email** t
 | Tính năng | API đề xuất | Ghi chú |
 |-----------|-------------|---------|
 | Sửa tên hiển thị | `PATCH /me` `{ display_name }` | Hiện chỉ draft localStorage |
-| 2FA | `POST /me/2fa/setup`, `POST /me/2fa/verify`, `DELETE /me/2fa` | UI dialog sẵn |
-| Sessions | `GET /me/sessions`, `DELETE /me/sessions/:id` | UI dialog sẵn |
+| ~~2FA~~ | `POST /me/2fa/setup`, `POST /me/2fa/verify`, `DELETE /me/2fa` | **Đã Live** |
+| ~~Sessions~~ | `GET /me/sessions`, `DELETE /me/sessions/:id` | **Đã Live** |
+| Login 2FA | `POST /auth/login` → `requires_2fa`, `POST /auth/login/2fa` | **Đã Live** |
+| Đặt mật khẩu OAuth | `POST /me/password/set` | **Đã Live** |
 | OAuth bind | Flow redirect + callback per provider | Admin bật OAuth ở Security trước |
 | `record_ip` preference | `PATCH /me/preferences` hoặc user settings table | Preview |
 
@@ -161,7 +164,7 @@ Quyết định: **không triển khai SMTP / gửi mail / thông báo email** t
 
 | Trường draft | Gợi ý |
 |--------------|-------|
-| `site_subtitle`, contact fields | Mở rộng `PUT /admin/settings/site` hoặc bảng `settings` |
+| ~~`site_subtitle`, contact fields~~ | **Đã Live** — `site_subtitle`, `support_zalo`, `support_telegram`, `doc_url` |
 | Turnstile / OAuth | Endpoint security settings riêng |
 | `enforce_balance`, `initial_wallet_balance` | Config server / wallet bootstrap |
 | Backup import | `POST /admin/settings/import` |

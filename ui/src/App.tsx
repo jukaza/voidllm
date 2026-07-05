@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import LoginPage from './pages/auth/LoginPage'
+import AuthCallbackPage from './pages/auth/AuthCallbackPage'
 import LandingPage from './pages/storefront/LandingPage'
 import RegisterPage from './pages/storefront/RegisterPage'
 import DashboardPage from './pages/DashboardPage'
@@ -59,12 +60,6 @@ function RequireAuth() {
   return <Shell />
 }
 
-function HomeRoute() {
-  const token = localStorage.getItem(LOCAL_STORAGE_KEY)
-  if (!token) return <LandingPage />
-  return <Navigate to="/dashboard" replace />
-}
-
 export default function App() {
   return (
     <TranslationProvider>
@@ -72,9 +67,10 @@ export default function App() {
         <ToastProvider>
           <BrowserRouter>
             <Routes>
-              <Route path="/" element={<HomeRoute />} />
+              <Route path="/" element={<LandingPage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
+              <Route path="/auth/callback" element={<AuthCallbackPage />} />
               <Route path="/legal/:kind" element={<LegalPage />} />
               <Route path="/system-settings/*" element={<Navigate to="/settings" replace />} />
               <Route element={<RequireAuth />}>

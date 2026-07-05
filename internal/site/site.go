@@ -29,6 +29,10 @@ type Config struct {
 	RegisterEnabled       bool   `json:"register_enabled"`
 	UserAgreementEnabled  bool   `json:"user_agreement_enabled"`
 	PrivacyPolicyEnabled  bool   `json:"privacy_policy_enabled"`
+	SiteSubtitle          string `json:"site_subtitle"`
+	SupportZalo           string `json:"support_zalo"`
+	SupportTelegram       string `json:"support_telegram"`
+	DocURL                string `json:"doc_url"`
 }
 
 // UpdateInput is the admin payload for PUT /admin/settings/site.
@@ -43,7 +47,11 @@ type UpdateInput struct {
 	PrivacyPolicy   *string          `json:"privacy_policy"`
 	Announcements   *[]Announcement  `json:"announcements"`
 	NoticeEnabled   *bool            `json:"notice_enabled"`
-	RegisterEnabled *bool   `json:"register_enabled"`
+	RegisterEnabled   *bool   `json:"register_enabled"`
+	SiteSubtitle      *string `json:"site_subtitle"`
+	SupportZalo       *string `json:"support_zalo"`
+	SupportTelegram   *string `json:"support_telegram"`
+	DocURL            *string `json:"doc_url"`
 }
 
 // EnsureDefaults seeds first-run site settings without overwriting operator edits.
@@ -65,7 +73,11 @@ func EnsureDefaults(ctx context.Context, store SettingsStore) error {
 		KeyNotice:          "",
 		KeyAnnouncements:   announcementsJSON,
 		KeyNoticeEnabled:   "true",
-		KeyRegisterEnabled: "true",
+		KeyRegisterEnabled:   "true",
+		KeySiteSubtitle:      "",
+		KeySupportZalo:       "",
+		KeySupportTelegram:   "",
+		KeyDocURL:            "",
 	}
 	for key, value := range defaults {
 		if err := store.SetSettingIfNotExists(ctx, key, value); err != nil {
@@ -134,6 +146,22 @@ func Load(ctx context.Context, store SettingsStore) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	siteSubtitle, err := store.GetSetting(ctx, KeySiteSubtitle)
+	if err != nil {
+		return Config{}, err
+	}
+	supportZalo, err := store.GetSetting(ctx, KeySupportZalo)
+	if err != nil {
+		return Config{}, err
+	}
+	supportTelegram, err := store.GetSetting(ctx, KeySupportTelegram)
+	if err != nil {
+		return Config{}, err
+	}
+	docURL, err := store.GetSetting(ctx, KeyDocURL)
+	if err != nil {
+		return Config{}, err
+	}
 
 	return Config{
 		SystemName:           systemName,
@@ -149,6 +177,10 @@ func Load(ctx context.Context, store SettingsStore) (Config, error) {
 		RegisterEnabled:      registerEnabled,
 		UserAgreementEnabled: strings.TrimSpace(userAgreement) != "",
 		PrivacyPolicyEnabled: strings.TrimSpace(privacyPolicy) != "",
+		SiteSubtitle:         siteSubtitle,
+		SupportZalo:          supportZalo,
+		SupportTelegram:      supportTelegram,
+		DocURL:               docURL,
 	}, nil
 }
 
@@ -219,6 +251,26 @@ func Update(ctx context.Context, store SettingsStore, input UpdateInput) (Config
 	}
 	if input.RegisterEnabled != nil {
 		if err := store.SetSetting(ctx, KeyRegisterEnabled, strconv.FormatBool(*input.RegisterEnabled)); err != nil {
+			return Config{}, err
+		}
+	}
+	if input.SiteSubtitle != nil {
+		if err := store.SetSetting(ctx, KeySiteSubtitle, strings.TrimSpace(*input.SiteSubtitle)); err != nil {
+			return Config{}, err
+		}
+	}
+	if input.SupportZalo != nil {
+		if err := store.SetSetting(ctx, KeySupportZalo, strings.TrimSpace(*input.SupportZalo)); err != nil {
+			return Config{}, err
+		}
+	}
+	if input.SupportTelegram != nil {
+		if err := store.SetSetting(ctx, KeySupportTelegram, strings.TrimSpace(*input.SupportTelegram)); err != nil {
+			return Config{}, err
+		}
+	}
+	if input.DocURL != nil {
+		if err := store.SetSetting(ctx, KeyDocURL, strings.TrimSpace(*input.DocURL)); err != nil {
 			return Config{}, err
 		}
 	}

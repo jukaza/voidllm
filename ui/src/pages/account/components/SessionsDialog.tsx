@@ -3,7 +3,7 @@ import { Dialog } from '../../../components/ui/Dialog'
 import { Badge } from '../../../components/ui/Badge'
 import { useToast } from '../../../hooks/useToast'
 import { useTranslation } from '../../../lib/i18n'
-import { useAccountDraft } from '../useAccountDraft'
+import { useRevokeOtherSessions, useRevokeSession, useSessions } from '../../../hooks/useAccountSecurity'
 
 interface SessionsDialogProps {
   open: boolean
@@ -13,20 +13,25 @@ interface SessionsDialogProps {
 export function SessionsDialog({ open, onClose }: SessionsDialogProps) {
   const { t } = useTranslation()
   const { toast } = useToast()
-  const { draft, setDraft } = useAccountDraft()
+  const { data: sessions = [], isLoading } = useSessions()
+  const revokeSession = useRevokeSession()
+  const revokeOthers = useRevokeOtherSessions()
 
-  function revokeSession(id: string) {
-    setDraft({ sessions: draft.sessions.filter((s) => s.id !== id) })
-    toast({ variant: 'success', message: t('account.sessions_revoked') })
+  const hasOthers = sessions.some((s) => !s.current)
+
+  function revokeOne(id: string) {
+    revokeSession.mutate(id, {
+      onSuccess: () => toast({ variant: 'success', message: t('account.sessions_revoked') }),
+      onError: (err) => toast({ variant: 'error', message: err.message }),
+    })
   }
 
   function revokeAllOthers() {
-    const current = draft.sessions.find((s) => s.current) ?? draft.sessions[0]
-    setDraft({ sessions: current ? [current] : [] })
-    toast({ variant: 'success', message: t('account.sessions_revoked_all') })
+    revokeOthers.mutate(undefined, {
+      onSuccess: () => toast({ variant: 'success', message: t('account.sessions_revoked_all') }),
+      onError: (err) => toast({ variant: 'error', message: err.message }),
+    })
   }
-
-  const hasOthers = draft.sessions.some((s) => !s.current) || draft.sessions.length > 1
 
   return (
     <Dialog
@@ -35,36 +40,48 @@ export function SessionsDialog({ open, onClose }: SessionsDialogProps) {
       title={t('account.sessions_dialog_title')}
       footer={
         hasOthers ? (
-          <Button variant="destructive" size="sm" onClick={revokeAllOthers}>
+          <Button
+            variant="destructive"
+            size="sm"
+            loading={revokeOthers.isPending}
+            onClick={revokeAllOthers}
+          >
             {t('account.sessions_revoke_all')}
           </Button>
         ) : undefined
       }
     >
       <div className="space-y-2">
-        {draft.sessions.length === 0 && (
+        {isLoading && <p className="text-sm text-text-tertiary">{t('common.loading')}</p>}
+        {!isLoading && sessions.length === 0 && (
           <p className="text-sm text-text-tertiary">{t('account.sessions_empty')}</p>
         )}
-        {draft.sessions.map((session) => (
+        {sessions.map((session) => (
           <div
             key={session.id}
             className="flex items-center justify-between rounded border border-border p-3 text-sm"
           >
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-mono text-xs text-text-tertiary">{session.ip}</span>
+                <span className="font-medium text-text-primary">{session.device_label}</span>
                 {session.current && (
                   <Badge variant="info" className="text-[10px]">
                     {t('account.sessions_current')}
                   </Badge>
                 )}
               </div>
-              <div>
-                {session.device} • {session.lastActive}
+              <div className="text-xs text-text-tertiary">
+                {session.ip || '—'}
+                {session.last_seen_at ? ` · ${session.last_seen_at}` : ''}
               </div>
             </div>
             {!session.current && (
-              <Button size="sm" variant="ghost" onClick={() => revokeSession(session.id)}>
+              <Button
+                size="sm"
+                variant="ghost"
+                loading={revokeSession.isPending}
+                onClick={() => revokeOne(session.id)}
+              >
                 {t('account.sessions_revoke')}
               </Button>
             )}

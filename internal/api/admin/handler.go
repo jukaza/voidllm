@@ -64,6 +64,10 @@ type Handler struct {
 	// Nil in dev builds (Version == "dev") — GetUpdateStatus returns a static
 	// response in that case.
 	UpdateChecker *update.Checker
+	// DataDir is the writable data root for uploaded site assets (e.g. custom logos).
+	DataDir string
+	// PublicUIOrigin is the SPA base URL for OAuth redirects (e.g. http://localhost:5173 in dev).
+	PublicUIOrigin string
 	// ReloadModels triggers an in-process rebuild of the model registry.
 	// Called after model/deployment mutations to apply changes immediately,
 	// independent of Redis pub/sub.

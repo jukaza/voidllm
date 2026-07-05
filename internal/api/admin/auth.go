@@ -13,7 +13,6 @@ import (
 	"github.com/voidmind-io/voidllm/internal/auth"
 	"github.com/voidmind-io/voidllm/internal/db"
 	"github.com/voidmind-io/voidllm/internal/jsonx"
-	"github.com/voidmind-io/voidllm/pkg/keygen"
 )
 
 // marshalDescription serializes a map to compact JSON for audit event descriptions.
@@ -53,11 +52,16 @@ type loginRequest struct {
 
 // meResponse is the JSON body returned for the authenticated user's profile.
 type meResponse struct {
-	ID            string `json:"id"`
-	Email         string `json:"email"`
-	DisplayName   string `json:"display_name"`
-	Role          string `json:"role"`
-	IsSystemAdmin bool   `json:"is_system_admin"`
+	ID                 string `json:"id"`
+	Email              string `json:"email"`
+	DisplayName        string `json:"display_name"`
+	Role               string `json:"role"`
+	IsSystemAdmin      bool   `json:"is_system_admin"`
+	HasPassword        bool   `json:"has_password"`
+	AuthProvider       string `json:"auth_provider"`
+	TwoFAEnabled       bool   `json:"two_fa_enabled"`
+	TwoFAAvailable     bool   `json:"two_fa_available"`
+	ActiveSessionCount int    `json:"active_session_count"`
 }
 
 // loginResponse is the JSON body returned on successful authentication.
@@ -141,89 +145,30 @@ func (h *Handler) Login(c fiber.Ctx) error {
 		return apierror.Send(c, fiber.StatusUnauthorized, "unauthorized", "invalid email or password")
 	}
 
-	role, _, err := h.DB.ResolveUserRole(ctx, userID)
-	if err != nil {
-		h.Log.ErrorContext(ctx, "login: resolve user role", slog.String("error", err.Error()))
-		return apierror.InternalError(c, "authentication failed")
-	}
-
-	// Revoke previous session keys for this user so only one session exists.
-	if err := h.DB.RevokeUserSessions(ctx, userID); err != nil {
-		h.Log.ErrorContext(ctx, "login: revoke old sessions", slog.String("error", err.Error()))
-		// Non-fatal: proceed with login even if cleanup fails.
-	}
-
-	key, err := keygen.Generate(keygen.KeyTypeSession)
-	if err != nil {
-		h.Log.ErrorContext(ctx, "login: generate session key", slog.String("error", err.Error()))
-		return apierror.InternalError(c, "authentication failed")
-	}
-
-	keyHash := keygen.Hash(key, h.HMACSecret)
-	keyHint := keygen.Hint(key)
-	expiresAt := time.Now().UTC().Add(24 * time.Hour)
-	expiresAtStr := expiresAt.Format(time.RFC3339)
-
-	apiKey, err := h.DB.CreateAPIKey(ctx, db.CreateAPIKeyParams{
-		KeyHash:   keyHash,
-		KeyHint:   keyHint,
-		KeyType:   keygen.KeyTypeSession,
-		Name:      "Login session",
-		UserID:    &userID,
-		ExpiresAt: &expiresAtStr,
-		CreatedBy: userID,
-	})
-	if err != nil {
-		h.Log.ErrorContext(ctx, "login: create api key", slog.String("error", err.Error()))
-		return apierror.InternalError(c, "authentication failed")
-	}
-
-	h.KeyCache.Set(keyHash, auth.KeyInfo{
-		ID:        apiKey.ID,
-		KeyType:   keygen.KeyTypeSession,
-		Role:      role,
-		UserID:    userID,
-		Name:      "Login session",
-		ExpiresAt: &expiresAt,
-	})
-
-	user, err := h.DB.GetUser(ctx, userID)
-	if err != nil {
-		h.Log.ErrorContext(ctx, "login: get user", slog.String("error", err.Error()))
-		return apierror.InternalError(c, "authentication failed")
-	}
-
 	if h.LoginThrottle != nil {
 		h.LoginThrottle.RecordSuccess(req.Email)
 	}
 
-	if h.AuditLogger != nil {
-		h.AuditLogger.Log(audit.Event{
-			Timestamp:    time.Now().UTC(),
-			ActorID:      user.ID,
-			ActorType:    "user",
-			ActorKeyID:   apiKey.ID,
-			Action:       "login",
-			ResourceType: "session",
-			ResourceID:   apiKey.ID,
-			Description:  marshalDescription(map[string]string{"email": req.Email}),
-			IPAddress:    c.IP(),
-			StatusCode:   fiber.StatusOK,
-			RequestID:    apierror.RequestIDFromCtx(c),
-		})
+	enabled, err := h.DB.UserHasTOTPEnabled(ctx, userID)
+	if err != nil && !errors.Is(err, db.ErrNotFound) {
+		h.Log.ErrorContext(ctx, "login: totp check", slog.String("error", err.Error()))
+		return apierror.InternalError(c, "authentication failed")
+	}
+	if enabled {
+		challenge, err := h.createLogin2FAChallenge(c, userID)
+		if err != nil {
+			h.Log.ErrorContext(ctx, "login: 2fa challenge", slog.String("error", err.Error()))
+			return apierror.InternalError(c, "authentication failed")
+		}
+		return c.Status(fiber.StatusOK).JSON(challenge)
 	}
 
-	return c.Status(fiber.StatusOK).JSON(loginResponse{
-		Token:     key,
-		ExpiresAt: expiresAtStr,
-		User: meResponse{
-			ID:            user.ID,
-			Email:         user.Email,
-			DisplayName:   user.DisplayName,
-			Role:          role,
-			IsSystemAdmin: user.IsSystemAdmin,
-		},
-	})
+	sess, err := h.issueUserSession(c, userID, "login")
+	if err != nil {
+		return apierror.InternalError(c, "authentication failed")
+	}
+
+	return c.Status(fiber.StatusOK).JSON(sess)
 }
 
 // availableModel is a single model entry in the available-models response.
@@ -461,26 +406,13 @@ func (h *Handler) Me(c fiber.Ctx) error {
 		h.Log.ErrorContext(c.Context(), "me: get user", slog.String("error", err.Error()))
 		return apierror.InternalError(c, "failed to retrieve user profile")
 	}
-	return c.JSON(meResponse{
-		ID:            user.ID,
-		Email:         user.Email,
-		DisplayName:   user.DisplayName,
-		Role:          keyInfo.Role,
-		IsSystemAdmin: user.IsSystemAdmin,
-	})
+	me, err := h.buildMeResponse(c.Context(), user, keyInfo.Role)
+	if err != nil {
+		h.Log.ErrorContext(c.Context(), "me: build response", slog.String("error", err.Error()))
+		return apierror.InternalError(c, "failed to retrieve user profile")
+	}
+	_ = h.DB.TouchSessionLastUsed(c.Context(), keyInfo.ID, 5*time.Minute)
+	return c.JSON(me)
 }
 
-// AuthProviders handles GET /api/v1/auth/providers. It returns which
-// authentication methods are available on this instance.
-//
-// @Summary      List available authentication providers
-// @Description  Returns which login methods are enabled.
-// @Tags         auth
-// @Produce      json
-// @Success      200  {object}  map[string]bool
-// @Router       /auth/providers [get]
-func (h *Handler) AuthProviders(c fiber.Ctx) error {
-	return c.JSON(fiber.Map{
-		"local": true,
-	})
-}
+

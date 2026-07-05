@@ -1,19 +1,21 @@
 import { Badge } from '../../../components/ui/Badge'
+import { useMe } from '../../../hooks/useMe'
+import { useMeConnections } from '../../../hooks/useSecuritySettings'
 import { useTranslation } from '../../../lib/i18n'
-import { useAccountDraft } from '../useAccountDraft'
 
 export function AccountStatusStrip() {
   const { t } = useTranslation()
-  const { draft } = useAccountDraft()
+  const { data: me } = useMe()
+  const { data: connections } = useMeConnections()
 
-  const oauthCount = [draft.oauth_google, draft.oauth_github, draft.oauth_oidc].filter(
-    (o) => o.bound,
-  ).length
+  if (!me) return null
+
+  const oauthCount = [connections?.google, connections?.github].filter((c) => c?.linked).length
 
   const chips = [
     {
       label: t('account.status_2fa'),
-      on: draft.two_fa_enabled,
+      on: me.two_fa_enabled,
     },
     {
       label: t('account.status_oauth'),
@@ -22,8 +24,8 @@ export function AccountStatusStrip() {
     },
     {
       label: t('account.status_sessions'),
-      on: draft.sessions.length > 0,
-      detail: String(draft.sessions.length),
+      on: me.active_session_count > 0,
+      detail: String(me.active_session_count),
     },
   ]
 

@@ -7,7 +7,11 @@ ui/dist/
 
 # Config (never commit secrets)
 voidllm.yaml
+voidllm.dev.yaml
 *.license.jwt
+
+# Uploaded site assets (custom logos, etc.)
+data/uploads/
 
 # Database
 *.db
@@ -39,4 +43,5 @@ node_modules/
 
 # Binary (built by go build)
 /voidllm
+/voidllm-server
 /bench

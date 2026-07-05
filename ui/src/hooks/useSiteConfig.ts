@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import apiClient from '../api/client'
 import type { SiteAnnouncement } from '../lib/announcements'
+import { LOCAL_STORAGE_KEY } from '../lib/constants'
 
 export interface SiteConfig {
   system_name: string
@@ -16,6 +17,10 @@ export interface SiteConfig {
   register_enabled: boolean
   user_agreement_enabled: boolean
   privacy_policy_enabled: boolean
+  site_subtitle: string
+  support_zalo: string
+  support_telegram: string
+  doc_url: string
 }
 
 export type SiteConfigUpdate = Partial<{
@@ -30,6 +35,10 @@ export type SiteConfigUpdate = Partial<{
   announcements: SiteAnnouncement[]
   notice_enabled: boolean
   register_enabled: boolean
+  site_subtitle: string
+  support_zalo: string
+  support_telegram: string
+  doc_url: string
 }>
 
 const SITE_QUERY_KEY = ['site-config'] as const
@@ -61,6 +70,35 @@ export function useAdminSiteSettings() {
   })
 }
 
+function setSiteConfigCache(queryClient: ReturnType<typeof useQueryClient>, data: SiteConfig) {
+  queryClient.setQueryData(SITE_QUERY_KEY, data)
+  queryClient.setQueryData([...SITE_QUERY_KEY, 'admin'], data)
+}
+
+async function siteLogoRequest<T>(endpoint: string, init?: RequestInit): Promise<T> {
+  const key = localStorage.getItem(LOCAL_STORAGE_KEY) ?? ''
+  const res = await fetch(`/api/v1${endpoint}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${key}`,
+      ...init?.headers,
+    },
+  })
+
+  if (res.status === 401) {
+    localStorage.removeItem(LOCAL_STORAGE_KEY)
+    window.location.href = '/login'
+    throw new Error('Session expired')
+  }
+
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: { message?: string } } | null
+    throw new Error(body?.error?.message ?? res.statusText)
+  }
+
+  return res.json() as Promise<T>
+}
+
 export function useUpdateSiteConfig() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -70,7 +108,37 @@ export function useUpdateSiteConfig() {
         body: JSON.stringify(payload),
       }),
     onSuccess: (data) => {
-      queryClient.setQueryData(SITE_QUERY_KEY, data)
+      setSiteConfigCache(queryClient, data)
+    },
+  })
+}
+
+export function useUploadSiteLogo() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const form = new FormData()
+      form.append('logo', file)
+      return siteLogoRequest<SiteConfig>('/admin/settings/site/logo', {
+        method: 'POST',
+        body: form,
+      })
+    },
+    onSuccess: (data) => {
+      setSiteConfigCache(queryClient, data)
+    },
+  })
+}
+
+export function useResetSiteLogo() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () =>
+      siteLogoRequest<SiteConfig>('/admin/settings/site/logo', {
+        method: 'DELETE',
+      }),
+    onSuccess: (data) => {
+      setSiteConfigCache(queryClient, data)
     },
   })
 }

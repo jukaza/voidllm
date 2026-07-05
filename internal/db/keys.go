@@ -106,3 +106,46 @@ ORDER BY k.id ASC`, d.dialect.Placeholder(1))
 
 	return records, skipErrors, nil
 }
+
+// LookupActiveKeyByHash returns a single active key record for auth cache fallback.
+func (d *DB) LookupActiveKeyByHash(ctx context.Context, keyHash string) (KeyRecord, error) {
+	q := fmt.Sprintf(`
+SELECT
+    k.id, k.key_hash, k.key_type, k.name,
+    k.user_id,
+    k.daily_token_limit, k.monthly_token_limit,
+    k.requests_per_minute, k.requests_per_day,
+    k.expires_at,
+    COALESCE(u.is_system_admin, 0)
+FROM api_keys k
+LEFT JOIN users u ON u.id = k.user_id AND u.deleted_at IS NULL
+WHERE k.deleted_at IS NULL
+  AND k.key_hash = %s
+  AND (k.expires_at IS NULL OR k.expires_at > %s)`,
+		d.dialect.Placeholder(1), d.dialect.Placeholder(2))
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	var (
+		r            KeyRecord
+		expiresAtRaw *string
+	)
+	err := d.sql.QueryRowContext(ctx, q, keyHash, now).Scan(
+		&r.ID, &r.KeyHash, &r.KeyType, &r.Name,
+		&r.UserID,
+		&r.DailyTokenLimit, &r.MonthlyTokenLimit,
+		&r.RequestsPerMinute, &r.RequestsPerDay,
+		&expiresAtRaw,
+		&r.IsSystemAdmin,
+	)
+	if err != nil {
+		return KeyRecord{}, fmt.Errorf("lookup active key: %w", translateError(err))
+	}
+	if expiresAtRaw != nil {
+		t, parseErr := time.Parse(time.RFC3339, *expiresAtRaw)
+		if parseErr != nil {
+			return KeyRecord{}, fmt.Errorf("parse expires_at %q: %w", *expiresAtRaw, parseErr)
+		}
+		r.ExpiresAt = &t
+	}
+	return r, nil
+}

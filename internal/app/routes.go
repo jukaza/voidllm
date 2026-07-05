@@ -107,6 +107,7 @@ func (a *Application) setupRoutes() {
 
 		// Swagger UI is served after API routes but before the SPA catch-all.
 		registerSwaggerHandlers(a.proxyApp)
+		registerSiteUploads(a.proxyApp, a.dataDir, a.log)
 
 		// SPA catch-all must be LAST — after all API routes.
 		registerSPAHandler(a.proxyApp, a.log)
@@ -139,6 +140,7 @@ func (a *Application) setupRoutes() {
 
 	// Swagger UI is served after API routes but before the SPA catch-all.
 	registerSwaggerHandlers(a.adminApp)
+	registerSiteUploads(a.adminApp, a.dataDir, a.log)
 
 	// SPA catch-all must be LAST on the admin app — after all API routes.
 	// In dual-port mode the UI is served from the admin port, not the proxy port.

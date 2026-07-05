@@ -85,6 +85,7 @@ type Application struct {
 	redisClient *voidredis.Client
 	redisCancel context.CancelFunc
 
+	dataDir  string
 	proxyApp *fiber.App
 	adminApp *fiber.App
 
@@ -699,8 +700,15 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 
 	loginThrottle := auth.NewLoginThrottle()
 
+	dataDir := resolveDataDir()
+	publicUIOrigin := strings.TrimSpace(os.Getenv("VOIDLLM_UI_ORIGIN"))
+	if devMode && publicUIOrigin == "" {
+		publicUIOrigin = "http://localhost:5173"
+	}
 	adminHandler := &admin.Handler{
-		DB:            database,
+		DB:             database,
+		DataDir:        dataDir,
+		PublicUIOrigin: publicUIOrigin,
 		HMACSecret:    hmacSecret,
 		EncryptionKey: encKey,
 		KeyCache:      keyCache,
@@ -732,6 +740,7 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 		log:              log,
 		devMode:          devMode,
 		bootstrapResult:  bootstrapResult,
+		dataDir:          dataDir,
 		database:         database,
 		encKey:           encKey,
 		hmacSecret:       hmacSecret,
@@ -1093,4 +1102,11 @@ func buildPIIEngine(encKey []byte, cfg config.PIIConfig, log *slog.Logger) (*pii
 		slog.Int("custom_patterns", len(cfg.Patterns)),
 	)
 	return pii.NewEngine(piiSecret, detectors), nil
+}
+
+func resolveDataDir() string {
+	if dir := strings.TrimSpace(os.Getenv("VOIDLLM_DATA_DIR")); dir != "" {
+		return dir
+	}
+	return "data"
 }

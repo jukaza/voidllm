@@ -6,42 +6,48 @@ import { useToast } from '../../hooks/useToast'
 import { useTranslation } from '../../lib/i18n'
 import { LiveBadge } from './components/PreviewBadge'
 import { SettingsSectionCard } from './components/SettingsSectionCard'
+import { contactHref } from '../../lib/contactLinks'
+import { SiteLogoField } from './components/SiteLogoField'
 import { SettingsTabFooter } from './components/SettingsTabFooter'
-import { useSettingsDraft } from './useSettingsDraft'
 
 export function GeneralSettingsTab() {
   const { t } = useTranslation()
   const { toast } = useToast()
   const { data } = useAdminSiteSettings()
   const updateSite = useUpdateSiteConfig()
-  const { draft, setDraft } = useSettingsDraft()
 
   const [systemName, setSystemName] = useState('')
-  const [logo, setLogo] = useState('')
+  const [siteSubtitle, setSiteSubtitle] = useState('')
   const [serverAddress, setServerAddress] = useState('')
   const [footer, setFooter] = useState('')
-  const [about, setAbout] = useState('')
   const [homePageContent, setHomePageContent] = useState('')
+  const [supportZalo, setSupportZalo] = useState('')
+  const [supportTelegram, setSupportTelegram] = useState('')
+  const [docUrl, setDocUrl] = useState('')
 
   useEffect(() => {
     if (!data) return
     setSystemName(data.system_name)
-    setLogo(data.logo)
+    setSiteSubtitle(data.site_subtitle ?? '')
     setServerAddress(data.server_address)
     setFooter(data.footer)
-    setAbout(data.about)
     setHomePageContent(data.home_page_content)
+    setSupportZalo(data.support_zalo ?? '')
+    setSupportTelegram(data.support_telegram ?? '')
+    setDocUrl(data.doc_url ?? '')
   }, [data])
 
   function save() {
     updateSite.mutate(
       {
         system_name: systemName.trim(),
-        logo: logo.trim(),
+        site_subtitle: siteSubtitle.trim(),
         server_address: serverAddress.trim(),
         footer: footer.trim(),
-        about: about.trim(),
         home_page_content: homePageContent.trim(),
+        support_zalo: supportZalo.trim(),
+        support_telegram: supportTelegram.trim(),
+        doc_url: docUrl.trim(),
       },
       {
         onSuccess: () => toast({ variant: 'success', message: t('common.saved') }),
@@ -49,6 +55,10 @@ export function GeneralSettingsTab() {
       },
     )
   }
+
+  const zaloHref = contactHref(supportZalo)
+  const telegramHref = contactHref(supportTelegram)
+  const docHref = contactHref(docUrl)
 
   return (
     <div className="space-y-6">
@@ -66,53 +76,24 @@ export function GeneralSettingsTab() {
         />
         <Input
           label={t('settings.site_subtitle')}
-          value={draft.site_subtitle}
-          onChange={(e) => setDraft({ site_subtitle: e.target.value })}
+          value={siteSubtitle}
+          onChange={(e) => setSiteSubtitle(e.target.value)}
           description={t('settings.site_subtitle_hint')}
         />
-        <Input
-          label={t('settings.logo')}
-          value={logo}
-          onChange={(e) => setLogo(e.target.value)}
-          placeholder="/logo.svg"
-          description={t('settings.logo_hint')}
-        />
-        {logo.trim() && (
-          <div className="flex items-center gap-3 rounded-md border border-border bg-bg-tertiary p-3">
-            <img
-              src={logo.trim()}
-              alt=""
-              className="h-10 w-10 object-contain"
-              onError={(e) => {
-                e.currentTarget.style.display = 'none'
-              }}
-            />
-            <span className="text-xs text-text-tertiary">{t('settings.logo_preview')}</span>
-          </div>
-        )}
-        <Input
-          label={t('settings.server_address')}
-          value={serverAddress}
-          onChange={(e) => setServerAddress(e.target.value)}
-          placeholder="https://api.example.com"
-          description={t('settings.server_address_hint')}
-        />
+        <SiteLogoField logo={data?.logo ?? ''} />
         <Input
           label={t('settings.footer')}
           value={footer}
           onChange={(e) => setFooter(e.target.value)}
           description={t('settings.footer_hint')}
         />
-        <Textarea
-          label={t('settings.about')}
-          value={about}
-          onChange={(e) => setAbout(e.target.value)}
-          rows={4}
-          description={t('settings.about_hint')}
-        />
       </SettingsSectionCard>
 
-      <SettingsSectionCard title={t('settings.homepage_title')} description={t('settings.homepage_desc')}>
+      <SettingsSectionCard
+        title={t('settings.homepage_title')}
+        description={t('settings.homepage_desc')}
+        badge={<LiveBadge />}
+      >
         <Textarea
           label={t('settings.home_page_content')}
           value={homePageContent}
@@ -127,32 +108,76 @@ export function GeneralSettingsTab() {
         description={t('settings.contact_desc')}
         badge={<LiveBadge />}
       >
-        <Input
-          label={t('settings.support_email')}
-          value={draft.support_email}
-          onChange={(e) => setDraft({ support_email: e.target.value })}
-          placeholder="support@example.com"
-        />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Input
-            label={t('settings.support_telegram')}
-            value={draft.support_telegram}
-            onChange={(e) => setDraft({ support_telegram: e.target.value })}
-            placeholder="@voidllm"
-          />
-          <Input
-            label={t('settings.support_discord')}
-            value={draft.support_discord}
-            onChange={(e) => setDraft({ support_discord: e.target.value })}
-            placeholder="https://discord.gg/..."
-          />
+          <div className="space-y-1">
+            <Input
+              label={t('settings.support_zalo')}
+              value={supportZalo}
+              onChange={(e) => setSupportZalo(e.target.value)}
+              placeholder="https://zalo.me/g/your-group"
+              description={t('settings.support_zalo_hint')}
+            />
+            {zaloHref && (
+              <a
+                href={zaloHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-accent no-underline hover:opacity-80"
+              >
+                {t('settings.contact_link_preview')}
+              </a>
+            )}
+          </div>
+          <div className="space-y-1">
+            <Input
+              label={t('settings.support_telegram')}
+              value={supportTelegram}
+              onChange={(e) => setSupportTelegram(e.target.value)}
+              placeholder="https://t.me/your-group"
+              description={t('settings.support_telegram_hint')}
+            />
+            {telegramHref && (
+              <a
+                href={telegramHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-accent no-underline hover:opacity-80"
+              >
+                {t('settings.contact_link_preview')}
+              </a>
+            )}
+          </div>
         </div>
         <Input
           label={t('settings.doc_url')}
-          value={draft.doc_url}
-          onChange={(e) => setDraft({ doc_url: e.target.value })}
+          value={docUrl}
+          onChange={(e) => setDocUrl(e.target.value)}
           placeholder="https://docs.example.com"
           description={t('settings.doc_url_hint')}
+        />
+        {docHref && (
+          <a
+            href={docHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-accent no-underline hover:opacity-80"
+          >
+            {t('settings.contact_link_preview')}
+          </a>
+        )}
+      </SettingsSectionCard>
+
+      <SettingsSectionCard
+        title={t('settings.integration_title')}
+        description={t('settings.integration_desc')}
+        badge={<LiveBadge />}
+      >
+        <Input
+          label={t('settings.server_address')}
+          value={serverAddress}
+          onChange={(e) => setServerAddress(e.target.value)}
+          placeholder="https://api.example.com"
+          description={t('settings.server_address_hint')}
         />
       </SettingsSectionCard>
 

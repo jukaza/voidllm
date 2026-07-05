@@ -9,6 +9,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/voidmind-io/voidllm/internal/apierror"
 	"github.com/voidmind-io/voidllm/internal/cache"
+	"github.com/voidmind-io/voidllm/internal/db"
 	"github.com/voidmind-io/voidllm/pkg/keygen"
 )
 
@@ -39,7 +40,11 @@ type KeyInfo struct {
 // Middleware returns a Fiber handler that authenticates requests via Bearer token.
 // It extracts the token, computes HMAC-SHA256 with hmacSecret, looks up the hash
 // in keyCache, checks expiration, and stores the KeyInfo in the request context.
-func Middleware(keyCache *cache.Cache[string, KeyInfo], hmacSecret []byte) fiber.Handler {
+func Middleware(keyCache *cache.Cache[string, KeyInfo], hmacSecret []byte, database ...*db.DB) fiber.Handler {
+	var lookupDB *db.DB
+	if len(database) > 0 {
+		lookupDB = database[0]
+	}
 	return func(c fiber.Ctx) error {
 		auth := c.Get("Authorization")
 		token := extractBearerToken(auth)
@@ -56,6 +61,14 @@ func Middleware(keyCache *cache.Cache[string, KeyInfo], hmacSecret []byte) fiber
 		// control the hash value to exploit timing differences.
 		hash := keygen.Hash(token, hmacSecret)
 		keyInfo, ok := keyCache.Get(hash)
+		if !ok && lookupDB != nil {
+			record, err := lookupDB.LookupActiveKeyByHash(c.Context(), hash)
+			if err == nil {
+				keyInfo = keyInfoFromRecord(record)
+				keyCache.Set(hash, keyInfo)
+				ok = true
+			}
+		}
 		if !ok {
 			return apierror.Unauthorized(c, "invalid API key")
 		}
@@ -68,6 +81,28 @@ func Middleware(keyCache *cache.Cache[string, KeyInfo], hmacSecret []byte) fiber
 		c.Locals(keyInfoKey, &keyInfo)
 		return c.Next()
 	}
+}
+
+func keyInfoFromRecord(r db.KeyRecord) KeyInfo {
+	ki := KeyInfo{
+		ID:                r.ID,
+		KeyType:           r.KeyType,
+		Name:              r.Name,
+		DailyTokenLimit:   r.DailyTokenLimit,
+		MonthlyTokenLimit: r.MonthlyTokenLimit,
+		RequestsPerMinute: r.RequestsPerMinute,
+		RequestsPerDay:    r.RequestsPerDay,
+		ExpiresAt:         r.ExpiresAt,
+	}
+	if r.UserID != nil {
+		ki.UserID = *r.UserID
+	}
+	if r.IsSystemAdmin == 1 {
+		ki.Role = RoleSystemAdmin
+	} else {
+		ki.Role = RoleMember
+	}
+	return ki
 }
 
 // extractBearerToken parses a Bearer token from an Authorization header value.

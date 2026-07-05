@@ -51,6 +51,8 @@ type CreateAPIKeyParams struct {
 	RequestsPerMinute int
 	RequestsPerDay    int
 	ExpiresAt         *string
+	LoginIP           *string
+	UserAgent         *string
 	CreatedBy         string
 }
 
@@ -77,12 +79,12 @@ func (d *DB) CreateAPIKey(ctx context.Context, params CreateAPIKeyParams) (*APIK
 		"(id, key_hash, key_hint, key_type, name, " +
 		"user_id, " +
 		"daily_token_limit, monthly_token_limit, requests_per_minute, requests_per_day, " +
-		"expires_at, created_by, created_at, updated_at) " +
+		"expires_at, login_ip, user_agent, created_by, created_at, updated_at) " +
 		"VALUES (" +
 		p(1) + ", " + p(2) + ", " + p(3) + ", " + p(4) + ", " + p(5) + ", " +
 		p(6) + ", " +
 		p(7) + ", " + p(8) + ", " + p(9) + ", " + p(10) + ", " +
-		p(11) + ", " + p(12) + ", " +
+		p(11) + ", " + p(12) + ", " + p(13) + ", " + p(14) + ", " +
 		"CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
 
 	selectQuery := "SELECT " + apiKeySelectColumns +
@@ -102,6 +104,8 @@ func (d *DB) CreateAPIKey(ctx context.Context, params CreateAPIKeyParams) (*APIK
 			params.RequestsPerMinute,
 			params.RequestsPerDay,
 			params.ExpiresAt,
+			params.LoginIP,
+			params.UserAgent,
 			params.CreatedBy,
 		)
 		if execErr != nil {

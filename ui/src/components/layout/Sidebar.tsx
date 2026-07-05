@@ -241,12 +241,12 @@ export function Sidebar() {
     >
       {/* Logo */}
       <div className="px-3 py-2.5 border-b border-white/5 shrink-0">
-        <a href="/" className="no-underline">
+        <Link to="/" className="no-underline">
           <BrandMark
             nameClassName="gradient-text text-base font-bold truncate"
             iconClassName="h-6 w-6 shrink-0"
           />
-        </a>
+        </Link>
       </div>
 
       {/* Navigation */}

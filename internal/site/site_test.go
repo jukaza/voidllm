@@ -39,13 +39,33 @@ func TestEnsureDefaultsAndUpdate(t *testing.T) {
 	}
 
 	name := "My AI Portal"
+	subtitle := "OpenAI-compatible marketplace"
+	zalo := "https://zalo.me/g/test"
+	telegram := "https://t.me/voidllm"
+	docs := "https://docs.example.com"
 	updated, err := site.Update(ctx, database, site.UpdateInput{
-		SystemName: &name,
+		SystemName:      &name,
+		SiteSubtitle:    &subtitle,
+		SupportZalo:     &zalo,
+		SupportTelegram: &telegram,
+		DocURL:          &docs,
 	})
 	if err != nil {
 		t.Fatalf("update: %v", err)
 	}
 	if updated.SystemName != name {
 		t.Fatalf("updated system_name = %q", updated.SystemName)
+	}
+	if updated.SiteSubtitle != subtitle {
+		t.Fatalf("site_subtitle = %q", updated.SiteSubtitle)
+	}
+	if updated.SupportZalo != zalo {
+		t.Fatalf("support_zalo = %q", updated.SupportZalo)
+	}
+	if updated.SupportTelegram != telegram {
+		t.Fatalf("support_telegram = %q", updated.SupportTelegram)
+	}
+	if updated.DocURL != docs {
+		t.Fatalf("doc_url = %q", updated.DocURL)
 	}
 }

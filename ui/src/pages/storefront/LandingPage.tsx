@@ -5,7 +5,12 @@ import { SiteNoticeBell } from '../../components/site/SiteNoticeBell'
 import { Markdown } from '../../components/ui/Markdown'
 import { usePublicCatalog } from '../../hooks/useProviders'
 import { useSiteConfig } from '../../hooks/useSiteConfig'
+import { contactHref } from '../../lib/contactLinks'
+import { LOCAL_STORAGE_KEY } from '../../lib/constants'
 import { useTranslation } from '../../lib/i18n'
+
+const dashboardLinkClass =
+  'text-sm bg-accent text-white px-4 py-2 rounded-lg no-underline hover:opacity-90'
 
 export default function LandingPage() {
   const { data, isLoading } = usePublicCatalog()
@@ -13,29 +18,43 @@ export default function LandingPage() {
   const { t } = useTranslation()
   const models = data?.data ?? []
 
+  const isLoggedIn = Boolean(localStorage.getItem(LOCAL_STORAGE_KEY))
   const showRegister = site?.register_enabled !== false
   const footerText = site?.footer?.trim() || `${site?.system_name ?? 'VoidLLM'} — OpenAI-compatible API marketplace`
+  const heroSubtitle = site?.site_subtitle?.trim() || t('storefront.hero_subtitle')
+  const zaloHref = contactHref(site?.support_zalo ?? '')
+  const telegramHref = contactHref(site?.support_telegram ?? '')
+  const docHref = contactHref(site?.doc_url ?? '')
+  const apiBase = site?.server_address?.trim()
+  const hasFooterLinks = Boolean(zaloHref || telegramHref || docHref || apiBase)
 
   return (
     <div className="min-h-screen bg-bg-primary text-text-primary">
       <header className="border-b border-white/5">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
-          <BrandMark />
+          <Link to="/" className="no-underline">
+            <BrandMark />
+          </Link>
           <div className="flex items-center gap-2">
             <SiteNoticeBell />
-            <Link
-              to="/login"
-              className="text-sm text-text-secondary hover:text-text-primary no-underline"
-            >
-              {t('storefront.sign_in')}
-            </Link>
-            {showRegister && (
-              <Link
-                to="/register"
-                className="text-sm bg-accent text-white px-4 py-2 rounded-lg no-underline hover:opacity-90"
-              >
-                {t('storefront.get_started')}
+            {isLoggedIn ? (
+              <Link to="/dashboard" className={dashboardLinkClass}>
+                {t('storefront.go_to_dashboard')}
               </Link>
+            ) : (
+              <>
+                <Link
+                  to="/login"
+                  className="text-sm text-text-secondary hover:text-text-primary no-underline"
+                >
+                  {t('storefront.sign_in')}
+                </Link>
+                {showRegister && (
+                  <Link to="/register" className={dashboardLinkClass}>
+                    {t('storefront.get_started')}
+                  </Link>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -46,10 +65,10 @@ export default function LandingPage() {
           {t('storefront.hero_title')}
         </h1>
         <p className="mt-4 text-lg text-text-tertiary max-w-2xl mx-auto">
-          {t('storefront.hero_subtitle')}
+          {heroSubtitle}
         </p>
         <div className="mt-8 flex items-center justify-center gap-4">
-          {showRegister && (
+          {!isLoggedIn && showRegister && (
             <Link
               to="/register"
               className="bg-accent text-white px-6 py-3 rounded-lg text-sm font-medium no-underline hover:opacity-90"
@@ -111,6 +130,46 @@ export default function LandingPage() {
 
       <footer className="border-t border-white/5 py-8 text-center text-xs text-text-tertiary space-y-2">
         <p>{footerText}</p>
+        {hasFooterLinks && (
+          <p className="flex flex-wrap items-center justify-center gap-3">
+            {zaloHref && (
+              <a
+                href={zaloHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-accent no-underline hover:opacity-80"
+              >
+                {t('storefront.support_zalo')}
+              </a>
+            )}
+            {telegramHref && (
+              <a
+                href={telegramHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-accent no-underline hover:opacity-80"
+              >
+                {t('storefront.support_telegram')}
+              </a>
+            )}
+            {docHref && (
+              <a
+                href={docHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-accent no-underline hover:opacity-80"
+              >
+                {t('storefront.api_docs')}
+              </a>
+            )}
+            {apiBase && (
+              <span className="text-text-tertiary">
+                {t('storefront.api_base')}:{' '}
+                <code className="text-text-secondary">{apiBase}</code>
+              </span>
+            )}
+          </p>
+        )}
         {(site?.user_agreement_enabled || site?.privacy_policy_enabled) && (
           <p className="flex items-center justify-center gap-3">
             {site.user_agreement_enabled && (

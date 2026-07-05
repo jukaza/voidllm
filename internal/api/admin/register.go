@@ -12,6 +12,7 @@ import (
 	"github.com/voidmind-io/voidllm/internal/apierror"
 	"github.com/voidmind-io/voidllm/internal/auth"
 	"github.com/voidmind-io/voidllm/internal/db"
+	"github.com/voidmind-io/voidllm/internal/security"
 	"github.com/voidmind-io/voidllm/internal/site"
 	"github.com/voidmind-io/voidllm/pkg/keygen"
 )
@@ -21,7 +22,8 @@ type registerRequest struct {
 	Email       string `json:"email"`
 	Password    string `json:"password"`
 	DisplayName string `json:"display_name"`
-	AcceptTerms bool   `json:"accept_terms"`
+	AcceptTerms    bool   `json:"accept_terms"`
+	TurnstileToken string `json:"turnstile_token"`
 }
 
 // registerResponse is returned on successful public signup. It carries a
@@ -75,6 +77,17 @@ func (h *Handler) Register(c fiber.Ctx) error {
 	}
 	if siteCfg.UserAgreementEnabled && !req.AcceptTerms {
 		return apierror.BadRequest(c, "you must accept the terms of service")
+	}
+
+	sec, err := security.LoadInternal(ctx, h.DB)
+	if err != nil {
+		h.Log.ErrorContext(ctx, "register: load security", slog.String("error", err.Error()))
+		return apierror.InternalError(c, "signup failed")
+	}
+	if sec.Turnstile.Enabled {
+		if err := security.VerifyTurnstile(ctx, sec.TurnstileSecret, req.TurnstileToken, c.IP()); err != nil {
+			return apierror.BadRequest(c, err.Error())
+		}
 	}
 
 	// Reuse the login throttle for signup abuse protection: one bucket per IP

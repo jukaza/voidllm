@@ -14,7 +14,11 @@ const (
 	KeyAnnouncements         = "site.announcements"
 	KeyAnnouncementsDemoSeed = "site.announcements_demo_seeded"
 	KeyNoticeEnabled         = "site.notice_enabled"
-	KeyRegisterEnabled = "site.register_enabled"
+	KeyRegisterEnabled   = "site.register_enabled"
+	KeySiteSubtitle      = "site.site_subtitle"
+	KeySupportZalo       = "site.support_zalo"
+	KeySupportTelegram   = "site.support_telegram"
+	KeyDocURL            = "site.doc_url"
 )
 
 // DefaultSystemName is the product name used until an operator customizes it.
