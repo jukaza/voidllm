@@ -4,6 +4,7 @@ export type SettingsTabKey =
   | 'general'
   | 'security'
   | 'features'
+  | 'keys'
   | 'payment'
   | 'legal'
   | 'backup'
@@ -12,6 +13,7 @@ export const SETTINGS_TAB_KEYS: SettingsTabKey[] = [
   'general',
   'security',
   'features',
+  'keys',
   'payment',
   'legal',
   'backup',
@@ -25,6 +27,7 @@ export const SETTINGS_TAB_I18N: Record<SettingsTabKey, TranslationKey> = {
   general: 'settings.tab_general',
   security: 'settings.tab_security',
   features: 'settings.tab_features',
+  keys: 'settings.tab_keys',
   payment: 'settings.tab_payment',
   legal: 'settings.tab_legal_notice',
   backup: 'settings.tab_backup',

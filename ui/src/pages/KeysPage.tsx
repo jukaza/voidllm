@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { PageHeader } from '../components/ui/PageHeader'
 import { useTranslation } from '../lib/i18n'
 import { Table } from '../components/ui/Table'
@@ -7,60 +8,150 @@ import { Dialog, ConfirmDialog } from '../components/ui/Dialog'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
-import { Select } from '../components/ui/Select'
-
+import { Textarea } from '../components/ui/Textarea'
+import { Toggle } from '../components/ui/Toggle'
+import { ExpiryField, defaultExpiryDateInput, dateInputToISO } from '../components/keys/ExpiryField'
+import { ModelLimitPicker, type ModelLimitOption } from '../components/keys/ModelLimitPicker'
+import { Banner } from '../components/ui/Banner'
 import { KeyHint } from '../components/ui/KeyHint'
+import { forgetApiKey, getRememberedApiKey, rememberApiKey } from '../lib/apiKeySecrets'
 import { TimeAgo } from '../components/ui/TimeAgo'
 import { CopyButton } from '../components/ui/CopyButton'
 import { StatCard } from '../components/ui/StatCard'
 import { useMe } from '../hooks/useMe'
-import { useAPIKeys, useCreateAPIKey, useDeleteAPIKey, useUpdateAPIKey, useRotateAPIKey } from '../hooks/useAPIKeys'
-import type { APIKeyResponse, CreateAPIKeyParams } from '../hooks/useAPIKeys'
+import { useModels } from '../hooks/useModels'
+import { useMyWallet } from '../hooks/useWallet'
+import {
+  useAPIKeys,
+  useCreateAPIKey,
+  useDeleteAPIKey,
+  useUpdateAPIKey,
+  useRotateAPIKey,
+  usePatchAPIKeyStatus,
+  normalizeKeyStatus,
+} from '../hooks/useAPIKeys'
+import type { APIKeyResponse, APIKeyStatus, CreateAPIKeyParams, UpdateAPIKeyParams } from '../hooks/useAPIKeys'
 import { useToast } from '../hooks/useToast'
+import { formatCost, formatNumber, formatTokens } from '../lib/utils'
 
 // ---------------------------------------------------------------------------
-// Module-level constants
+// Helpers
 // ---------------------------------------------------------------------------
 
-const keyTypeBadgeVariant: Record<string, 'default' | 'info' | 'warning' | 'muted'> = {
-  user_key: 'default',
-  session_key: 'muted',
+const statusBadgeVariant: Record<APIKeyStatus, 'default' | 'info' | 'warning' | 'muted'> = {
+  active: 'default',
+  disabled: 'muted',
+  expired: 'warning',
+  quota_exhausted: 'warning',
 }
 
-const keyTypeLabels: Record<string, string> = {
-  user_key: 'User',
-  session_key: 'Session',
+function parseOptionalInt(value: string): number | undefined {
+  const trimmed = value.trim()
+  if (!trimmed) return undefined
+  const n = parseInt(trimmed, 10)
+  return isNaN(n) ? undefined : n
 }
 
-const EXPIRES_OPTIONS = [
-  { value: '30d', label: '30 days' },
-  { value: '90d', label: '90 days' },
-  { value: '1y', label: '1 year' },
-  { value: 'never', label: 'Never' },
-]
+function parseOptionalFloat(value: string): number | undefined {
+  const trimmed = value.trim()
+  if (!trimmed) return undefined
+  const n = parseFloat(trimmed)
+  return isNaN(n) ? undefined : n
+}
 
-function expiresAtFromOption(opt: string): string | undefined {
-  const days: Record<string, number> = { '30d': 30, '90d': 90, '1y': 365 }
-  if (opt === 'never' || !days[opt]) return undefined
-  return new Date(Date.now() + days[opt] * 86400000).toISOString()
+function LimitBar({ used, limit, label }: { used: number; limit: number; label: string }) {
+  if (limit <= 0) return null
+  const pct = Math.min(100, Math.round((used / limit) * 100))
+  return (
+    <div className="space-y-0.5" title={`${formatNumber(used)} / ${formatNumber(limit)}`}>
+      <div className="flex justify-between text-[10px] text-text-tertiary">
+        <span>{label}</span>
+        <span>{pct}%</span>
+      </div>
+      <div className="h-1.5 rounded-full bg-bg-tertiary overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all ${pct >= 90 ? 'bg-warning' : 'bg-accent'}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  )
+}
+
+function SpendCapBar({ used, cap }: { used: number; cap: number }) {
+  if (cap <= 0) {
+    return <span className="text-xs text-text-tertiary">—</span>
+  }
+  const pct = Math.min(100, Math.round((used / cap) * 100))
+  return (
+    <div className="min-w-[120px] space-y-1">
+      <div className="text-xs text-text-secondary tabular-nums">
+        {formatCost(used)} / {formatCost(cap)}
+      </div>
+      <div className="h-1.5 rounded-full bg-bg-tertiary overflow-hidden">
+        <div
+          className={`h-full rounded-full ${pct >= 90 ? 'bg-warning' : 'bg-success'}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  )
+}
+
+function LimitsCell({ row }: { row: APIKeyResponse }) {
+  const { t } = useTranslation()
+  const live = row.limits_live
+  const hasLimits =
+    row.daily_token_limit > 0 ||
+    row.monthly_token_limit > 0 ||
+    row.requests_per_minute > 0 ||
+    row.requests_per_day > 0
+
+  if (!hasLimits) {
+    return <span className="text-xs text-text-tertiary">{t('keys.limit.none')}</span>
+  }
+
+  return (
+    <div className="space-y-1.5 min-w-[140px]">
+      {row.daily_token_limit > 0 && (
+        <LimitBar
+          used={live?.daily_tokens ?? 0}
+          limit={row.daily_token_limit}
+          label={t('keys.limit.daily_tokens', { limit: formatTokens(row.daily_token_limit) })}
+        />
+      )}
+      {row.monthly_token_limit > 0 && (
+        <LimitBar
+          used={live?.monthly_tokens ?? 0}
+          limit={row.monthly_token_limit}
+          label={t('keys.limit.monthly_tokens', { limit: formatTokens(row.monthly_token_limit) })}
+        />
+      )}
+      {row.requests_per_minute > 0 && (
+        <LimitBar
+          used={live?.requests_per_minute ?? 0}
+          limit={row.requests_per_minute}
+          label={t('keys.limit.rpm', { limit: row.requests_per_minute })}
+        />
+      )}
+      {row.requests_per_day > 0 && (
+        <LimitBar
+          used={live?.requests_per_day ?? 0}
+          limit={row.requests_per_day}
+          label={t('keys.limit.rpd', { limit: row.requests_per_day })}
+        />
+      )}
+    </div>
+  )
 }
 
 // ---------------------------------------------------------------------------
-// Inline SVG icons
+// Icons
 // ---------------------------------------------------------------------------
 
 function IconKey({ className }: { className?: string }) {
   return (
-    <svg
-      className={className}
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={1.5}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
     </svg>
   )
@@ -68,16 +159,7 @@ function IconKey({ className }: { className?: string }) {
 
 function IconCheck({ className }: { className?: string }) {
   return (
-    <svg
-      className={className}
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={1.5}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M20 6L9 17l-5-5" />
     </svg>
   )
@@ -85,16 +167,7 @@ function IconCheck({ className }: { className?: string }) {
 
 function IconClock({ className }: { className?: string }) {
   return (
-    <svg
-      className={className}
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={1.5}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <circle cx="12" cy="12" r="10" />
       <path d="M12 6v6l4 2" />
     </svg>
@@ -103,16 +176,7 @@ function IconClock({ className }: { className?: string }) {
 
 function IconPencil({ className }: { className?: string }) {
   return (
-    <svg
-      className={className}
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={1.5}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
       <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
     </svg>
@@ -121,16 +185,7 @@ function IconPencil({ className }: { className?: string }) {
 
 function IconRefresh({ className }: { className?: string }) {
   return (
-    <svg
-      className={className}
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={1.5}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M1 4v6h6" />
       <path d="M23 20v-6h-6" />
       <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" />
@@ -140,16 +195,7 @@ function IconRefresh({ className }: { className?: string }) {
 
 function IconTrash({ className }: { className?: string }) {
   return (
-    <svg
-      className={className}
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={1.5}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <polyline points="3 6 5 6 21 6" />
       <path d="M19 6l-1 14H6L5 6" />
       <path d="M10 11v6M14 11v6" />
@@ -158,18 +204,18 @@ function IconTrash({ className }: { className?: string }) {
   )
 }
 
+function IconChart({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 3v18h18" />
+      <path d="M7 16l4-8 4 5 5-9" />
+    </svg>
+  )
+}
+
 function IconCheckCircle({ className }: { className?: string }) {
   return (
-    <svg
-      className={className}
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={1.5}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
       <polyline points="22 4 12 14.01 9 11.01" />
     </svg>
@@ -178,18 +224,143 @@ function IconCheckCircle({ className }: { className?: string }) {
 
 function IconChevronDown({ className }: { className?: string }) {
   return (
-    <svg
-      className={className}
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M6 9l6 6 6-6" />
     </svg>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Advanced limits fields (shared by create/edit)
+// ---------------------------------------------------------------------------
+
+interface AdvancedLimitsFieldsProps {
+  dailyTokenLimit: string
+  setDailyTokenLimit: (v: string) => void
+  monthlyTokenLimit: string
+  setMonthlyTokenLimit: (v: string) => void
+  requestsPerMinute: string
+  setRequestsPerMinute: (v: string) => void
+  requestsPerDay: string
+  setRequestsPerDay: (v: string) => void
+  spendCap: string
+  setSpendCap: (v: string) => void
+  ipWhitelist: string
+  setIpWhitelist: (v: string) => void
+  ipBlacklist: string
+  setIpBlacklist: (v: string) => void
+  modelLimitsEnabled: boolean
+  setModelLimitsEnabled: (v: boolean) => void
+  modelLimits: string[]
+  setModelLimits: (v: string[]) => void
+  modelOptions: ModelLimitOption[]
+  disabled?: boolean
+}
+
+function AdvancedLimitsFields({
+  dailyTokenLimit,
+  setDailyTokenLimit,
+  monthlyTokenLimit,
+  setMonthlyTokenLimit,
+  requestsPerMinute,
+  setRequestsPerMinute,
+  requestsPerDay,
+  setRequestsPerDay,
+  spendCap,
+  setSpendCap,
+  ipWhitelist,
+  setIpWhitelist,
+  ipBlacklist,
+  setIpBlacklist,
+  modelLimitsEnabled,
+  setModelLimitsEnabled,
+  modelLimits,
+  setModelLimits,
+  modelOptions,
+  disabled,
+}: AdvancedLimitsFieldsProps) {
+  const { t } = useTranslation()
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <Input
+          label={t('keys.create.daily_tokens')}
+          type="number"
+          value={dailyTokenLimit}
+          onChange={(e) => setDailyTokenLimit(e.target.value)}
+          placeholder={t('keys.placeholder.unlimited')}
+          disabled={disabled}
+        />
+        <Input
+          label={t('keys.create.monthly_tokens')}
+          type="number"
+          value={monthlyTokenLimit}
+          onChange={(e) => setMonthlyTokenLimit(e.target.value)}
+          placeholder={t('keys.placeholder.unlimited')}
+          disabled={disabled}
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <Input
+          label={t('keys.create.rpm')}
+          type="number"
+          value={requestsPerMinute}
+          onChange={(e) => setRequestsPerMinute(e.target.value)}
+          placeholder={t('keys.placeholder.unlimited')}
+          disabled={disabled}
+        />
+        <Input
+          label={t('keys.create.rpd')}
+          type="number"
+          value={requestsPerDay}
+          onChange={(e) => setRequestsPerDay(e.target.value)}
+          placeholder={t('keys.placeholder.unlimited')}
+          disabled={disabled}
+        />
+      </div>
+      <Input
+        label={t('keys.create.spend_cap')}
+        type="number"
+        value={spendCap}
+        onChange={(e) => setSpendCap(e.target.value)}
+        placeholder={t('keys.placeholder.unlimited')}
+        disabled={disabled}
+      />
+      <Textarea
+        label={t('keys.create.ip_whitelist')}
+        value={ipWhitelist}
+        onChange={(e) => setIpWhitelist(e.target.value)}
+        placeholder={t('keys.create.ip_hint')}
+        rows={3}
+        disabled={disabled}
+      />
+      <Textarea
+        label={t('keys.create.ip_blacklist')}
+        value={ipBlacklist}
+        onChange={(e) => setIpBlacklist(e.target.value)}
+        placeholder={t('keys.create.ip_hint')}
+        rows={3}
+        disabled={disabled}
+      />
+      <Toggle
+        checked={modelLimitsEnabled}
+        onChange={setModelLimitsEnabled}
+        label={t('keys.create.model_limits_enabled')}
+        disabled={disabled}
+      />
+      {modelLimitsEnabled && (
+        <div className="space-y-2">
+          <p className="text-xs text-text-tertiary">{t('keys.create.model_limits_hint')}</p>
+          <ModelLimitPicker
+            models={modelOptions}
+            selected={modelLimits}
+            onChange={setModelLimits}
+            disabled={disabled}
+          />
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -200,32 +371,58 @@ function IconChevronDown({ className }: { className?: string }) {
 interface CreateKeyDialogProps {
   open: boolean
   onClose: () => void
-  onCreated: (key: string) => void
+  onCreated: (data: { id: string; key: string }) => void
+  userId?: string
 }
 
-function CreateKeyDialog({ open, onClose, onCreated }: CreateKeyDialogProps) {
+function CreateKeyDialog({ open, onClose, onCreated, userId }: CreateKeyDialogProps) {
+  const { t } = useTranslation()
   const [name, setName] = useState('')
-  const [expiresIn, setExpiresIn] = useState('90d')
+  const [expiresAt, setExpiresAt] = useState<string | null>(dateInputToISO(defaultExpiryDateInput(90)))
   const [nameError, setNameError] = useState<string | undefined>()
-  const [showAdvancedLimits, setShowAdvancedLimits] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const [dailyTokenLimit, setDailyTokenLimit] = useState('')
   const [monthlyTokenLimit, setMonthlyTokenLimit] = useState('')
   const [requestsPerMinute, setRequestsPerMinute] = useState('')
   const [requestsPerDay, setRequestsPerDay] = useState('')
+  const [spendCap, setSpendCap] = useState('')
+  const [ipWhitelist, setIpWhitelist] = useState('')
+  const [ipBlacklist, setIpBlacklist] = useState('')
+  const [modelLimitsEnabled, setModelLimitsEnabled] = useState(false)
+  const [modelLimits, setModelLimits] = useState<string[]>([])
 
   const { data: me } = useMe()
+  const { data: modelsData } = useModels()
   const createKey = useCreateAPIKey()
   const { toast } = useToast()
 
-  function handleClose() {
+  const modelOptions = useMemo<ModelLimitOption[]>(
+    () =>
+      (modelsData?.data ?? [])
+        .filter((m) => m.is_active)
+        .map((m) => ({ name: m.name, logo: m.logo }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [modelsData?.data],
+  )
+
+  function resetForm() {
     setName('')
-    setExpiresIn('90d')
+    setExpiresAt(dateInputToISO(defaultExpiryDateInput(90)))
     setNameError(undefined)
-    setShowAdvancedLimits(false)
+    setShowAdvanced(false)
     setDailyTokenLimit('')
     setMonthlyTokenLimit('')
     setRequestsPerMinute('')
     setRequestsPerDay('')
+    setSpendCap('')
+    setIpWhitelist('')
+    setIpBlacklist('')
+    setModelLimitsEnabled(false)
+    setModelLimits([])
+  }
+
+  function handleClose() {
+    resetForm()
     onClose()
   }
 
@@ -233,150 +430,124 @@ function CreateKeyDialog({ open, onClose, onCreated }: CreateKeyDialogProps) {
     e.preventDefault()
 
     const trimmedName = name.trim()
-    let hasError = false
-
     if (!trimmedName) {
-      setNameError('Name is required')
-      hasError = true
-    } else {
-      setNameError(undefined)
+      setNameError(t('keys.create.name_required'))
+      return
     }
+    setNameError(undefined)
 
-    if (!me?.id) {
-      hasError = true
-    }
-
-    if (hasError) return
+    const targetUserId = userId ?? me?.id
+    if (!targetUserId) return
 
     const params: CreateAPIKeyParams = {
       name: trimmedName,
       key_type: 'user_key',
-      user_id: me?.id,
-      expires_at: expiresAtFromOption(expiresIn),
+      user_id: targetUserId,
+      expires_at: expiresAt ?? undefined,
     }
 
-    const parsedDailyToken = parseInt(dailyTokenLimit, 10)
-    if (dailyTokenLimit.trim() && !isNaN(parsedDailyToken)) {
-      params.daily_token_limit = parsedDailyToken
-    }
-    const parsedMonthlyToken = parseInt(monthlyTokenLimit, 10)
-    if (monthlyTokenLimit.trim() && !isNaN(parsedMonthlyToken)) {
-      params.monthly_token_limit = parsedMonthlyToken
-    }
-    const parsedRpm = parseInt(requestsPerMinute, 10)
-    if (requestsPerMinute.trim() && !isNaN(parsedRpm)) {
-      params.requests_per_minute = parsedRpm
-    }
-    const parsedRpd = parseInt(requestsPerDay, 10)
-    if (requestsPerDay.trim() && !isNaN(parsedRpd)) {
-      params.requests_per_day = parsedRpd
-    }
+    const parsedDaily = parseOptionalInt(dailyTokenLimit)
+    if (parsedDaily !== undefined) params.daily_token_limit = parsedDaily
+    const parsedMonthly = parseOptionalInt(monthlyTokenLimit)
+    if (parsedMonthly !== undefined) params.monthly_token_limit = parsedMonthly
+    const parsedRpm = parseOptionalInt(requestsPerMinute)
+    if (parsedRpm !== undefined) params.requests_per_minute = parsedRpm
+    const parsedRpd = parseOptionalInt(requestsPerDay)
+    if (parsedRpd !== undefined) params.requests_per_day = parsedRpd
+    const parsedSpend = parseOptionalFloat(spendCap)
+    if (parsedSpend !== undefined) params.spend_cap = parsedSpend
+    if (ipWhitelist.trim()) params.ip_whitelist = ipWhitelist.trim()
+    if (ipBlacklist.trim()) params.ip_blacklist = ipBlacklist.trim()
+    params.model_limits_enabled = modelLimitsEnabled
+    if (modelLimitsEnabled && modelLimits.length > 0) params.model_limits = modelLimits
 
     createKey.mutate(params, {
       onSuccess: (data) => {
         handleClose()
         if (data.key) {
-          onCreated(data.key)
+          rememberApiKey(data.id, data.key)
+          onCreated({ id: data.id, key: data.key })
         }
       },
       onError: (err) => {
         toast({
           variant: 'error',
-          message: err instanceof Error ? err.message : 'Failed to create API key',
+          message: err instanceof Error ? err.message : t('keys.create_failed'),
         })
       },
     })
   }
 
   return (
-    <Dialog open={open} onClose={handleClose} title="Create API Key">
+    <Dialog open={open} onClose={handleClose} title={t('keys.create.title')}>
       <form onSubmit={handleSubmit} className="space-y-4" noValidate>
         <Input
-          label="Name"
+          label={t('keys.create.name')}
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Production backend"
+          placeholder={t('keys.placeholder.name')}
           error={nameError}
           disabled={createKey.isPending}
         />
-        <Select
-          label="Expires In"
-          options={EXPIRES_OPTIONS}
-          value={expiresIn}
-          onChange={setExpiresIn}
+        <ExpiryField
+          label={t('keys.create.expires')}
+          value={expiresAt}
+          onChange={setExpiresAt}
           disabled={createKey.isPending}
+          description={t('keys.expiry.hint')}
         />
 
-        {/* Rate & Token Limits — collapsible */}
         <div className="border-t border-border pt-4">
           <button
             type="button"
             className="flex w-full items-center justify-between"
-            onClick={() => setShowAdvancedLimits((v) => !v)}
+            onClick={() => setShowAdvanced((v) => !v)}
             disabled={createKey.isPending}
           >
             <span className="text-[10px] font-medium tracking-widest uppercase text-text-tertiary">
-              Rate &amp; Token Limits
+              {t('keys.create.advanced')}
             </span>
             <IconChevronDown
               className={[
                 'h-3.5 w-3.5 text-text-tertiary transition-transform duration-150',
-                showAdvancedLimits ? 'rotate-180' : '',
+                showAdvanced ? 'rotate-180' : '',
               ].join(' ')}
             />
           </button>
-          {showAdvancedLimits && (
-            <div className="mt-4 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  label="Daily Token Limit"
-                  type="number"
-                  value={dailyTokenLimit}
-                  onChange={(e) => setDailyTokenLimit(e.target.value)}
-                  placeholder="0 = unlimited"
-                  disabled={createKey.isPending}
-                />
-                <Input
-                  label="Monthly Token Limit"
-                  type="number"
-                  value={monthlyTokenLimit}
-                  onChange={(e) => setMonthlyTokenLimit(e.target.value)}
-                  placeholder="0 = unlimited"
-                  disabled={createKey.isPending}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  label="Requests per Minute"
-                  type="number"
-                  value={requestsPerMinute}
-                  onChange={(e) => setRequestsPerMinute(e.target.value)}
-                  placeholder="0 = unlimited"
-                  disabled={createKey.isPending}
-                />
-                <Input
-                  label="Requests per Day"
-                  type="number"
-                  value={requestsPerDay}
-                  onChange={(e) => setRequestsPerDay(e.target.value)}
-                  placeholder="0 = unlimited"
-                  disabled={createKey.isPending}
-                />
-              </div>
+          {showAdvanced && (
+            <div className="mt-4">
+              <AdvancedLimitsFields
+                dailyTokenLimit={dailyTokenLimit}
+                setDailyTokenLimit={setDailyTokenLimit}
+                monthlyTokenLimit={monthlyTokenLimit}
+                setMonthlyTokenLimit={setMonthlyTokenLimit}
+                requestsPerMinute={requestsPerMinute}
+                setRequestsPerMinute={setRequestsPerMinute}
+                requestsPerDay={requestsPerDay}
+                setRequestsPerDay={setRequestsPerDay}
+                spendCap={spendCap}
+                setSpendCap={setSpendCap}
+                ipWhitelist={ipWhitelist}
+                setIpWhitelist={setIpWhitelist}
+                ipBlacklist={ipBlacklist}
+                setIpBlacklist={setIpBlacklist}
+                modelLimitsEnabled={modelLimitsEnabled}
+                setModelLimitsEnabled={setModelLimitsEnabled}
+                modelLimits={modelLimits}
+                setModelLimits={setModelLimits}
+                modelOptions={modelOptions}
+                disabled={createKey.isPending}
+              />
             </div>
           )}
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
-          <Button
-            variant="secondary"
-            onClick={handleClose}
-            disabled={createKey.isPending}
-          >
-            Cancel
+          <Button variant="secondary" onClick={handleClose} disabled={createKey.isPending}>
+            {t('common.cancel')}
           </Button>
           <Button onClick={handleSubmit} loading={createKey.isPending}>
-            Create Key
+            {t('keys.create.submit')}
           </Button>
         </div>
       </form>
@@ -394,53 +565,25 @@ interface KeyCreatedDialogProps {
 }
 
 function KeyCreatedDialog({ keyValue, onClose }: KeyCreatedDialogProps) {
+  const { t } = useTranslation()
+
   return (
-    <Dialog
-      open={keyValue !== null}
-      onClose={onClose}
-      title="Key Created Successfully"
-      closeOnBackdrop={false}
-    >
+    <Dialog open={keyValue !== null} onClose={onClose} title={t('keys.created.title')} closeOnBackdrop={false}>
       <div className="space-y-5">
-        {/* Success icon */}
         <div className="flex justify-center">
           <span className="flex h-14 w-14 items-center justify-center rounded-full bg-success/10">
             <IconCheckCircle className="h-7 w-7 text-success" />
           </span>
         </div>
-
-        {/* Warning banner */}
         <div className="flex items-start gap-2.5 rounded-lg border border-warning/25 bg-warning/5 px-3 py-2.5">
-          <svg
-            className="mt-0.5 h-4 w-4 shrink-0 text-warning"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-            aria-hidden="true"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"
-            />
-          </svg>
-          <span className="text-xs leading-relaxed text-warning">
-            Copy this key now. You won&apos;t be able to see it again.
-          </span>
+          <span className="text-xs leading-relaxed text-warning">{t('keys.created.warning')}</span>
         </div>
-
-        {/* Key display */}
         <div className="rounded-lg border border-border bg-bg-primary px-4 py-3">
-          <p className="break-all font-mono text-sm leading-relaxed text-text-primary">
-            {keyValue}
-          </p>
+          <p className="break-all font-mono text-sm leading-relaxed text-text-primary">{keyValue}</p>
         </div>
-
-        {/* Actions */}
         <div className="flex items-center justify-end gap-2">
-          <CopyButton text={keyValue ?? ''} label="Copy Key" copiedLabel="Copied!" />
-          <Button onClick={onClose}>Done</Button>
+          <CopyButton text={keyValue ?? ''} label={t('keys.created.copy')} copiedLabel={t('keys.created.copied')} />
+          <Button onClick={onClose}>{t('keys.created.done')}</Button>
         </div>
       </div>
     </Dialog>
@@ -451,22 +594,16 @@ function KeyCreatedDialog({ keyValue, onClose }: KeyCreatedDialogProps) {
 // EditKeyDialog
 // ---------------------------------------------------------------------------
 
-const EDIT_EXPIRES_OPTIONS = [
-  { value: 'keep', label: 'Keep current' },
-  { value: '30d', label: '30 days from now' },
-  { value: '90d', label: '90 days from now' },
-  { value: '1y', label: '1 year from now' },
-  { value: 'never', label: 'Never' },
-]
-
 interface EditKeyDialogProps {
   apiKey: APIKeyResponse
   onClose: () => void
 }
 
 function EditKeyDialog({ apiKey, onClose }: EditKeyDialogProps) {
+  const { t } = useTranslation()
   const [name, setName] = useState(apiKey.name)
-  const [expiresIn, setExpiresIn] = useState('keep')
+  const [enabled, setEnabled] = useState(normalizeKeyStatus(apiKey.status) === 'active')
+  const [expiresAt, setExpiresAt] = useState<string | null>(apiKey.expires_at ?? null)
   const [dailyTokenLimit, setDailyTokenLimit] = useState(
     apiKey.daily_token_limit > 0 ? String(apiKey.daily_token_limit) : '',
   )
@@ -479,37 +616,57 @@ function EditKeyDialog({ apiKey, onClose }: EditKeyDialogProps) {
   const [requestsPerDay, setRequestsPerDay] = useState(
     apiKey.requests_per_day > 0 ? String(apiKey.requests_per_day) : '',
   )
+  const [spendCap, setSpendCap] = useState((apiKey.spend_cap ?? 0) > 0 ? String(apiKey.spend_cap) : '')
+  const [ipWhitelist, setIpWhitelist] = useState(apiKey.ip_whitelist ?? '')
+  const [ipBlacklist, setIpBlacklist] = useState(apiKey.ip_blacklist ?? '')
+  const [modelLimitsEnabled, setModelLimitsEnabled] = useState(apiKey.model_limits_enabled ?? false)
+  const [modelLimits, setModelLimits] = useState<string[]>(apiKey.model_limits ?? [])
   const [nameError, setNameError] = useState<string | undefined>()
 
+  const { data: modelsData } = useModels()
   const updateKey = useUpdateAPIKey()
   const { toast } = useToast()
+
+  const modelOptions = useMemo<ModelLimitOption[]>(() => {
+    const fromApi = (modelsData?.data ?? [])
+      .filter((m) => m.is_active)
+      .map((m) => ({ name: m.name, logo: m.logo }))
+    const byName = new Map(fromApi.map((m) => [m.name, m]))
+    for (const name of modelLimits) {
+      if (!byName.has(name)) byName.set(name, { name, logo: undefined })
+    }
+    return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name))
+  }, [modelsData?.data, modelLimits])
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
 
     const trimmedName = name.trim()
     if (!trimmedName) {
-      setNameError('Name is required')
+      setNameError(t('keys.create.name_required'))
       return
     }
     setNameError(undefined)
 
-    const params: Record<string, unknown> = {}
+    const params: UpdateAPIKeyParams = {}
+    const nextStatus: APIKeyStatus = enabled ? 'active' : 'disabled'
 
     if (trimmedName !== apiKey.name) params.name = trimmedName
+    if (nextStatus !== normalizeKeyStatus(apiKey.status)) params.status = nextStatus
 
-    if (expiresIn !== 'keep') {
-      params.expires_at = expiresAtFromOption(expiresIn) ?? null
+    const prevExpires = apiKey.expires_at ?? null
+    if (expiresAt !== prevExpires) {
+      params.expires_at = expiresAt
     }
 
-    const parsedDailyToken = dailyTokenLimit.trim() ? parseInt(dailyTokenLimit, 10) : 0
-    if (!isNaN(parsedDailyToken) && parsedDailyToken !== apiKey.daily_token_limit) {
-      params.daily_token_limit = parsedDailyToken
+    const parsedDaily = dailyTokenLimit.trim() ? parseInt(dailyTokenLimit, 10) : 0
+    if (!isNaN(parsedDaily) && parsedDaily !== apiKey.daily_token_limit) {
+      params.daily_token_limit = parsedDaily
     }
 
-    const parsedMonthlyToken = monthlyTokenLimit.trim() ? parseInt(monthlyTokenLimit, 10) : 0
-    if (!isNaN(parsedMonthlyToken) && parsedMonthlyToken !== apiKey.monthly_token_limit) {
-      params.monthly_token_limit = parsedMonthlyToken
+    const parsedMonthly = monthlyTokenLimit.trim() ? parseInt(monthlyTokenLimit, 10) : 0
+    if (!isNaN(parsedMonthly) && parsedMonthly !== apiKey.monthly_token_limit) {
+      params.monthly_token_limit = parsedMonthly
     }
 
     const parsedRpm = requestsPerMinute.trim() ? parseInt(requestsPerMinute, 10) : 0
@@ -522,6 +679,28 @@ function EditKeyDialog({ apiKey, onClose }: EditKeyDialogProps) {
       params.requests_per_day = parsedRpd
     }
 
+    const parsedSpend = spendCap.trim() ? parseFloat(spendCap) : 0
+    if (!isNaN(parsedSpend) && parsedSpend !== (apiKey.spend_cap ?? 0)) {
+      params.spend_cap = parsedSpend
+    }
+
+    if (ipWhitelist.trim() !== (apiKey.ip_whitelist ?? '')) {
+      params.ip_whitelist = ipWhitelist.trim()
+    }
+    if (ipBlacklist.trim() !== (apiKey.ip_blacklist ?? '')) {
+      params.ip_blacklist = ipBlacklist.trim()
+    }
+    if (modelLimitsEnabled !== apiKey.model_limits_enabled) {
+      params.model_limits_enabled = modelLimitsEnabled
+    }
+    const prevModels = apiKey.model_limits ?? []
+    const modelsChanged =
+      modelLimits.length !== prevModels.length ||
+      modelLimits.some((m, i) => m !== prevModels[i])
+    if (modelsChanged) {
+      params.model_limits = modelLimits
+    }
+
     if (Object.keys(params).length === 0) {
       onClose()
       return
@@ -531,13 +710,13 @@ function EditKeyDialog({ apiKey, onClose }: EditKeyDialogProps) {
       { keyId: apiKey.id, params },
       {
         onSuccess: () => {
-          toast({ variant: 'success', message: 'API key updated' })
+          toast({ variant: 'success', message: t('keys.updated') })
           onClose()
         },
         onError: (err) => {
           toast({
             variant: 'error',
-            message: err instanceof Error ? err.message : 'Failed to update API key',
+            message: err instanceof Error ? err.message : t('keys.update_failed'),
           })
         },
       },
@@ -545,65 +724,57 @@ function EditKeyDialog({ apiKey, onClose }: EditKeyDialogProps) {
   }
 
   return (
-    <Dialog open onClose={onClose} title="Edit API Key">
+    <Dialog open onClose={onClose} title={t('keys.edit.title')}>
       <form onSubmit={handleSubmit} className="space-y-4" noValidate>
         <Input
-          label="Name"
+          label={t('keys.create.name')}
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Production backend"
+          placeholder={t('keys.placeholder.name')}
           error={nameError}
           disabled={updateKey.isPending}
         />
-        <Select
-          label="Expires At"
-          options={EDIT_EXPIRES_OPTIONS}
-          value={expiresIn}
-          onChange={setExpiresIn}
+        <Toggle
+          checked={enabled}
+          onChange={setEnabled}
+          label={t('keys.edit.enabled')}
+          disabled={updateKey.isPending || normalizeKeyStatus(apiKey.status) === 'expired'}
+        />
+        <ExpiryField
+          label={t('keys.edit.expires')}
+          value={expiresAt}
+          onChange={setExpiresAt}
+          disabled={updateKey.isPending}
+          description={t('keys.expiry.hint')}
+        />
+        <AdvancedLimitsFields
+          dailyTokenLimit={dailyTokenLimit}
+          setDailyTokenLimit={setDailyTokenLimit}
+          monthlyTokenLimit={monthlyTokenLimit}
+          setMonthlyTokenLimit={setMonthlyTokenLimit}
+          requestsPerMinute={requestsPerMinute}
+          setRequestsPerMinute={setRequestsPerMinute}
+          requestsPerDay={requestsPerDay}
+          setRequestsPerDay={setRequestsPerDay}
+          spendCap={spendCap}
+          setSpendCap={setSpendCap}
+          ipWhitelist={ipWhitelist}
+          setIpWhitelist={setIpWhitelist}
+          ipBlacklist={ipBlacklist}
+          setIpBlacklist={setIpBlacklist}
+          modelLimitsEnabled={modelLimitsEnabled}
+          setModelLimitsEnabled={setModelLimitsEnabled}
+          modelLimits={modelLimits}
+          setModelLimits={setModelLimits}
+          modelOptions={modelOptions}
           disabled={updateKey.isPending}
         />
-        <div className="grid grid-cols-2 gap-4">
-          <Input
-            label="Daily Token Limit"
-            type="number"
-            value={dailyTokenLimit}
-            onChange={(e) => setDailyTokenLimit(e.target.value)}
-            placeholder="0 = unlimited"
-            disabled={updateKey.isPending}
-          />
-          <Input
-            label="Monthly Token Limit"
-            type="number"
-            value={monthlyTokenLimit}
-            onChange={(e) => setMonthlyTokenLimit(e.target.value)}
-            placeholder="0 = unlimited"
-            disabled={updateKey.isPending}
-          />
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <Input
-            label="Requests per Minute"
-            type="number"
-            value={requestsPerMinute}
-            onChange={(e) => setRequestsPerMinute(e.target.value)}
-            placeholder="0 = unlimited"
-            disabled={updateKey.isPending}
-          />
-          <Input
-            label="Requests per Day"
-            type="number"
-            value={requestsPerDay}
-            onChange={(e) => setRequestsPerDay(e.target.value)}
-            placeholder="0 = unlimited"
-            disabled={updateKey.isPending}
-          />
-        </div>
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="secondary" onClick={onClose} disabled={updateKey.isPending}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button onClick={handleSubmit} loading={updateKey.isPending}>
-            Save Changes
+            {t('keys.edit.save')}
           </Button>
         </div>
       </form>
@@ -631,22 +802,31 @@ export default function KeysPage() {
     return () => setCreatedKey(null)
   }, [])
 
-  const { data: keys, isLoading } = useAPIKeys(cursor)
+  const { data: keys, isLoading } = useAPIKeys({ cursor })
+  const { data: wallet } = useMyWallet()
   const deleteKey = useDeleteAPIKey()
   const rotateKey = useRotateAPIKey()
+  const patchStatus = usePatchAPIKeyStatus()
   const { toast } = useToast()
 
   const allKeys = useMemo(() => keys?.data ?? [], [keys?.data])
+  const lowBalance = wallet != null && wallet.balance <= 0
+
+  const statusLabel = (status: APIKeyStatus) => {
+    const map: Record<APIKeyStatus, string> = {
+      active: t('keys.status.active'),
+      disabled: t('keys.status.disabled'),
+      expired: t('keys.status.expired'),
+      quota_exhausted: t('keys.status.quota_exhausted'),
+    }
+    return map[status] ?? status
+  }
 
   const [totalKeys, activeKeys, expiringSoon] = useMemo(() => {
-    // eslint-disable-next-line react-hooks/purity -- Date comparison is intentionally impure
     const now = Date.now()
     const sevenDaysMs = 7 * 24 * 60 * 60 * 1000
     const total = allKeys.length
-    const active = allKeys.filter((k) => {
-      if (!k.expires_at) return true
-      return new Date(k.expires_at).getTime() > now
-    }).length
+    const active = allKeys.filter((k) => normalizeKeyStatus(k.status) === 'active' && (!k.expires_at || new Date(k.expires_at).getTime() > now)).length
     const expiring = allKeys.filter((k) => {
       if (!k.expires_at) return false
       const exp = new Date(k.expires_at).getTime()
@@ -655,43 +835,75 @@ export default function KeysPage() {
     return [total, active, expiring] as const
   }, [allKeys])
 
+  function toggleKeyStatus(row: APIKeyResponse) {
+    const status = normalizeKeyStatus(row.status)
+    const next: APIKeyStatus = status === 'active' ? 'disabled' : 'active'
+    patchStatus.mutate(
+      { keyId: row.id, status: next },
+      {
+        onSuccess: () => toast({ variant: 'success', message: t('keys.updated') }),
+        onError: (err) => {
+          toast({
+            variant: 'error',
+            message: err instanceof Error ? err.message : t('keys.update_failed'),
+          })
+        },
+      },
+    )
+  }
+
   const columns: Column<APIKeyResponse>[] = [
-    {
-      key: 'key_hint',
-      header: 'Khóa API',
-      render: (row) => (
-        <span className="font-mono text-xs">
-          <KeyHint hint={row.key_hint} />
-        </span>
-      ),
-    },
-    {
-      key: 'key_type',
-      header: t('keys.table.type'),
-      render: (row) => (
-        <Badge variant={keyTypeBadgeVariant[row.key_type] ?? 'muted'}>
-          {keyTypeLabels[row.key_type] ?? row.key_type}
-        </Badge>
-      ),
-    },
     {
       key: 'name',
       header: t('keys.table.name'),
+      render: (row) => <span className="text-text-primary font-medium">{row.name}</span>,
+    },
+    {
+      key: 'key_hint',
+      header: t('keys.table.key'),
       render: (row) => (
-        <span className="text-text-primary">{row.name}</span>
+        <KeyHint
+          hint={row.key_hint}
+          copyValue={getRememberedApiKey(row.id) ?? row.key_hint}
+          copyLabel={t('keys.copy')}
+          copiedLabel={t('common.copied')}
+        />
       ),
+    },
+    {
+      key: 'status',
+      header: t('keys.table.status'),
+      render: (row) => {
+        const status = normalizeKeyStatus(row.status)
+        return (
+          <Badge variant={statusBadgeVariant[status] ?? 'muted'}>
+            {statusLabel(status)}
+          </Badge>
+        )
+      },
+    },
+    {
+      key: 'limits',
+      header: t('keys.table.limits'),
+      render: (row) => <LimitsCell row={row} />,
+    },
+    {
+      key: 'spend_cap',
+      header: t('keys.table.spend'),
+      render: (row) => <SpendCapBar used={row.spend_used ?? 0} cap={row.spend_cap ?? 0} />,
     },
     {
       key: 'expires_at',
       header: t('keys.table.expires'),
       render: (row) => (
-        <TimeAgo date={row.expires_at ?? ''} fallback="Không hết hạn" />
+        <TimeAgo date={row.expires_at ?? ''} fallback={t('keys.expires.never')} />
       ),
     },
     {
-      key: 'created_at',
-      header: 'Ngày tạo',
-      render: (row) => <TimeAgo date={row.created_at} />,
+      key: 'last_used_at',
+      header: t('keys.table.last_used'),
+      render: (row) =>
+        row.last_used_at ? <TimeAgo date={row.last_used_at} /> : <span className="text-text-tertiary">—</span>,
     },
     {
       key: 'actions',
@@ -699,15 +911,31 @@ export default function KeysPage() {
       align: 'right',
       render: (row) => {
         if (row.key_type === 'session_key') return null
+        const busy = deleteKey.isPending || rotateKey.isPending || patchStatus.isPending
+        const status = normalizeKeyStatus(row.status)
         return (
           <div className="flex items-center justify-end gap-0.5">
+            <Toggle
+              checked={status === 'active'}
+              onChange={() => toggleKeyStatus(row)}
+              disabled={busy || status === 'expired' || status === 'quota_exhausted'}
+              size="sm"
+              title={status === 'active' ? t('keys.action.disable') : t('keys.action.enable')}
+            />
+            <Link
+              to={`/analytics?key_id=${row.id}`}
+              title={t('keys.action.analytics')}
+              className="inline-flex items-center justify-center rounded-md p-1.5 text-text-secondary hover:text-text-primary hover:opacity-80 transition-all"
+            >
+              <IconChart className="h-4 w-4" />
+            </Link>
             <Button
               variant="ghost"
               size="sm"
               className="!px-1.5"
-              title="Edit key"
+              title={t('keys.action.edit')}
               onClick={() => setEditKey(row)}
-              disabled={deleteKey.isPending || rotateKey.isPending}
+              disabled={busy}
             >
               <IconPencil className="h-4 w-4" />
             </Button>
@@ -715,9 +943,9 @@ export default function KeysPage() {
               variant="ghost"
               size="sm"
               className="!px-1.5"
-              title="Rotate key"
+              title={t('keys.action.rotate')}
               onClick={() => setRotateKeyId(row.id)}
-              disabled={deleteKey.isPending || rotateKey.isPending}
+              disabled={busy}
             >
               <IconRefresh className="h-4 w-4" />
             </Button>
@@ -725,9 +953,9 @@ export default function KeysPage() {
               variant="ghost"
               size="sm"
               className="!px-1.5 text-error hover:text-error"
-              title="Revoke key"
+              title={t('keys.action.revoke')}
               onClick={() => setRevokeKeyId(row.id)}
-              disabled={deleteKey.isPending || rotateKey.isPending}
+              disabled={busy}
             >
               <IconTrash className="h-4 w-4" />
             </Button>
@@ -739,15 +967,16 @@ export default function KeysPage() {
 
   function handleRevoke() {
     if (!revokeKeyId) return
+    forgetApiKey(revokeKeyId)
     deleteKey.mutate(revokeKeyId, {
       onSuccess: () => {
-        toast({ variant: 'success', message: 'API key revoked' })
+        toast({ variant: 'success', message: t('keys.revoked') })
         setRevokeKeyId(null)
       },
       onError: (err) => {
         toast({
           variant: 'error',
-          message: err instanceof Error ? err.message : 'Failed to revoke key',
+          message: err instanceof Error ? err.message : t('keys.revoke_failed'),
         })
         setRevokeKeyId(null)
       },
@@ -760,20 +989,20 @@ export default function KeysPage() {
       onSuccess: (data) => {
         setRotateKeyId(null)
         if (data.key) {
+          rememberApiKey(data.id, data.key)
           setRotatedKey(data.key)
         }
       },
       onError: (err) => {
         toast({
           variant: 'error',
-          message: err instanceof Error ? err.message : 'Failed to rotate key',
+          message: err instanceof Error ? err.message : t('keys.rotate_failed'),
         })
         setRotateKeyId(null)
       },
     })
   }
 
-  // Empty state (not loading, no keys)
   const showEmptyState = !isLoading && allKeys.length === 0 && !keys?.has_more
 
   return (
@@ -781,27 +1010,30 @@ export default function KeysPage() {
       <PageHeader
         title={t('keys.title')}
         description={t('keys.desc')}
-        actions={
-          <Button onClick={() => setShowCreateDialog(true)}>{t('keys.add')}</Button>
-        }
+        actions={<Button onClick={() => setShowCreateDialog(true)}>{t('keys.add')}</Button>}
       />
 
-      {/* Stat cards */}
+      {lowBalance && (
+        <Link to="/wallet" className="block no-underline mb-6">
+          <Banner variant="warning" title={t('keys.wallet_empty')} />
+        </Link>
+      )}
+
       <div className="grid grid-cols-3 gap-4 mb-6">
         <StatCard
-          label="Tổng số khóa"
+          label={t('keys.stats.total')}
           value={totalKeys}
           iconColor="purple"
           icon={<IconKey className="h-4 w-4" />}
         />
         <StatCard
-          label="Khóa hoạt động"
+          label={t('keys.stats.active')}
           value={activeKeys}
           iconColor="green"
           icon={<IconCheck className="h-4 w-4" />}
         />
         <StatCard
-          label="Sắp hết hạn"
+          label={t('keys.stats.expiring')}
           value={expiringSoon}
           iconColor="yellow"
           icon={<IconClock className="h-4 w-4" />}
@@ -813,10 +1045,8 @@ export default function KeysPage() {
           <span className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-bg-tertiary">
             <IconKey className="h-7 w-7 text-text-tertiary" />
           </span>
-          <h3 className="mb-1 text-base font-medium text-text-primary">Chưa có khóa API nào</h3>
-          <p className="mb-6 text-sm text-text-secondary">
-            Tạo khóa API đầu tiên của bạn để bắt đầu sử dụng proxy
-          </p>
+          <h3 className="mb-1 text-base font-medium text-text-primary">{t('keys.empty.title')}</h3>
+          <p className="mb-6 text-sm text-text-secondary">{t('keys.empty.desc')}</p>
           <Button onClick={() => setShowCreateDialog(true)}>{t('keys.add')}</Button>
         </div>
       ) : (
@@ -825,7 +1055,7 @@ export default function KeysPage() {
           data={allKeys}
           keyExtractor={(row) => row.id}
           loading={isLoading}
-          emptyMessage="Không tìm thấy khóa API nào"
+          emptyMessage={t('keys.empty.table')}
           pagination={{
             cursor: cursor ?? null,
             hasMore: keys?.has_more ?? false,
@@ -848,43 +1078,32 @@ export default function KeysPage() {
       <CreateKeyDialog
         open={showCreateDialog}
         onClose={() => setShowCreateDialog(false)}
-        onCreated={(key) => setCreatedKey(key)}
+        onCreated={({ key }) => setCreatedKey(key)}
       />
 
-      <KeyCreatedDialog
-        keyValue={createdKey}
-        onClose={() => setCreatedKey(null)}
-      />
+      <KeyCreatedDialog keyValue={createdKey} onClose={() => setCreatedKey(null)} />
 
-      {editKey !== null && (
-        <EditKeyDialog
-          apiKey={editKey}
-          onClose={() => setEditKey(null)}
-        />
-      )}
+      {editKey !== null && <EditKeyDialog apiKey={editKey} onClose={() => setEditKey(null)} />}
 
       <ConfirmDialog
         open={rotateKeyId !== null}
         onClose={() => setRotateKeyId(null)}
         onConfirm={handleRotate}
-        title="Rotate API Key"
-        description="This will generate a new key and expire the current key after 24 hours. Any application using the current key will need to be updated."
-        confirmLabel="Rotate"
+        title={t('keys.rotate.title')}
+        description={t('keys.rotate.desc')}
+        confirmLabel={t('keys.rotate.confirm')}
         loading={rotateKey.isPending}
       />
 
-      <KeyCreatedDialog
-        keyValue={rotatedKey}
-        onClose={() => setRotatedKey(null)}
-      />
+      <KeyCreatedDialog keyValue={rotatedKey} onClose={() => setRotatedKey(null)} />
 
       <ConfirmDialog
         open={revokeKeyId !== null}
         onClose={() => setRevokeKeyId(null)}
         onConfirm={handleRevoke}
-        title="Revoke API Key"
-        description="Are you sure you want to revoke this key? This action cannot be undone. Any application using this key will lose access."
-        confirmLabel="Revoke"
+        title={t('keys.revoke.title')}
+        description={t('keys.revoke.desc')}
+        confirmLabel={t('keys.revoke.confirm')}
         loading={deleteKey.isPending}
       />
     </>

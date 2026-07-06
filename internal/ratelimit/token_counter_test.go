@@ -244,6 +244,22 @@ func TestTokenCounter_ConcurrentAddAndCheck(t *testing.T) {
 	}
 }
 
+func TestTokenCounter_Snapshot(t *testing.T) {
+	t.Parallel()
+
+	tc := NewTokenCounter()
+	tc.Add("snap-key", 150)
+	tc.Add("snap-key", 50)
+
+	snap := tc.Snapshot("snap-key")
+	if snap.DailyTokens != 200 {
+		t.Errorf("DailyTokens = %d, want 200", snap.DailyTokens)
+	}
+	if snap.MonthlyTokens != 200 {
+		t.Errorf("MonthlyTokens = %d, want 200", snap.MonthlyTokens)
+	}
+}
+
 func BenchmarkTokenCounter_Add(b *testing.B) {
 	tc := NewTokenCounter()
 

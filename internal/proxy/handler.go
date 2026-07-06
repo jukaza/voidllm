@@ -26,6 +26,7 @@ import (
 	"github.com/jukaza/tavo/internal/auth"
 	"github.com/jukaza/tavo/internal/circuitbreaker"
 	"github.com/jukaza/tavo/internal/jsonx"
+	"github.com/jukaza/tavo/internal/keys"
 	"github.com/jukaza/tavo/internal/metrics"
 	"github.com/jukaza/tavo/internal/pii"
 	"github.com/jukaza/tavo/internal/ratelimit"
@@ -33,6 +34,7 @@ import (
 	"github.com/jukaza/tavo/internal/tokens"
 	"github.com/jukaza/tavo/internal/upstream"
 	"github.com/jukaza/tavo/internal/usage"
+	"github.com/jukaza/tavo/pkg/keygen"
 )
 
 // WalletChecker performs prepaid-balance checks for the marketplace billing
@@ -97,6 +99,8 @@ type ProxyHandler struct {
 	// TokenEstimateEnabled fills missing usage token counts locally when
 	// upstream responses omit usage metadata (see settings.token_counting).
 	TokenEstimateEnabled bool
+	// KeysRuntime holds hot-reloaded API key policy (IP ACL trust settings).
+	KeysRuntime *keys.Runtime
 }
 
 // NewProxyHandler constructs a ProxyHandler with a pre-configured HTTP client.
@@ -229,7 +233,7 @@ func (p *ProxyHandler) Handle(c fiber.Ctx) error {
 	keyInfo := auth.KeyInfoFromCtx(c)
 	requestID := apierror.RequestIDFromCtx(c)
 
-	if err := p.checkLimits(c, keyInfo); err != nil {
+	if err := p.checkLimits(c, keyInfo, envelope.Model); err != nil {
 		if errors.Is(err, errResponseSent) {
 			return nil
 		}
@@ -812,14 +816,50 @@ func (p *ProxyHandler) readAndValidateBody(c fiber.Ctx, maxRequestBody int) ([]b
 	return body, envelope, nil
 }
 
-// checkLimits evaluates rate limits and token budgets for the authenticated key.
-// It builds the three-tier Limits structs from keyInfo and delegates to the
-// RateLimiter and TokenCounter. If either check rejects the request, an API
-// error response is sent and the error is returned. Nil-safe for both
-// RateLimiter and TokenCounter; a nil keyInfo is also safe and skips all checks.
-func (p *ProxyHandler) checkLimits(c fiber.Ctx, keyInfo *auth.KeyInfo) error {
+// checkLimits evaluates spend caps, IP ACL, model allowlists, rate limits, and
+// token budgets for the authenticated key. If any check rejects the request, an
+// API error response is sent and the error is returned.
+func (p *ProxyHandler) checkLimits(c fiber.Ctx, keyInfo *auth.KeyInfo, model string) error {
 	if keyInfo == nil {
 		return nil
+	}
+
+	if keyInfo.KeyType != keygen.KeyTypeSession {
+		if keyInfo.SpendCap > 0 && keyInfo.SpendUsed >= keyInfo.SpendCap {
+			if err := apierror.Send(c, fiber.StatusPaymentRequired, "spend_cap_exceeded",
+				"api key spend cap exceeded"); err != nil {
+				return err
+			}
+			return errResponseSent
+		}
+
+		trustForwarded := false
+		if p.KeysRuntime != nil {
+			trustForwarded = p.KeysRuntime.Get().TrustForwardedIP
+		}
+		clientIP := keys.ClientIP(c, trustForwarded)
+		whitelist := keys.ParseIPRules(keyInfo.IPWhitelist)
+		blacklist := keys.ParseIPRules(keyInfo.IPBlacklist)
+		if len(whitelist) > 0 || len(blacklist) > 0 {
+			if !keys.IPAllowed(clientIP, whitelist, blacklist) {
+				p.Log.LogAttrs(c.Context(), slog.LevelWarn, "ip acl denied",
+					slog.String("key_id", keyInfo.ID),
+					slog.String("client_ip", clientIP),
+				)
+				if err := apierror.Send(c, fiber.StatusForbidden, "access_denied", "request blocked by ip policy"); err != nil {
+					return err
+				}
+				return errResponseSent
+			}
+		}
+
+		if model != "" && !keys.ModelAllowed(model, keyInfo.ModelLimitsEnabled, keys.ParseModelLimits(keyInfo.ModelLimits)) {
+			if err := apierror.Send(c, fiber.StatusForbidden, "model_not_allowed",
+				"requested model is not allowed for this api key"); err != nil {
+				return err
+			}
+			return errResponseSent
+		}
 	}
 
 	keyLimits := ratelimit.Limits{

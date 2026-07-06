@@ -74,10 +74,16 @@ func RegisterRoutes(app *fiber.App, handler *Handler, keyCache *cache.Cache[stri
 	api.Get("/users/:user_id", auth.RequireRole(auth.RoleSystemAdmin), handler.GetUser)
 	api.Patch("/users/:user_id", auth.RequireRole(auth.RoleSystemAdmin), handler.UpdateUser)
 	api.Delete("/users/:user_id", auth.RequireRole(auth.RoleSystemAdmin), handler.DeleteUser)
+	api.Get("/admin/users/:user_id/keys", auth.RequireRole(auth.RoleSystemAdmin), handler.ListUserAPIKeys)
+	api.Post("/admin/users/:user_id/keys/revoke-all", auth.RequireRole(auth.RoleSystemAdmin), handler.RevokeAllUserAPIKeys)
 
 	// API Keys
+	api.Post("/keys/batch", auth.RequireRole(auth.RoleMember), handler.BatchCreateAPIKeys)
+	api.Post("/keys/batch/delete", auth.RequireRole(auth.RoleMember), handler.BatchDeleteAPIKeys)
 	api.Post("/keys", auth.RequireRole(auth.RoleMember), handler.CreateAPIKey)
 	api.Get("/keys", auth.RequireRole(auth.RoleMember), handler.ListAPIKeys)
+	api.Get("/keys/:key_id/usage", auth.RequireRole(auth.RoleMember), handler.GetAPIKeyUsage)
+	api.Get("/keys/:key_id/limits", auth.RequireRole(auth.RoleMember), handler.GetAPIKeyLimits)
 	api.Get("/keys/:key_id", auth.RequireRole(auth.RoleMember), handler.GetAPIKey)
 	api.Patch("/keys/:key_id", auth.RequireRole(auth.RoleMember), handler.UpdateAPIKey)
 	api.Delete("/keys/:key_id", auth.RequireRole(auth.RoleMember), handler.DeleteAPIKey)
@@ -169,6 +175,8 @@ func RegisterRoutes(app *fiber.App, handler *Handler, keyCache *cache.Cache[stri
 	api.Put("/admin/settings/payment", auth.RequireRole(auth.RoleSystemAdmin), handler.UpdateAdminPaymentSettings)
 	api.Get("/admin/settings/features", auth.RequireRole(auth.RoleSystemAdmin), handler.GetAdminFeaturesSettings)
 	api.Put("/admin/settings/features", auth.RequireRole(auth.RoleSystemAdmin), handler.UpdateAdminFeaturesSettings)
+	api.Get("/admin/settings/keys", auth.RequireRole(auth.RoleSystemAdmin), handler.GetAdminKeysPolicy)
+	api.Put("/admin/settings/keys", auth.RequireRole(auth.RoleSystemAdmin), handler.UpdateAdminKeysPolicy)
 
 	api.Get("/admin/settings/export", auth.RequireRole(auth.RoleSystemAdmin), handler.ExportAdminSettings)
 	api.Post("/admin/settings/import/preview", auth.RequireRole(auth.RoleSystemAdmin), handler.PreviewAdminSettingsImport)

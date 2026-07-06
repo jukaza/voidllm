@@ -96,6 +96,7 @@ func (a *Application) setupRoutes() {
 	// GET /v1/models is handled by Tavo directly (not proxied to upstream).
 	// It must be registered BEFORE the catch-all to take precedence.
 	a.proxyApp.Get("/v1/models", auth.Middleware(a.keyCache, a.hmacSecret), a.proxyHandler.ModelsHandler)
+	a.proxyApp.Get("/v1/usage", auth.Middleware(a.keyCache, a.hmacSecret), a.proxyHandler.UsageHandler)
 	a.proxyApp.All("/v1/*", auth.Middleware(a.keyCache, a.hmacSecret), a.proxyHandler.Handle)
 
 	adminPort := a.cfg.Server.Admin.Port

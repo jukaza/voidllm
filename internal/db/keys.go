@@ -29,6 +29,14 @@ type KeyRecord struct {
 	RequestsPerMinute int
 	RequestsPerDay    int
 
+	Status             string
+	SpendCap           float64
+	SpendUsed          float64
+	IPWhitelist        string
+	IPBlacklist        string
+	ModelLimitsEnabled bool
+	ModelLimits        string
+
 	// ExpiresAt is the optional key expiry, stored as RFC3339 in the DB.
 	ExpiresAt *time.Time
 
@@ -52,6 +60,8 @@ SELECT
     k.user_id,
     k.daily_token_limit, k.monthly_token_limit,
     k.requests_per_minute, k.requests_per_day,
+    k.status, k.spend_cap, k.spend_used, k.ip_whitelist, k.ip_blacklist,
+    k.model_limits_enabled, k.model_limits,
     k.expires_at,
     COALESCE(u.is_system_admin, 0)
 FROM api_keys k
@@ -72,8 +82,9 @@ ORDER BY k.id ASC`, d.dialect.Placeholder(1))
 
 	for rows.Next() {
 		var (
-			r            KeyRecord
-			expiresAtRaw *string
+			r                  KeyRecord
+			expiresAtRaw       *string
+			modelLimitsEnabled int
 		)
 
 		if err := rows.Scan(
@@ -81,6 +92,9 @@ ORDER BY k.id ASC`, d.dialect.Placeholder(1))
 			&r.UserID,
 			&r.DailyTokenLimit, &r.MonthlyTokenLimit,
 			&r.RequestsPerMinute, &r.RequestsPerDay,
+			&r.Status, &r.SpendCap, &r.SpendUsed,
+			&r.IPWhitelist, &r.IPBlacklist,
+			&modelLimitsEnabled, &r.ModelLimits,
 			&expiresAtRaw,
 			&r.IsSystemAdmin,
 		); err != nil {
@@ -96,6 +110,7 @@ ORDER BY k.id ASC`, d.dialect.Placeholder(1))
 			}
 			r.ExpiresAt = &t
 		}
+		r.ModelLimitsEnabled = modelLimitsEnabled == 1
 
 		records = append(records, r)
 	}
@@ -115,6 +130,8 @@ SELECT
     k.user_id,
     k.daily_token_limit, k.monthly_token_limit,
     k.requests_per_minute, k.requests_per_day,
+    k.status, k.spend_cap, k.spend_used, k.ip_whitelist, k.ip_blacklist,
+    k.model_limits_enabled, k.model_limits,
     k.expires_at,
     COALESCE(u.is_system_admin, 0)
 FROM api_keys k
@@ -126,14 +143,18 @@ WHERE k.deleted_at IS NULL
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	var (
-		r            KeyRecord
-		expiresAtRaw *string
+		r                  KeyRecord
+		expiresAtRaw       *string
+		modelLimitsEnabled int
 	)
 	err := d.sql.QueryRowContext(ctx, q, keyHash, now).Scan(
 		&r.ID, &r.KeyHash, &r.KeyType, &r.Name,
 		&r.UserID,
 		&r.DailyTokenLimit, &r.MonthlyTokenLimit,
 		&r.RequestsPerMinute, &r.RequestsPerDay,
+		&r.Status, &r.SpendCap, &r.SpendUsed,
+		&r.IPWhitelist, &r.IPBlacklist,
+		&modelLimitsEnabled, &r.ModelLimits,
 		&expiresAtRaw,
 		&r.IsSystemAdmin,
 	)
@@ -147,5 +168,6 @@ WHERE k.deleted_at IS NULL
 		}
 		r.ExpiresAt = &t
 	}
+	r.ModelLimitsEnabled = modelLimitsEnabled == 1
 	return r, nil
 }

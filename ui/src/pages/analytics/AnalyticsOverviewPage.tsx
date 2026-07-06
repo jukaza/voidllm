@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { StatCard } from '../../components/ui/StatCard'
 import { AreaChart, DonutChart, HorizontalBar, type DonutSegment } from '../../components/ui/charts'
 import { useMe } from '../../hooks/useMe'
@@ -60,12 +61,18 @@ function formatMetric(n: number, metric: ChartMetric): string {
 export default function AnalyticsOverviewPage() {
   const { data: me } = useMe()
   const { t } = useTranslation()
+  const [searchParams] = useSearchParams()
   const isAdmin = me?.is_system_admin ?? false
 
   const [periodDays, setPeriodDays] = useState<PeriodDays>(7)
   const [chartMetric, setChartMetric] = useState<ChartMetric>('requests')
   const [keyId, setKeyId] = useState('')
   const [model, setModel] = useState('')
+
+  useEffect(() => {
+    const fromUrl = searchParams.get('key_id')
+    if (fromUrl) setKeyId(fromUrl)
+  }, [searchParams])
 
   const { from, to } = useMemo(() => getRange(periodDays), [periodDays])
   const filters = useMemo<MyUsageFilters>(

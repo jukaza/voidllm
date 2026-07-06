@@ -13,6 +13,7 @@ import { FeaturesSettingsTab } from './FeaturesSettingsTab'
 import { LegalNoticeSettingsTab } from './LegalNoticeSettingsTab'
 import { BackupSettingsTab } from './BackupSettingsTab'
 import { PaymentSettingsTab } from './PaymentSettingsTab'
+import { KeysSettingsTab } from './KeysSettingsTab'
 
 import { isSettingsTabKey, type SettingsTabKey } from './settingsTabs'
 
@@ -72,6 +73,7 @@ export default function SystemSettingsPage() {
         {tab === 'general' && <GeneralSettingsTab />}
         {tab === 'security' && <SecuritySettingsTab />}
         {tab === 'features' && <FeaturesSettingsTab />}
+        {tab === 'keys' && <KeysSettingsTab />}
         {tab === 'payment' && <PaymentSettingsTab />}
         {tab === 'legal' && <LegalNoticeSettingsTab />}
         {tab === 'backup' && <BackupSettingsTab />}

@@ -62,6 +62,25 @@ func (tc *TokenCounter) Add(keyID string, tokens int64) {
 	tc.addToScope(&tc.monthlyCounters, "key:"+keyID, monthWindow, tokens)
 }
 
+// TokenUsageSnapshot holds in-memory token totals for a key scope.
+type TokenUsageSnapshot struct {
+	DailyTokens   int64 `json:"daily_tokens"`
+	MonthlyTokens int64 `json:"monthly_tokens"`
+}
+
+// Snapshot returns the current daily/monthly token usage for keyID without
+// mutating counters.
+func (tc *TokenCounter) Snapshot(keyID string) TokenUsageSnapshot {
+	now := time.Now().UTC()
+	dayWindow := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC).Unix()
+	monthWindow := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC).Unix()
+	scope := "key:" + keyID
+	return TokenUsageSnapshot{
+		DailyTokens:   tc.getCount(&tc.dailyCounters, scope, dayWindow),
+		MonthlyTokens: tc.getCount(&tc.monthlyCounters, scope, monthWindow),
+	}
+}
+
 // CheckTokens verifies that no scope has exceeded its token budget. Each scope
 // is checked against its own limit independently. Returns ErrTokenBudgetExceeded
 // if any scope is over budget.

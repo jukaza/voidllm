@@ -6,6 +6,7 @@ import LandingPage from './pages/storefront/LandingPage'
 import RegisterPage from './pages/storefront/RegisterPage'
 import DashboardPage from './pages/DashboardPage'
 import KeysPage from './pages/KeysPage'
+import KeyUsagePage from './pages/KeyUsagePage'
 import FinanceLayout from './pages/finance/FinanceLayout'
 import FinanceOverviewPage from './pages/finance/FinanceOverviewPage'
 import FinanceTopupsPage from './pages/finance/FinanceTopupsPage'
@@ -73,6 +74,7 @@ export default function App() {
               <Route path="/register" element={<RegisterPage />} />
               <Route path="/auth/callback" element={<AuthCallbackPage />} />
               <Route path="/legal/:kind" element={<LegalPage />} />
+              <Route path="/key-usage" element={<KeyUsagePage />} />
               <Route path="/system-settings/*" element={<Navigate to="/settings" replace />} />
               <Route element={<RequireAuth />}>
                 <Route path="/dashboard" element={<DashboardPage />} />

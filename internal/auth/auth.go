@@ -35,6 +35,19 @@ type KeyInfo struct {
 	RequestsPerDay int
 	// ExpiresAt is the expiration time of the key. Nil means no expiration.
 	ExpiresAt *time.Time
+	// Status is the key lifecycle state: active, disabled, expired, quota_exhausted.
+	Status string
+	// SpendCap is the maximum spend allowed on this key (0 = unlimited).
+	SpendCap float64
+	// SpendUsed is the cumulative spend charged to this key.
+	SpendUsed float64
+	// IPWhitelist and IPBlacklist are newline-separated IP/CIDR rules.
+	IPWhitelist string
+	IPBlacklist string
+	// ModelLimitsEnabled gates requests to ModelLimits when true.
+	ModelLimitsEnabled bool
+	// ModelLimits is a JSON array of allowed model names.
+	ModelLimits string
 }
 
 // Middleware returns a Fiber handler that authenticates requests via Bearer token.
@@ -77,6 +90,15 @@ func Middleware(keyCache *cache.Cache[string, KeyInfo], hmacSecret []byte, datab
 			keyCache.Delete(hash)
 			return apierror.Unauthorized(c, "invalid API key")
 		}
+		if keyInfo.KeyType != keygen.KeyTypeSession {
+			switch keyInfo.Status {
+			case "disabled", "expired", "quota_exhausted":
+				return apierror.Send(c, fiber.StatusForbidden, "key_disabled", "api key is disabled")
+			case "", "active":
+			default:
+				return apierror.Send(c, fiber.StatusForbidden, "key_disabled", "api key is disabled")
+			}
+		}
 
 		c.Locals(keyInfoKey, &keyInfo)
 		return c.Next()
@@ -84,15 +106,26 @@ func Middleware(keyCache *cache.Cache[string, KeyInfo], hmacSecret []byte, datab
 }
 
 func keyInfoFromRecord(r db.KeyRecord) KeyInfo {
+	status := r.Status
+	if status == "" {
+		status = "active"
+	}
 	ki := KeyInfo{
-		ID:                r.ID,
-		KeyType:           r.KeyType,
-		Name:              r.Name,
-		DailyTokenLimit:   r.DailyTokenLimit,
-		MonthlyTokenLimit: r.MonthlyTokenLimit,
-		RequestsPerMinute: r.RequestsPerMinute,
-		RequestsPerDay:    r.RequestsPerDay,
-		ExpiresAt:         r.ExpiresAt,
+		ID:                 r.ID,
+		KeyType:            r.KeyType,
+		Name:               r.Name,
+		DailyTokenLimit:    r.DailyTokenLimit,
+		MonthlyTokenLimit:  r.MonthlyTokenLimit,
+		RequestsPerMinute:  r.RequestsPerMinute,
+		RequestsPerDay:     r.RequestsPerDay,
+		ExpiresAt:          r.ExpiresAt,
+		Status:             status,
+		SpendCap:           r.SpendCap,
+		SpendUsed:          r.SpendUsed,
+		IPWhitelist:        r.IPWhitelist,
+		IPBlacklist:        r.IPBlacklist,
+		ModelLimitsEnabled: r.ModelLimitsEnabled,
+		ModelLimits:        r.ModelLimits,
 	}
 	if r.UserID != nil {
 		ki.UserID = *r.UserID

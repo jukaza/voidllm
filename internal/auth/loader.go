@@ -30,15 +30,26 @@ func LoadKeysIntoCache(ctx context.Context, database *db.DB, keyCache *cache.Cac
 	entries := make(map[string]KeyInfo, len(records))
 
 	for _, r := range records {
+		status := r.Status
+		if status == "" {
+			status = "active"
+		}
 		ki := KeyInfo{
-			ID:                r.ID,
-			KeyType:           r.KeyType,
-			Name:              r.Name,
-			DailyTokenLimit:   r.DailyTokenLimit,
-			MonthlyTokenLimit: r.MonthlyTokenLimit,
-			RequestsPerMinute: r.RequestsPerMinute,
-			RequestsPerDay:    r.RequestsPerDay,
-			ExpiresAt:         r.ExpiresAt,
+			ID:                 r.ID,
+			KeyType:            r.KeyType,
+			Name:               r.Name,
+			DailyTokenLimit:    r.DailyTokenLimit,
+			MonthlyTokenLimit:  r.MonthlyTokenLimit,
+			RequestsPerMinute:  r.RequestsPerMinute,
+			RequestsPerDay:     r.RequestsPerDay,
+			ExpiresAt:          r.ExpiresAt,
+			Status:             status,
+			SpendCap:           r.SpendCap,
+			SpendUsed:          r.SpendUsed,
+			IPWhitelist:        r.IPWhitelist,
+			IPBlacklist:        r.IPBlacklist,
+			ModelLimitsEnabled: r.ModelLimitsEnabled,
+			ModelLimits:        r.ModelLimits,
 		}
 
 		if r.UserID != nil {

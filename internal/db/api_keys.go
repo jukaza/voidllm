@@ -15,56 +15,78 @@ import (
 const apiKeySelectColumns = "id, key_hash, key_hint, key_type, name, " +
 	"user_id, " +
 	"daily_token_limit, monthly_token_limit, requests_per_minute, requests_per_day, " +
+	"status, spend_cap, spend_used, ip_whitelist, ip_blacklist, " +
+	"model_limits_enabled, model_limits, " +
 	"expires_at, last_used_at, created_by, created_at, updated_at, deleted_at"
 
 // APIKey represents an API key record in the database.
 // KeyHash is included for cache keying and must never be included in API responses.
 type APIKey struct {
-	ID                string
-	KeyHash           string
-	KeyHint           string
-	KeyType           string
-	Name              string
-	UserID            *string
-	DailyTokenLimit   int64
-	MonthlyTokenLimit int64
-	RequestsPerMinute int
-	RequestsPerDay    int
-	ExpiresAt         *string
-	LastUsedAt        *string
-	CreatedBy         string
-	CreatedAt         string
-	UpdatedAt         string
-	DeletedAt         *string
+	ID                  string
+	KeyHash             string
+	KeyHint             string
+	KeyType             string
+	Name                string
+	UserID              *string
+	DailyTokenLimit     int64
+	MonthlyTokenLimit   int64
+	RequestsPerMinute   int
+	RequestsPerDay      int
+	Status              string
+	SpendCap            float64
+	SpendUsed           float64
+	IPWhitelist         string
+	IPBlacklist         string
+	ModelLimitsEnabled  bool
+	ModelLimits         string
+	ExpiresAt           *string
+	LastUsedAt          *string
+	CreatedBy           string
+	CreatedAt           string
+	UpdatedAt           string
+	DeletedAt           *string
 }
 
 // CreateAPIKeyParams holds the input for creating an API key.
 type CreateAPIKeyParams struct {
 	// KeyHash is the HMAC-SHA256 hash of the raw key. Never store the raw key.
-	KeyHash           string
-	KeyHint           string
-	KeyType           string
-	Name              string
-	UserID            *string
-	DailyTokenLimit   int64
-	MonthlyTokenLimit int64
-	RequestsPerMinute int
-	RequestsPerDay    int
-	ExpiresAt         *string
-	LoginIP           *string
-	UserAgent         *string
-	CreatedBy         string
+	KeyHash            string
+	KeyHint            string
+	KeyType            string
+	Name               string
+	UserID             *string
+	DailyTokenLimit    int64
+	MonthlyTokenLimit  int64
+	RequestsPerMinute  int
+	RequestsPerDay     int
+	Status             string
+	SpendCap           float64
+	IPWhitelist        string
+	IPBlacklist        string
+	ModelLimitsEnabled bool
+	ModelLimits        string
+	ExpiresAt          *string
+	LoginIP            *string
+	UserAgent          *string
+	CreatedBy          string
 }
 
 // UpdateAPIKeyParams holds optional fields for updating an API key.
 // A nil pointer means the field is not changed.
 type UpdateAPIKeyParams struct {
-	Name              *string
-	DailyTokenLimit   *int64
-	MonthlyTokenLimit *int64
-	RequestsPerMinute *int
-	RequestsPerDay    *int
-	ExpiresAt         *string
+	Name               *string
+	DailyTokenLimit    *int64
+	MonthlyTokenLimit  *int64
+	RequestsPerMinute  *int
+	RequestsPerDay     *int
+	Status             *string
+	SpendCap           *float64
+	SpendUsed          *float64
+	IPWhitelist        *string
+	IPBlacklist        *string
+	ModelLimitsEnabled *bool
+	ModelLimits        *string
+	ExpiresAt          *string
 }
 
 // CreateAPIKey inserts a new API key and returns the persisted record.
@@ -75,16 +97,24 @@ func (d *DB) CreateAPIKey(ctx context.Context, params CreateAPIKeyParams) (*APIK
 	}
 
 	p := d.dialect.Placeholder
+	status := params.Status
+	if status == "" {
+		status = "active"
+	}
 	insertQuery := "INSERT INTO api_keys " +
 		"(id, key_hash, key_hint, key_type, name, " +
 		"user_id, " +
 		"daily_token_limit, monthly_token_limit, requests_per_minute, requests_per_day, " +
+		"status, spend_cap, spend_used, ip_whitelist, ip_blacklist, " +
+		"model_limits_enabled, model_limits, " +
 		"expires_at, login_ip, user_agent, created_by, created_at, updated_at) " +
 		"VALUES (" +
 		p(1) + ", " + p(2) + ", " + p(3) + ", " + p(4) + ", " + p(5) + ", " +
 		p(6) + ", " +
 		p(7) + ", " + p(8) + ", " + p(9) + ", " + p(10) + ", " +
-		p(11) + ", " + p(12) + ", " + p(13) + ", " + p(14) + ", " +
+		p(11) + ", " + p(12) + ", 0, " + p(13) + ", " + p(14) + ", " +
+		p(15) + ", " + p(16) + ", " +
+		p(17) + ", " + p(18) + ", " + p(19) + ", " + p(20) + ", " +
 		"CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
 
 	selectQuery := "SELECT " + apiKeySelectColumns +
@@ -92,6 +122,10 @@ func (d *DB) CreateAPIKey(ctx context.Context, params CreateAPIKeyParams) (*APIK
 
 	var key *APIKey
 	err = d.WithTx(ctx, func(q Querier) error {
+		modelLimitsEnabled := 0
+		if params.ModelLimitsEnabled {
+			modelLimitsEnabled = 1
+		}
 		_, execErr := q.ExecContext(ctx, insertQuery,
 			id.String(),
 			params.KeyHash,
@@ -103,6 +137,12 @@ func (d *DB) CreateAPIKey(ctx context.Context, params CreateAPIKeyParams) (*APIK
 			params.MonthlyTokenLimit,
 			params.RequestsPerMinute,
 			params.RequestsPerDay,
+			status,
+			params.SpendCap,
+			params.IPWhitelist,
+			params.IPBlacklist,
+			modelLimitsEnabled,
+			params.ModelLimits,
 			params.ExpiresAt,
 			params.LoginIP,
 			params.UserAgent,
@@ -177,17 +217,25 @@ func (d *DB) ListAPIKeys(ctx context.Context, userID, cursor string, limit int, 
 
 	var keys []APIKey
 	for rows.Next() {
-		var k APIKey
-		if err := rows.Scan(
+		var (
+			k                  APIKey
+			modelLimitsEnabled int
+		)
+		if err := scanAPIKeyRow(
+			rows,
 			&k.ID, &k.KeyHash, &k.KeyHint, &k.KeyType, &k.Name,
 			&k.UserID,
 			&k.DailyTokenLimit, &k.MonthlyTokenLimit,
 			&k.RequestsPerMinute, &k.RequestsPerDay,
+			&k.Status, &k.SpendCap, &k.SpendUsed,
+			&k.IPWhitelist, &k.IPBlacklist,
+			&modelLimitsEnabled, &k.ModelLimits,
 			&k.ExpiresAt, &k.LastUsedAt,
 			&k.CreatedBy, &k.CreatedAt, &k.UpdatedAt, &k.DeletedAt,
 		); err != nil {
 			return nil, fmt.Errorf("list api keys scan: %w", err)
 		}
+		k.ModelLimitsEnabled = modelLimitsEnabled == 1
 		keys = append(keys, k)
 	}
 	if err := rows.Err(); err != nil {
@@ -235,6 +283,45 @@ func (d *DB) UpdateAPIKey(ctx context.Context, id string, params UpdateAPIKeyPar
 	if params.ExpiresAt != nil {
 		setClauses = append(setClauses, "expires_at = "+p(argN))
 		args = append(args, *params.ExpiresAt)
+		argN++
+	}
+	if params.Status != nil {
+		setClauses = append(setClauses, "status = "+p(argN))
+		args = append(args, *params.Status)
+		argN++
+	}
+	if params.SpendCap != nil {
+		setClauses = append(setClauses, "spend_cap = "+p(argN))
+		args = append(args, *params.SpendCap)
+		argN++
+	}
+	if params.SpendUsed != nil {
+		setClauses = append(setClauses, "spend_used = "+p(argN))
+		args = append(args, *params.SpendUsed)
+		argN++
+	}
+	if params.IPWhitelist != nil {
+		setClauses = append(setClauses, "ip_whitelist = "+p(argN))
+		args = append(args, *params.IPWhitelist)
+		argN++
+	}
+	if params.IPBlacklist != nil {
+		setClauses = append(setClauses, "ip_blacklist = "+p(argN))
+		args = append(args, *params.IPBlacklist)
+		argN++
+	}
+	if params.ModelLimitsEnabled != nil {
+		enabled := 0
+		if *params.ModelLimitsEnabled {
+			enabled = 1
+		}
+		setClauses = append(setClauses, "model_limits_enabled = "+p(argN))
+		args = append(args, enabled)
+		argN++
+	}
+	if params.ModelLimits != nil {
+		setClauses = append(setClauses, "model_limits = "+p(argN))
+		args = append(args, *params.ModelLimits)
 		argN++
 	}
 
@@ -370,16 +457,28 @@ func (d *DB) RotateKeyTx(ctx context.Context, oldID string, oldExpiresAt string,
 
 	p := d.dialect.Placeholder
 
+	rotateStatus := newParams.Status
+	if rotateStatus == "" {
+		rotateStatus = "active"
+	}
+	modelLimitsEnabled := 0
+	if newParams.ModelLimitsEnabled {
+		modelLimitsEnabled = 1
+	}
 	insertQuery := "INSERT INTO api_keys " +
 		"(id, key_hash, key_hint, key_type, name, " +
 		"user_id, " +
 		"daily_token_limit, monthly_token_limit, requests_per_minute, requests_per_day, " +
+		"status, spend_cap, spend_used, ip_whitelist, ip_blacklist, " +
+		"model_limits_enabled, model_limits, " +
 		"expires_at, created_by, created_at, updated_at) " +
 		"VALUES (" +
 		p(1) + ", " + p(2) + ", " + p(3) + ", " + p(4) + ", " + p(5) + ", " +
 		p(6) + ", " +
 		p(7) + ", " + p(8) + ", " + p(9) + ", " + p(10) + ", " +
-		p(11) + ", " + p(12) + ", " +
+		p(11) + ", " + p(12) + ", 0, " + p(13) + ", " + p(14) + ", " +
+		p(15) + ", " + p(16) + ", " +
+		p(17) + ", " + p(18) + ", " +
 		"CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
 
 	updateQuery := "UPDATE api_keys SET expires_at = " + p(1) + ", updated_at = CURRENT_TIMESTAMP" +
@@ -401,6 +500,12 @@ func (d *DB) RotateKeyTx(ctx context.Context, oldID string, oldExpiresAt string,
 			newParams.MonthlyTokenLimit,
 			newParams.RequestsPerMinute,
 			newParams.RequestsPerDay,
+			rotateStatus,
+			newParams.SpendCap,
+			newParams.IPWhitelist,
+			newParams.IPBlacklist,
+			modelLimitsEnabled,
+			newParams.ModelLimits,
 			newParams.ExpiresAt,
 			newParams.CreatedBy,
 		)
@@ -458,19 +563,92 @@ func (d *DB) GetUserRole(ctx context.Context, userID string) (string, error) {
 	return "member", nil
 }
 
+type apiKeyScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanAPIKeyRow(scanner apiKeyScanner, dest ...any) error {
+	return scanner.Scan(dest...)
+}
+
 // scanAPIKey scans a single API key row returned by QueryRowContext.
 func scanAPIKey(row *sql.Row) (*APIKey, error) {
-	var k APIKey
-	err := row.Scan(
+	var (
+		k                  APIKey
+		modelLimitsEnabled int
+	)
+	err := scanAPIKeyRow(
+		row,
 		&k.ID, &k.KeyHash, &k.KeyHint, &k.KeyType, &k.Name,
 		&k.UserID,
 		&k.DailyTokenLimit, &k.MonthlyTokenLimit,
 		&k.RequestsPerMinute, &k.RequestsPerDay,
+		&k.Status, &k.SpendCap, &k.SpendUsed,
+		&k.IPWhitelist, &k.IPBlacklist,
+		&modelLimitsEnabled, &k.ModelLimits,
 		&k.ExpiresAt, &k.LastUsedAt,
 		&k.CreatedBy, &k.CreatedAt, &k.UpdatedAt, &k.DeletedAt,
 	)
 	if err != nil {
 		return nil, err
 	}
+	k.ModelLimitsEnabled = modelLimitsEnabled == 1
 	return &k, nil
+}
+
+// CountUserAPIKeys returns active user_key count for a user.
+func (d *DB) CountUserAPIKeys(ctx context.Context, userID string) (int, error) {
+	p := d.dialect.Placeholder
+	var count int
+	err := d.sql.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM api_keys WHERE user_id = "+p(1)+
+			" AND key_type = 'user_key' AND deleted_at IS NULL",
+		userID,
+	).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count user api keys: %w", translateError(err))
+	}
+	return count, nil
+}
+
+// IncrementKeySpend adds revenue to spend_used and returns the new total.
+func (d *DB) IncrementKeySpend(ctx context.Context, keyID string, amount float64) (float64, error) {
+	if amount <= 0 {
+		key, err := d.GetAPIKey(ctx, keyID)
+		if err != nil {
+			return 0, err
+		}
+		return key.SpendUsed, nil
+	}
+	p := d.dialect.Placeholder
+	query := "UPDATE api_keys SET spend_used = spend_used + " + p(1) +
+		", updated_at = CURRENT_TIMESTAMP WHERE id = " + p(2) +
+		" AND deleted_at IS NULL RETURNING spend_used, spend_cap, status"
+	var spendUsed, spendCap float64
+	var status string
+	err := d.sql.QueryRowContext(ctx, query, amount, keyID).Scan(&spendUsed, &spendCap, &status)
+	if err != nil {
+		return 0, fmt.Errorf("increment key spend %s: %w", keyID, translateError(err))
+	}
+	if spendCap > 0 && spendUsed >= spendCap && status == "active" {
+		_, _ = d.sql.ExecContext(ctx,
+			"UPDATE api_keys SET status = 'quota_exhausted', updated_at = CURRENT_TIMESTAMP WHERE id = "+p(1),
+			keyID,
+		)
+	}
+	return spendUsed, nil
+}
+
+// RevokeAllUserAPIKeys soft-deletes all user_key rows for a user.
+func (d *DB) RevokeAllUserAPIKeys(ctx context.Context, userID string) (int64, error) {
+	p := d.dialect.Placeholder
+	result, err := d.sql.ExecContext(ctx,
+		"UPDATE api_keys SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP, status = 'disabled' "+
+			"WHERE user_id = "+p(1)+" AND key_type = 'user_key' AND deleted_at IS NULL",
+		userID,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("revoke all user api keys: %w", translateError(err))
+	}
+	return result.RowsAffected()
 }

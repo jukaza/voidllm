@@ -327,6 +327,17 @@ func (l *Logger) flush(events []Event) error {
 		}
 	}
 
+	for _, ev := range events {
+		if ev.Revenue != nil && *ev.Revenue > 0 && ev.KeyID != "" {
+			if _, err := l.database.IncrementKeySpend(ctx, ev.KeyID, *ev.Revenue); err != nil {
+				l.log.LogAttrs(ctx, slog.LevelError, "increment key spend failed",
+					slog.String("key_id", ev.KeyID),
+					slog.String("error", err.Error()),
+				)
+			}
+		}
+	}
+
 	// Aggregate the flushed events into hourly rollup buckets. The bucket hour
 	// is derived from the current wall clock time, which is accurate to within
 	// the flush interval (default 5s) — sufficient precision for hour granularity.

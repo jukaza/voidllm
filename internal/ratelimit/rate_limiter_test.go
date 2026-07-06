@@ -258,6 +258,28 @@ func TestCheckRate_KeyLimitDoesNotConsumeOtherKeys(t *testing.T) {
 	}
 }
 
+func TestRateLimiter_Snapshot(t *testing.T) {
+	t.Parallel()
+
+	rl := NewRateLimiter()
+	keyLimits := Limits{RequestsPerMinute: 10, RequestsPerDay: 20}
+
+	if err := rl.CheckRate("snap-key", keyLimits); err != nil {
+		t.Fatalf("setup CheckRate: %v", err)
+	}
+	if err := rl.CheckRate("snap-key", keyLimits); err != nil {
+		t.Fatalf("setup CheckRate: %v", err)
+	}
+
+	snap := rl.Snapshot("snap-key")
+	if snap.RequestsPerMinute != 2 {
+		t.Errorf("RequestsPerMinute = %d, want 2", snap.RequestsPerMinute)
+	}
+	if snap.RequestsPerDay != 2 {
+		t.Errorf("RequestsPerDay = %d, want 2", snap.RequestsPerDay)
+	}
+}
+
 func BenchmarkCheckRate(b *testing.B) {
 	rl := NewRateLimiter()
 	keyLimits := Limits{RequestsPerMinute: 1_000_000}

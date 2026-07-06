@@ -16,7 +16,9 @@ import (
 	"github.com/jukaza/tavo/internal/cache"
 	"github.com/jukaza/tavo/internal/db"
 	"github.com/jukaza/tavo/internal/health"
+	"github.com/jukaza/tavo/internal/keys"
 	"github.com/jukaza/tavo/internal/proxy"
+	"github.com/jukaza/tavo/internal/ratelimit"
 	voidredis "github.com/jukaza/tavo/internal/redis"
 	"github.com/jukaza/tavo/internal/update"
 	"github.com/jukaza/tavo/internal/usage"
@@ -81,6 +83,12 @@ type Handler struct {
 	ApplyFeatures func(context.Context, features.Config) error
 	// Backup manages cloud backups and restores. Nil disables backup API.
 	Backup *backup.Service
+	// RateLimiter provides in-memory RPM/RPD snapshots for key usage endpoints.
+	RateLimiter ratelimit.Checker
+	// TokenCounter provides in-memory daily/monthly token snapshots for key usage endpoints.
+	TokenCounter *ratelimit.TokenCounter
+	// KeysRuntime holds hot-reloaded API key policy settings.
+	KeysRuntime *keys.Runtime
 }
 
 // swaggerErrorResponse is the standard API error envelope used in OpenAPI docs.

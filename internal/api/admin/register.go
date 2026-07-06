@@ -15,6 +15,7 @@ import (
 	"github.com/jukaza/tavo/internal/auth"
 	"github.com/jukaza/tavo/internal/db"
 	"github.com/jukaza/tavo/internal/features"
+	"github.com/jukaza/tavo/internal/keys"
 	"github.com/jukaza/tavo/internal/security"
 	"github.com/jukaza/tavo/internal/site"
 	"github.com/jukaza/tavo/pkg/keygen"
@@ -169,6 +170,38 @@ func (h *Handler) Register(c fiber.Ctx) error {
 		Name:      "Login session",
 		ExpiresAt: &expiresAt,
 	})
+
+	policy := h.currentKeysPolicy(ctx)
+	if policy.AutoCreateOnRegister {
+		userKeyName := "Default API Key"
+		var userKeyExpires *string
+		if policy.DefaultExpiryDays > 0 {
+			userKeyExpiry := time.Now().UTC().AddDate(0, 0, policy.DefaultExpiryDays)
+			exp := userKeyExpiry.Format(time.RFC3339)
+			userKeyExpires = &exp
+		}
+		userKeyPlain, genErr := keygen.Generate(keygen.KeyTypeUser)
+		if genErr != nil {
+			h.Log.ErrorContext(ctx, "register: generate user key", slog.String("error", genErr.Error()))
+			return apierror.InternalError(c, "signup failed")
+		}
+		userKeyHash := keygen.Hash(userKeyPlain, h.HMACSecret)
+		userKeyRec, createErr := h.DB.CreateAPIKey(ctx, db.CreateAPIKeyParams{
+			KeyHash:   userKeyHash,
+			KeyHint:   keygen.Hint(userKeyPlain),
+			KeyType:   keygen.KeyTypeUser,
+			Name:      userKeyName,
+			UserID:    &user.ID,
+			Status:    keys.StatusActive,
+			ExpiresAt: userKeyExpires,
+			CreatedBy: user.ID,
+		})
+		if createErr != nil {
+			h.Log.ErrorContext(ctx, "register: create user key", slog.String("error", createErr.Error()))
+			return apierror.InternalError(c, "signup failed")
+		}
+		h.KeyCache.Set(userKeyHash, keyInfoFromAPIKey(userKeyRec, auth.RoleMember))
+	}
 
 	if h.LoginThrottle != nil {
 		h.LoginThrottle.RecordSuccess(req.Email)

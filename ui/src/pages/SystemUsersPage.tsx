@@ -14,6 +14,7 @@ import { useMe } from '../hooks/useMe'
 import { useUsers, useCreateUser, useDeleteUser } from '../hooks/useUsers'
 import type { UserResponse, CreateUserParams } from '../hooks/useUsers'
 import { useToast } from '../hooks/useToast'
+import { UserKeysDialog } from '../components/admin/UserKeysDialog'
 
 // ---------------------------------------------------------------------------
 // Icons
@@ -208,6 +209,7 @@ export default function SystemUsersPage() {
   const [prevCursors, setPrevCursors] = useState<string[]>([])
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [deleteUserId, setDeleteUserId] = useState<string | null>(null)
+  const [keysUser, setKeysUser] = useState<UserResponse | null>(null)
 
   const { data: users, isLoading } = useUsers(cursor)
   const deleteUser = useDeleteUser()
@@ -251,20 +253,29 @@ export default function SystemUsersPage() {
       key: 'actions',
       header: '',
       align: 'right',
-      render: (row) => {
-        if (row.id === me?.id) return null
-        return (
-          <button
-            type="button"
-            onClick={() => setDeleteUserId(row.id)}
-            disabled={deleteUser.isPending}
-            title="Delete user"
-            className="p-1.5 rounded-md text-text-tertiary hover:text-error hover:bg-error/10 transition-colors disabled:opacity-40"
+      render: (row) => (
+        <div className="flex items-center justify-end gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="!px-2 text-xs"
+            onClick={() => setKeysUser(row)}
           >
-            <IconTrash />
-          </button>
-        )
-      },
+            API Keys
+          </Button>
+          {row.id !== me?.id && (
+            <button
+              type="button"
+              onClick={() => setDeleteUserId(row.id)}
+              disabled={deleteUser.isPending}
+              title="Delete user"
+              className="p-1.5 rounded-md text-text-tertiary hover:text-error hover:bg-error/10 transition-colors disabled:opacity-40"
+            >
+              <IconTrash />
+            </button>
+          )}
+        </div>
+      ),
     },
   ]
 
@@ -355,6 +366,10 @@ export default function SystemUsersPage() {
         confirmLabel="Delete"
         loading={deleteUser.isPending}
       />
+
+      {keysUser !== null && (
+        <UserKeysDialog user={keysUser} onClose={() => setKeysUser(null)} />
+      )}
     </>
   )
 }

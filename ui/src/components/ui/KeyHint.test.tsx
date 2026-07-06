@@ -1,6 +1,25 @@
-import { render, screen } from '@testing-library/react'
-import { describe, it, expect } from 'vitest'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest'
 import { KeyHint } from './KeyHint'
+
+const writeText = vi.fn().mockResolvedValue(undefined)
+const originalClipboard = navigator.clipboard
+
+beforeAll(() => {
+  Object.assign(navigator, { clipboard: { writeText } })
+})
+
+afterAll(() => {
+  try {
+    Object.assign(navigator, { clipboard: originalClipboard })
+  } catch {
+    /* jsdom may block restoring clipboard */
+  }
+})
+
+beforeEach(() => {
+  writeText.mockClear()
+})
 
 describe('KeyHint', () => {
   describe('Rendering', () => {
@@ -33,15 +52,30 @@ describe('KeyHint', () => {
     })
   })
 
-  describe('Styling', () => {
-    it('outer span has font-mono class', () => {
-      render(<KeyHint hint="sk-a3f2...2ad6" data-testid="kh" />)
-      expect(screen.getByTestId('kh').className).toContain('font-mono')
+  describe('Copy', () => {
+    it('does not show copy button without copyValue', () => {
+      render(<KeyHint hint="sk-a3f2...2ad6" />)
+      expect(screen.queryByRole('button')).not.toBeInTheDocument()
     })
 
-    it('outer span has text-xs class', () => {
-      render(<KeyHint hint="sk-a3f2...2ad6" data-testid="kh" />)
-      expect(screen.getByTestId('kh').className).toContain('text-xs')
+    it('copies copyValue when the button is clicked', async () => {
+      render(<KeyHint hint="sk-a3f2...2ad6" copyValue="sk-a3f2fullkey2ad6" copyLabel="Copy key" />)
+      fireEvent.click(screen.getByRole('button', { name: 'Copy key' }))
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith('sk-a3f2fullkey2ad6'))
+    })
+  })
+
+  describe('Styling', () => {
+    it('hint text has font-mono class', () => {
+      render(<KeyHint hint="sk-a3f2...2ad6" />)
+      const hint = screen.getByText('2ad6').closest('span.font-mono')
+      expect(hint?.className).toContain('font-mono')
+    })
+
+    it('hint text has text-xs class', () => {
+      render(<KeyHint hint="sk-a3f2...2ad6" />)
+      const hint = screen.getByText('2ad6').closest('span.text-xs')
+      expect(hint?.className).toContain('text-xs')
     })
   })
 
@@ -54,7 +88,6 @@ describe('KeyHint', () => {
     it('merges custom className', () => {
       render(<KeyHint hint="sk-a3f2...2ad6" className="extra" data-testid="kh" />)
       expect(screen.getByTestId('kh').className).toContain('extra')
-      expect(screen.getByTestId('kh').className).toContain('font-mono')
     })
   })
 })

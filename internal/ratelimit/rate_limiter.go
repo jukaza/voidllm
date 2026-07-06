@@ -81,6 +81,36 @@ func (r *RateLimiter) EvictStale() {
 	})
 }
 
+// RateUsageSnapshot holds in-memory request counts for a key scope.
+type RateUsageSnapshot struct {
+	RequestsPerMinute int64 `json:"requests_per_minute"`
+	RequestsPerDay    int64 `json:"requests_per_day"`
+}
+
+// Snapshot returns the current RPM/RPD usage for keyID without mutating counters.
+func (r *RateLimiter) Snapshot(keyID string) RateUsageSnapshot {
+	now := time.Now().UTC()
+	minuteWindow := now.Truncate(time.Minute).Unix()
+	dayWindow := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC).Unix()
+	scope := "key:" + keyID
+	return RateUsageSnapshot{
+		RequestsPerMinute: r.getCount(&r.minuteCounters, scope, minuteWindow),
+		RequestsPerDay:    r.getCount(&r.dayCounters, scope, dayWindow),
+	}
+}
+
+func (r *RateLimiter) getCount(m *sync.Map, scope string, currentWindow int64) int64 {
+	v, ok := m.Load(scope)
+	if !ok {
+		return 0
+	}
+	entry := v.(*counterEntry)
+	if entry.windowStart.Load() != currentWindow {
+		return 0
+	}
+	return entry.count.Load()
+}
+
 func (r *RateLimiter) tryIncrement(entry *counterEntry, currentWindow int64, limit int64) bool {
 	for {
 		stored := entry.windowStart.Load()

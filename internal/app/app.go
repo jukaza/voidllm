@@ -36,6 +36,7 @@ import (
 	"github.com/jukaza/tavo/internal/docs"
 	"github.com/jukaza/tavo/internal/features"
 	"github.com/jukaza/tavo/internal/health"
+	"github.com/jukaza/tavo/internal/keys"
 	"github.com/jukaza/tavo/internal/metrics"
 	voidotel "github.com/jukaza/tavo/internal/otel"
 	"github.com/jukaza/tavo/internal/pii"
@@ -521,6 +522,12 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 		return nil, fmt.Errorf("load features settings: %w", err)
 	}
 	featuresRuntime := features.NewRuntime(featuresCfg)
+	keysPolicy, err := keys.LoadPolicy(ctx, database)
+	if err != nil {
+		return nil, fmt.Errorf("load keys policy: %w", err)
+	}
+	keysRuntime := keys.NewRuntime()
+	keysRuntime.Set(keysPolicy)
 	enforceBalance := featuresCfg.Wallet.EnforceBalance
 
 	// Step 8: start usage logger (always) and audit logger (if enabled).
@@ -699,6 +706,7 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 	proxyHandler.MaxStreamDuration = cfg.Server.Proxy.MaxStreamDuration
 	proxyHandler.FallbackMaxDepth = cfg.Settings.FallbackMaxDepth
 	proxyHandler.TokenEstimateEnabled = cfg.Settings.TokenCounting.IsEnabled()
+	proxyHandler.KeysRuntime = keysRuntime
 
 	if cfg.Settings.PII.IsEnabled() {
 		piiEngine, piiErr := buildPIIEngine(encKey, cfg.Settings.PII, log)
@@ -732,6 +740,9 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 		Wallet:          walletService,
 		LiveStats:       liveStats,
 		FeaturesRuntime: featuresRuntime,
+		RateLimiter:     rateLimiter,
+		TokenCounter:    tokenCounter,
+		KeysRuntime:     keysRuntime,
 	}
 	adminHandler.ApplyFeatures = func(_ context.Context, cfg features.Config) error {
 		if cfg.Wallet.EnforceBalance {
