@@ -28,6 +28,7 @@ func RegisterRoutes(app *fiber.App, handler *Handler, keyCache *cache.Cache[stri
 	app.Get("/api/v1/public/site", handler.GetPublicSite)
 	app.Get("/api/v1/public/features", handler.GetPublicFeatures)
 	app.Get("/api/v1/public/topup-config", handler.GetPublicTopupConfig)
+	app.Get("/api/v1/public/llm-setup", handler.HandleCliSetup)
 	app.Post("/api/v1/webhooks/sepay", handler.SepayWebhook)
 
 	var apiMiddlewares []any

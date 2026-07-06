@@ -15,6 +15,8 @@ interface TabbedPageLayoutProps {
   navLabel: string
   children: ReactNode
   maxWidthClass?: string
+  /** Always show horizontal tabs above content (dashboard integrations, etc.) */
+  showTopTabs?: boolean
 }
 
 export function TabbedPageLayout({
@@ -24,22 +26,36 @@ export function TabbedPageLayout({
   navLabel,
   children,
   maxWidthClass = 'max-w-6xl',
+  showTopTabs = false,
 }: TabbedPageLayoutProps) {
   return (
     <div className={cn('mx-auto', maxWidthClass)}>
-      <div className="lg:hidden">
+      {showTopTabs ? (
         <TabSwitcher
           tabs={tabs}
           activeKey={activeTab}
           onChange={onTabChange}
           scrollable
-          className="mb-6 w-full max-w-full"
+          className="mb-8 w-full max-w-full"
         />
-      </div>
+      ) : (
+        <div className="mb-6 lg:hidden">
+          <TabSwitcher
+            tabs={tabs}
+            activeKey={activeTab}
+            onChange={onTabChange}
+            scrollable
+            className="w-full max-w-full"
+          />
+        </div>
+      )}
 
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+      <div className={cn('flex flex-col gap-6', !showTopTabs && 'lg:flex-row lg:items-start')}>
         <nav
-          className="hidden lg:flex lg:w-52 shrink-0 flex-col gap-0.5 rounded-lg border border-border bg-bg-secondary p-1.5"
+          className={cn(
+            'shrink-0 flex-col gap-0.5 rounded-lg border border-border bg-bg-secondary p-1.5',
+            showTopTabs ? 'hidden' : 'hidden lg:flex lg:w-52',
+          )}
           aria-label={navLabel}
         >
           {tabs.map((tab) => {

@@ -5,6 +5,7 @@ import AuthCallbackPage from './pages/auth/AuthCallbackPage'
 import LandingPage from './pages/storefront/LandingPage'
 import RegisterPage from './pages/storefront/RegisterPage'
 import DashboardPage from './pages/DashboardPage'
+import IntegrationsPage from './pages/IntegrationsPage'
 import KeysPage from './pages/KeysPage'
 import KeyUsagePage from './pages/KeyUsagePage'
 import FinanceLayout from './pages/finance/FinanceLayout'
@@ -78,6 +79,8 @@ export default function App() {
               <Route path="/system-settings/*" element={<Navigate to="/settings" replace />} />
               <Route element={<RequireAuth />}>
                 <Route path="/dashboard" element={<DashboardPage />} />
+                <Route path="/integrations" element={<IntegrationsPage />} />
+                <Route path="/dashboard/integrations" element={<Navigate to="/integrations" replace />} />
                 <Route
                   path="/playground"
                   element={
