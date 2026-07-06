@@ -160,9 +160,11 @@ export default function AnalyticsOverviewPage() {
   const loading = totals.isLoading
   const { live, connected } = useUsageLive()
 
+  const spendLabel = isAdmin ? t('analytics.metric_payment') : t('analytics.metric_cost')
+
   const metricOptions = [
     { value: 'requests' as ChartMetric, label: t('analytics.metric_requests') },
-    { value: 'payment' as ChartMetric, label: t('analytics.metric_payment') },
+    { value: 'payment' as ChartMetric, label: spendLabel },
     { value: 'tokens' as ChartMetric, label: t('analytics.metric_tokens') },
   ]
 
@@ -249,7 +251,7 @@ export default function AnalyticsOverviewPage() {
           valueStyle={{ color: TOKEN_METRIC_STYLES.cacheRead.color }}
         />
         <StatCard
-          label={`${t('analytics.payment')} (${periodLabel})`}
+          label={`${isAdmin ? t('analytics.payment') : t('analytics.cost')} (${periodLabel})`}
           value={loading ? '...' : formatCost(summary.revenue)}
         />
       </div>

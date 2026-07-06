@@ -114,7 +114,7 @@ export default function RequestLogsPage() {
       },
       {
         key: 'revenue',
-        header: isAdmin ? t('analytics.revenue') : t('analytics.payment'),
+        header: isAdmin ? t('analytics.revenue') : t('analytics.cost'),
         align: 'right',
         render: (row) => (
           <span className="text-text-primary tabular-nums">

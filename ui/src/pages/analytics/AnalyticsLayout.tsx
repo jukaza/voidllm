@@ -17,12 +17,15 @@ export default function AnalyticsLayout() {
           { path: '/analytics/channels', label: t('analytics.channels') },
           { path: '/analytics/profit', label: t('analytics.revenue_report') },
         ]
-      : []),
+      : [{ path: '/analytics/cost', label: t('analytics.cost_report') }]),
   ]
 
   return (
     <>
-      <PageHeader title={t('analytics.title')} description={t('analytics.description')} />
+      <PageHeader
+        title={t('analytics.title')}
+        description={isAdmin ? t('analytics.description_admin') : t('analytics.description_user')}
+      />
 
       <div className="flex items-center gap-1 mb-6 border-b border-border">
         {tabs.map((tab) => {

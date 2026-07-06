@@ -33,12 +33,15 @@ type publicSubscriptionPlanJSON struct {
 }
 
 type publicSubscriptionPackageJSON struct {
-	ID          string                       `json:"id"`
-	Name        string                       `json:"name"`
-	Description string                       `json:"description"`
-	CoverType   string                       `json:"cover_type"`
-	CoverValue  string                       `json:"cover_value"`
-	Plans       []publicSubscriptionPlanJSON `json:"plans"`
+	ID               string                       `json:"id"`
+	Name             string                       `json:"name"`
+	Description      string                       `json:"description"`
+	CoverType        string                       `json:"cover_type"`
+	CoverValue       string                       `json:"cover_value"`
+	MinPrice         float64                      `json:"min_price"`
+	ModelCount       int                          `json:"model_count"`
+	SubscriberCount  int                          `json:"subscriber_count"`
+	Plans            []publicSubscriptionPlanJSON `json:"plans"`
 }
 
 // PublicSubscriptionCatalog handles GET /api/v1/public/subscription-packages.
@@ -62,13 +65,27 @@ func (h *Handler) PublicSubscriptionCatalog(c fiber.Ctx) error {
 		if len(planJSON) == 0 {
 			continue
 		}
+		subCount, _ := h.DB.CountActiveUserSubscriptionsForPackage(c.Context(), pkg.ID)
+		modelSet := make(map[string]struct{})
+		var minPrice float64
+		for i := range planJSON {
+			if i == 0 || planJSON[i].Price < minPrice {
+				minPrice = planJSON[i].Price
+			}
+			for _, m := range planJSON[i].AllowedModels {
+				modelSet[m] = struct{}{}
+			}
+		}
 		items = append(items, publicSubscriptionPackageJSON{
-			ID:          pkg.ID,
-			Name:        pkg.Name,
-			Description: pkg.Description,
-			CoverType:   pkg.CoverType,
-			CoverValue:  pkg.CoverValue,
-			Plans:       planJSON,
+			ID:              pkg.ID,
+			Name:            pkg.Name,
+			Description:     pkg.Description,
+			CoverType:       pkg.CoverType,
+			CoverValue:      pkg.CoverValue,
+			MinPrice:        minPrice,
+			ModelCount:      len(modelSet),
+			SubscriberCount: subCount,
+			Plans:           planJSON,
 		})
 	}
 	return c.JSON(fiber.Map{"data": items})
@@ -158,7 +175,7 @@ func (h *Handler) CreateSubscriptionOrder(c fiber.Ctx) error {
 			PaymentMethod: "wallet",
 			PayAmount:     plan.Price,
 			Status:        "completed",
-			Subscription:  ptrUserSubscriptionJSON(userSubscriptionToJSON(us, plan.Name, pkgName)),
+			Subscription:  ptrUserSubscriptionJSON(userSubscriptionToJSON(us, plan, pkgName)),
 		})
 	}
 

@@ -92,7 +92,7 @@ export function UsageLogDrawer({ requestId, onClose }: UsageLogDrawerProps) {
             {log.revenue != null && (
               <div>
                 <dt className="text-text-tertiary">
-                  {isAdmin ? t('analytics.revenue') : t('analytics.payment')}
+                  {isAdmin ? t('analytics.revenue') : t('analytics.cost')}
                 </dt>
                 <dd className="text-text-primary font-medium">{formatCost(log.revenue)}</dd>
               </div>

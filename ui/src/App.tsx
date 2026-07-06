@@ -22,12 +22,16 @@ import AnalyticsLayout from './pages/analytics/AnalyticsLayout'
 import AnalyticsOverviewPage from './pages/analytics/AnalyticsOverviewPage'
 import RequestLogsPage from './pages/analytics/RequestLogsPage'
 import ProfitPage from './pages/analytics/ProfitPage'
+import CostPage from './pages/analytics/CostPage'
 import ChannelsPage from './pages/analytics/ChannelsPage'
+import AnalyticsCostRedirect from './pages/analytics/AnalyticsRedirect'
 import AccountSettingsPage from './pages/account/AccountSettingsPage'
 import PlaygroundPage from './pages/PlaygroundPage'
 import SystemUsersPage from './pages/SystemUsersPage'
 import SubscriptionsPage from './pages/SubscriptionsPage'
 import PlansPage from './pages/PlansPage'
+import PlanPackagePage from './pages/PlanPackagePage'
+import MySubscriptionsPage from './pages/MySubscriptionsPage'
 import CatalogPage from './pages/CatalogPage'
 import SystemSettingsPage from './pages/settings/SystemSettingsPage'
 import LegalPage from './pages/storefront/LegalPage'
@@ -113,16 +117,19 @@ export default function App() {
                 <Route path="/marketplace/*" element={<Navigate to="/finance/topups" replace />} />
                 <Route path="/wallet" element={<WalletPage />} />
                 <Route path="/plans" element={<PlansPage />} />
+                <Route path="/plans/:packageId" element={<PlanPackagePage />} />
+                <Route path="/my-subscriptions" element={<MySubscriptionsPage />} />
                 <Route path="/models" element={<ModelsLayout />} />
                 <Route path="/analytics" element={<AnalyticsLayout />}>
                   <Route index element={<AnalyticsOverviewPage />} />
                   <Route path="logs" element={<RequestLogsPage />} />
                   <Route path="channels" element={<ChannelsPage />} />
                   <Route path="profit" element={<ProfitPage />} />
+                  <Route path="cost" element={<CostPage />} />
                 </Route>
                 <Route path="/usage" element={<Navigate to="/analytics" replace />} />
                 <Route path="/usage/*" element={<Navigate to="/analytics" replace />} />
-                <Route path="/cost-reports" element={<Navigate to="/analytics/profit" replace />} />
+                <Route path="/cost-reports" element={<AnalyticsCostRedirect />} />
                 <Route path="/account" element={<AccountSettingsPage />} />
                 <Route path="/profile" element={<Navigate to="/account" replace />} />
                 <Route path="/users" element={<SystemUsersPage />} />

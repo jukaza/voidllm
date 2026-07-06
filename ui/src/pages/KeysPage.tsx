@@ -14,7 +14,7 @@ import { ExpiryField, defaultExpiryDateInput, dateInputToISO } from '../componen
 import { ModelLimitPicker, type ModelLimitOption } from '../components/keys/ModelLimitPicker'
 import { KeySubscriptionField } from '../components/keys/KeySubscriptionField'
 import { Banner } from '../components/ui/Banner'
-import { KeyHint } from '../components/ui/KeyHint'
+
 import { forgetApiKey, rememberApiKey } from '../lib/apiKeySecrets'
 import { KeyCopyButton } from '../components/keys/KeyCopyButton'
 import { TimeAgo } from '../components/ui/TimeAgo'

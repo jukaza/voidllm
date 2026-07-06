@@ -196,6 +196,7 @@ function buildNavigation(t: any): NavGroup[] {
         { label: t('sidebar.playground'), path: '/playground', icon: <IconTerminal /> },
         { label: t('sidebar.wallet'), path: '/wallet', icon: <IconWallet /> },
         { label: t('sidebar.plans'), path: '/plans', icon: <IconSubscription /> },
+        { label: t('sidebar.my_subscriptions'), path: '/my-subscriptions', icon: <IconSubscription /> },
       ],
     },
     {

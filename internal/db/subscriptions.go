@@ -515,6 +515,23 @@ func (d *DB) DeleteSubscriptionPlan(ctx context.Context, id string) error {
 	return nil
 }
 
+// CountActiveUserSubscriptionsForPackage counts non-expired active subscriptions for a package.
+func (d *DB) CountActiveUserSubscriptionsForPackage(ctx context.Context, packageID string) (int, error) {
+	p := d.dialect.Placeholder
+	now := time.Now().UTC().Format(time.RFC3339)
+	var count int
+	err := d.sql.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM user_subscriptions u "+
+			"JOIN subscription_plans p ON p.id = u.plan_id "+
+			"WHERE p.package_id = "+p(1)+" AND u.status = 'active' AND u.expires_at > "+p(2)+" AND p.deleted_at IS NULL",
+		packageID, now,
+	).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count package subscriptions: %w", translateError(err))
+	}
+	return count, nil
+}
+
 func (d *DB) CountActivePlanBindings(ctx context.Context, planID string) (int, error) {
 	p := d.dialect.Placeholder
 	now := time.Now().UTC().Format(time.RFC3339)

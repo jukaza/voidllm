@@ -114,14 +114,25 @@ type RateUsageSnapshot struct {
 
 // Snapshot returns the current RPM/RPD usage for keyID without mutating counters.
 func (r *RateLimiter) Snapshot(keyID string) RateUsageSnapshot {
+	return r.ScopedSnapshot("key:" + keyID)
+}
+
+// ScopedSnapshot returns RPM/RPD usage for an arbitrary counter scope.
+func (r *RateLimiter) ScopedSnapshot(scope string) RateUsageSnapshot {
 	now := time.Now().UTC()
 	minuteWindow := now.Truncate(time.Minute).Unix()
 	dayWindow := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC).Unix()
-	scope := "key:" + keyID
 	return RateUsageSnapshot{
 		RequestsPerMinute: r.getCount(&r.minuteCounters, scope, minuteWindow),
 		RequestsPerDay:    r.getCount(&r.dayCounters, scope, dayWindow),
 	}
+}
+
+// ScopedMonthlyRequests returns the monthly request count for scope.
+func (r *RateLimiter) ScopedMonthlyRequests(scope string) int64 {
+	now := time.Now().UTC()
+	monthWindow := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC).Unix()
+	return r.getCount(&r.monthlyRequestCounters, scope, monthWindow)
 }
 
 func (r *RateLimiter) getCount(m *sync.Map, scope string, currentWindow int64) int64 {

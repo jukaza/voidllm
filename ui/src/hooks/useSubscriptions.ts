@@ -37,16 +37,40 @@ export interface SubscriptionPlan {
   updated_at: string
 }
 
+export interface SubscriptionPlanQuota {
+  validity_days: number
+  daily_token_limit: number
+  monthly_token_limit: number
+  daily_request_limit: number
+  monthly_request_limit: number
+  requests_per_minute: number
+  requests_per_day: number
+  allowed_models: string[]
+  quota_exceeded_policy: 'block' | 'fallback_wallet'
+}
+
+export interface SubscriptionUsageSnapshot {
+  daily_tokens: number
+  monthly_tokens: number
+  requests_per_minute: number
+  requests_per_day: number
+  monthly_requests: number
+}
+
 export interface UserSubscription {
   id: string
   user_id: string
   plan_id: string
   plan_name?: string
+  package_id?: string
   package_name?: string
   status: string
   starts_at: string
   expires_at: string
+  days_remaining?: number
   order_id?: string
+  plan?: SubscriptionPlanQuota
+  usage?: SubscriptionUsageSnapshot
   created_at: string
   updated_at: string
 }
@@ -227,7 +251,74 @@ export interface PublicSubscriptionPlan extends SubscriptionPlan {
 }
 
 export interface PublicSubscriptionPackage extends SubscriptionPackage {
+  min_price?: number
+  model_count?: number
+  subscriber_count?: number
   plans: PublicSubscriptionPlan[]
+}
+
+export function computeDaysRemaining(expiresAt: string): number | undefined {
+  const ms = Date.parse(expiresAt)
+  if (Number.isNaN(ms)) return undefined
+  const days = Math.floor((ms - Date.now()) / (24 * 60 * 60 * 1000))
+  return Math.max(0, days)
+}
+
+export function enrichPublicPackage(pkg: PublicSubscriptionPackage): PublicSubscriptionPackage {
+  const modelSet = new Set<string>()
+  let minPrice = pkg.min_price
+  for (const plan of pkg.plans) {
+    if (minPrice === undefined || plan.price < minPrice) minPrice = plan.price
+    for (const m of plan.allowed_models ?? []) {
+      if (m) modelSet.add(m)
+    }
+  }
+  return {
+    ...pkg,
+    min_price: minPrice ?? pkg.plans[0]?.price ?? 0,
+    model_count: pkg.model_count ?? modelSet.size,
+    subscriber_count: pkg.subscriber_count ?? 0,
+  }
+}
+
+export function buildPublicPlanLookup(
+  catalog: PublicSubscriptionPackage[],
+): Map<string, PublicSubscriptionPlan> {
+  const map = new Map<string, PublicSubscriptionPlan>()
+  for (const pkg of catalog) {
+    for (const plan of pkg.plans) {
+      map.set(plan.id, plan)
+    }
+  }
+  return map
+}
+
+export function enrichUserSubscription(
+  sub: UserSubscription,
+  planLookup?: Map<string, PublicSubscriptionPlan>,
+): UserSubscription {
+  const out: UserSubscription = { ...sub }
+  if (out.days_remaining === undefined) {
+    const days = computeDaysRemaining(out.expires_at)
+    if (days !== undefined) out.days_remaining = days
+  }
+  if (!out.plan && planLookup) {
+    const pub = planLookup.get(out.plan_id)
+    if (pub) {
+      out.plan = {
+        validity_days: pub.validity_days,
+        daily_token_limit: pub.daily_token_limit,
+        monthly_token_limit: pub.monthly_token_limit,
+        daily_request_limit: pub.daily_request_limit,
+        monthly_request_limit: pub.monthly_request_limit,
+        requests_per_minute: pub.requests_per_minute,
+        requests_per_day: pub.requests_per_day,
+        allowed_models: pub.allowed_models ?? [],
+        quota_exceeded_policy: pub.quota_exceeded_policy,
+      }
+    }
+  }
+  return out
 }
 
 export function usePublicSubscriptionCatalog() {
@@ -236,7 +327,8 @@ export function usePublicSubscriptionCatalog() {
     queryFn: async () => {
       const res = await fetch('/api/v1/public/subscription-packages')
       if (!res.ok) throw new Error('Failed to load subscription catalog')
-      return res.json() as Promise<{ data: PublicSubscriptionPackage[] }>
+      const raw = (await res.json()) as { data: PublicSubscriptionPackage[] }
+      return { data: raw.data.map(enrichPublicPackage) }
     },
     staleTime: 60_000,
   })

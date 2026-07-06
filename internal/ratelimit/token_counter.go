@@ -71,10 +71,14 @@ type TokenUsageSnapshot struct {
 // Snapshot returns the current daily/monthly token usage for keyID without
 // mutating counters.
 func (tc *TokenCounter) Snapshot(keyID string) TokenUsageSnapshot {
+	return tc.ScopedSnapshot("key:" + keyID)
+}
+
+// ScopedSnapshot returns daily/monthly token usage for an arbitrary scope.
+func (tc *TokenCounter) ScopedSnapshot(scope string) TokenUsageSnapshot {
 	now := time.Now().UTC()
 	dayWindow := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC).Unix()
 	monthWindow := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC).Unix()
-	scope := "key:" + keyID
 	return TokenUsageSnapshot{
 		DailyTokens:   tc.getCount(&tc.dailyCounters, scope, dayWindow),
 		MonthlyTokens: tc.getCount(&tc.monthlyCounters, scope, monthWindow),

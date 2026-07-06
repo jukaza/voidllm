@@ -52,18 +52,42 @@ type subscriptionPlanJSON struct {
 	UpdatedAt             string   `json:"updated_at"`
 }
 
+type subscriptionPlanQuotaJSON struct {
+	ValidityDays        int      `json:"validity_days"`
+	DailyTokenLimit     int64    `json:"daily_token_limit"`
+	MonthlyTokenLimit   int64    `json:"monthly_token_limit"`
+	DailyRequestLimit   int      `json:"daily_request_limit"`
+	MonthlyRequestLimit int      `json:"monthly_request_limit"`
+	RequestsPerMinute   int      `json:"requests_per_minute"`
+	RequestsPerDay      int      `json:"requests_per_day"`
+	AllowedModels       []string `json:"allowed_models"`
+	QuotaExceededPolicy string   `json:"quota_exceeded_policy"`
+}
+
+type subscriptionUsageJSON struct {
+	DailyTokens         int64 `json:"daily_tokens"`
+	MonthlyTokens       int64 `json:"monthly_tokens"`
+	RequestsPerMinute   int64 `json:"requests_per_minute"`
+	RequestsPerDay      int64 `json:"requests_per_day"`
+	MonthlyRequests     int64 `json:"monthly_requests"`
+}
+
 type userSubscriptionJSON struct {
-	ID         string `json:"id"`
-	UserID     string `json:"user_id"`
-	PlanID     string `json:"plan_id"`
-	PlanName   string `json:"plan_name,omitempty"`
-	PackageName string `json:"package_name,omitempty"`
-	Status     string `json:"status"`
-	StartsAt   string `json:"starts_at"`
-	ExpiresAt  string `json:"expires_at"`
-	OrderID    string `json:"order_id,omitempty"`
-	CreatedAt  string `json:"created_at"`
-	UpdatedAt  string `json:"updated_at"`
+	ID              string                     `json:"id"`
+	UserID          string                     `json:"user_id"`
+	PlanID          string                     `json:"plan_id"`
+	PlanName        string                     `json:"plan_name,omitempty"`
+	PackageID       string                     `json:"package_id,omitempty"`
+	PackageName     string                     `json:"package_name,omitempty"`
+	Status          string                     `json:"status"`
+	StartsAt        string                     `json:"starts_at"`
+	ExpiresAt       string                     `json:"expires_at"`
+	DaysRemaining   int                        `json:"days_remaining"`
+	OrderID         string                     `json:"order_id,omitempty"`
+	Plan            *subscriptionPlanQuotaJSON `json:"plan,omitempty"`
+	Usage           *subscriptionUsageJSON     `json:"usage,omitempty"`
+	CreatedAt       string                     `json:"created_at"`
+	UpdatedAt       string                     `json:"updated_at"`
 }
 
 type keySubscriptionBindingJSON struct {
@@ -506,7 +530,7 @@ func (h *Handler) GrantUserSubscription(c fiber.Ctx) error {
 	if err != nil {
 		return apierror.InternalError(c, "failed to grant subscription")
 	}
-	return c.Status(fiber.StatusCreated).JSON(userSubscriptionToJSON(us, plan.Name, ""))
+	return c.Status(fiber.StatusCreated).JSON(userSubscriptionToJSON(us, plan, ""))
 }
 
 // ListAdminUserSubscriptions handles GET /api/v1/admin/user-subscriptions.
@@ -522,25 +546,22 @@ func (h *Handler) ListAdminUserSubscriptions(c fiber.Ctx) error {
 	items := make([]userSubscriptionJSON, 0, len(subs))
 	for i := range subs {
 		plan, _ := h.DB.GetSubscriptionPlan(c.Context(), subs[i].PlanID)
-		planName := ""
 		pkgName := ""
 		if plan != nil {
-			planName = plan.Name
 			if pkg, err := h.DB.GetSubscriptionPackage(c.Context(), plan.PackageID); err == nil {
 				pkgName = pkg.Name
 			}
 		}
-		items = append(items, userSubscriptionToJSON(&subs[i], planName, pkgName))
+		items = append(items, userSubscriptionToJSON(&subs[i], plan, pkgName))
 	}
 	return c.JSON(fiber.Map{"data": items})
 }
 
-func userSubscriptionToJSON(us *db.UserSubscription, planName, packageName string) userSubscriptionJSON {
-	return userSubscriptionJSON{
+func userSubscriptionToJSON(us *db.UserSubscription, plan *db.SubscriptionPlan, packageName string) userSubscriptionJSON {
+	out := userSubscriptionJSON{
 		ID:          us.ID,
 		UserID:      us.UserID,
 		PlanID:      us.PlanID,
-		PlanName:    planName,
 		PackageName: packageName,
 		Status:      us.Status,
 		StartsAt:    us.StartsAt,
@@ -549,6 +570,46 @@ func userSubscriptionToJSON(us *db.UserSubscription, planName, packageName strin
 		CreatedAt:   us.CreatedAt,
 		UpdatedAt:   us.UpdatedAt,
 	}
+	if plan != nil {
+		out.PlanName = plan.Name
+		out.PackageID = plan.PackageID
+		out.Plan = &subscriptionPlanQuotaJSON{
+			ValidityDays:        plan.ValidityDays,
+			DailyTokenLimit:     plan.DailyTokenLimit,
+			MonthlyTokenLimit:   plan.MonthlyTokenLimit,
+			DailyRequestLimit:   plan.DailyRequestLimit,
+			MonthlyRequestLimit: plan.MonthlyRequestLimit,
+			RequestsPerMinute:   plan.RequestsPerMinute,
+			RequestsPerDay:      plan.RequestsPerDay,
+			AllowedModels:       keys.ParseModelLimits(plan.AllowedModels),
+			QuotaExceededPolicy: plan.QuotaExceededPolicy,
+		}
+	}
+	if t, err := time.Parse(time.RFC3339, us.ExpiresAt); err == nil {
+		rem := int(time.Until(t).Hours() / 24)
+		if rem < 0 {
+			rem = 0
+		}
+		out.DaysRemaining = rem
+	}
+	return out
+}
+
+func (h *Handler) subscriptionUsageSnapshot(userSubscriptionID string) *subscriptionUsageJSON {
+	scope := subsvc.SubscriptionScope(userSubscriptionID)
+	usage := &subscriptionUsageJSON{}
+	if rl, ok := h.rateLimiter(); ok {
+		snap := rl.ScopedSnapshot(scope)
+		usage.RequestsPerMinute = snap.RequestsPerMinute
+		usage.RequestsPerDay = snap.RequestsPerDay
+		usage.MonthlyRequests = rl.ScopedMonthlyRequests(scope)
+	}
+	if h.TokenCounter != nil {
+		snap := h.TokenCounter.ScopedSnapshot(scope)
+		usage.DailyTokens = snap.DailyTokens
+		usage.MonthlyTokens = snap.MonthlyTokens
+	}
+	return usage
 }
 
 // MySubscriptions handles GET /api/v1/my-subscriptions.
@@ -564,15 +625,15 @@ func (h *Handler) MySubscriptions(c fiber.Ctx) error {
 	items := make([]userSubscriptionJSON, 0, len(subs))
 	for i := range subs {
 		plan, _ := h.DB.GetSubscriptionPlan(c.Context(), subs[i].PlanID)
-		planName := ""
 		pkgName := ""
 		if plan != nil {
-			planName = plan.Name
 			if pkg, err := h.DB.GetSubscriptionPackage(c.Context(), plan.PackageID); err == nil {
 				pkgName = pkg.Name
 			}
 		}
-		items = append(items, userSubscriptionToJSON(&subs[i], planName, pkgName))
+		item := userSubscriptionToJSON(&subs[i], plan, pkgName)
+		item.Usage = h.subscriptionUsageSnapshot(subs[i].ID)
+		items = append(items, item)
 	}
 	return c.JSON(fiber.Map{"data": items})
 }
