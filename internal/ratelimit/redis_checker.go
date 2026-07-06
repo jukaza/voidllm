@@ -56,3 +56,32 @@ func (r *RedisChecker) CheckRate(keyID string, keyLimits Limits) error {
 	}
 	return nil
 }
+
+// CheckScopedRate verifies RPM/RPD limits for an arbitrary scope identifier.
+func (r *RedisChecker) CheckScopedRate(scope string, limits Limits) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	checks := []rateCheck{
+		{"scoped", scope, limits.RequestsPerMinute, time.Minute},
+		{"scoped", scope, limits.RequestsPerDay, 24 * time.Hour},
+	}
+
+	for _, c := range checks {
+		if c.limit <= 0 {
+			continue
+		}
+		allowed, err := r.client.CheckRate(ctx, c.scope, c.id, c.limit, c.window)
+		if err != nil {
+			r.log.Warn("redis scoped rate check failed, allowing request",
+				slog.String("scope", c.scope),
+				slog.String("error", err.Error()),
+			)
+			continue
+		}
+		if !allowed {
+			return ErrRateLimitExceeded
+		}
+	}
+	return nil
+}

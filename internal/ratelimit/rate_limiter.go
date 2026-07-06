@@ -20,8 +20,9 @@ var _ Checker = (*RateLimiter)(nil)
 
 // RateLimiter enforces per-key RPM/RPD limits using in-memory atomic counters.
 type RateLimiter struct {
-	minuteCounters sync.Map
-	dayCounters    sync.Map
+	minuteCounters        sync.Map
+	dayCounters           sync.Map
+	monthlyRequestCounters sync.Map
 }
 
 // NewRateLimiter constructs a RateLimiter ready for use.
@@ -31,23 +32,40 @@ func NewRateLimiter() *RateLimiter {
 
 // CheckRate verifies rate limits for the API key scope.
 func (r *RateLimiter) CheckRate(keyID string, keyLimits Limits) error {
+	return r.CheckScopedRate("key:"+keyID, keyLimits)
+}
+
+// CheckScopedRate verifies RPM/RPD limits for an arbitrary scope.
+func (r *RateLimiter) CheckScopedRate(scope string, limits Limits) error {
 	now := time.Now().UTC()
 	minuteWindow := now.Truncate(time.Minute).Unix()
 	dayWindow := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC).Unix()
 
-	scope := "key:" + keyID
-
-	if keyLimits.RequestsPerMinute > 0 {
+	if limits.RequestsPerMinute > 0 {
 		entry := r.loadOrCreate(&r.minuteCounters, scope)
-		if !r.tryIncrement(entry, minuteWindow, int64(keyLimits.RequestsPerMinute)) {
+		if !r.tryIncrement(entry, minuteWindow, int64(limits.RequestsPerMinute)) {
 			return ErrRateLimitExceeded
 		}
 	}
-	if keyLimits.RequestsPerDay > 0 {
+	if limits.RequestsPerDay > 0 {
 		entry := r.loadOrCreate(&r.dayCounters, scope)
-		if !r.tryIncrement(entry, dayWindow, int64(keyLimits.RequestsPerDay)) {
+		if !r.tryIncrement(entry, dayWindow, int64(limits.RequestsPerDay)) {
 			return ErrRateLimitExceeded
 		}
+	}
+	return nil
+}
+
+// CheckScopedMonthlyRequests enforces a monthly request budget for scope.
+func (r *RateLimiter) CheckScopedMonthlyRequests(scope string, monthlyLimit int) error {
+	if monthlyLimit <= 0 {
+		return nil
+	}
+	now := time.Now().UTC()
+	monthWindow := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC).Unix()
+	entry := r.loadOrCreate(&r.monthlyRequestCounters, scope)
+	if !r.tryIncrement(entry, monthWindow, int64(monthlyLimit)) {
+		return ErrRateLimitExceeded
 	}
 	return nil
 }
@@ -76,6 +94,13 @@ func (r *RateLimiter) EvictStale() {
 	r.dayCounters.Range(func(key, value any) bool {
 		if value.(*counterEntry).windowStart.Load() < dayWindow {
 			r.dayCounters.Delete(key)
+		}
+		return true
+	})
+	monthWindow := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC).Unix()
+	r.monthlyRequestCounters.Range(func(key, value any) bool {
+		if value.(*counterEntry).windowStart.Load() < monthWindow {
+			r.monthlyRequestCounters.Delete(key)
 		}
 		return true
 	})

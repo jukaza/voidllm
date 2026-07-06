@@ -45,11 +45,17 @@ func setupTestApp(t *testing.T, dsn string) (*fiber.App, *db.DB, *cache.Cache[st
 
 	keyCache := cache.New[string, auth.KeyInfo]()
 
+	encKey := make([]byte, 32)
+	for i := range encKey {
+		encKey[i] = byte(i + 1)
+	}
+
 	handler := &admin.Handler{
-		DB:         database,
-		HMACSecret: testHMACSecret,
-		KeyCache:   keyCache,
-		Log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
+		DB:            database,
+		HMACSecret:    testHMACSecret,
+		EncryptionKey: encKey,
+		KeyCache:      keyCache,
+		Log:           slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 
 	app := fiber.New()

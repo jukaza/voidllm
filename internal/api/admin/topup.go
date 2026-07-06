@@ -218,6 +218,8 @@ func (h *Handler) GetTopupStatus(c fiber.Ctx) error {
 		"pay_amount":    tr.PayAmount,
 		"credit_amount": tr.CreditAmount,
 		"bonus_amount":  tr.BonusAmount,
+		"order_kind":    tr.OrderKind,
+		"plan_id":       tr.PlanID,
 	})
 }
 
@@ -323,6 +325,29 @@ func (h *Handler) SepayWebhook(c fiber.Ctx) error {
 			slog.Float64("paid", payload.TransferAmount),
 		)
 		return c.JSON(fiber.Map{"success": false, "message": "amount mismatch"})
+	}
+
+	if tr.OrderKind == "subscription" {
+		lockUserTopup(tr.UserID)
+		defer unlockUserTopup(tr.UserID)
+
+		us, err := h.DB.CompleteSepaySubscription(c.Context(), tradeNo, sepayTxID, payload.TransferAmount)
+		if err != nil {
+			if isNotFound(err) {
+				return c.JSON(fiber.Map{"success": false, "message": "order already processed"})
+			}
+			if errors.Is(err, db.ErrAmountMismatch) {
+				return c.JSON(fiber.Map{"success": false, "message": "amount mismatch"})
+			}
+			h.Log.ErrorContext(c.Context(), "sepay complete subscription", slog.String("error", err.Error()))
+			return c.JSON(fiber.Map{"success": false, "message": "failed to activate subscription"})
+		}
+		h.Log.InfoContext(c.Context(), "sepay subscription completed",
+			slog.String("trade_no", tradeNo),
+			slog.String("user_id", tr.UserID),
+			slog.String("user_subscription_id", us.ID),
+		)
+		return c.JSON(fiber.Map{"success": true})
 	}
 
 	lockUserTopup(tr.UserID)

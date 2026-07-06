@@ -48,6 +48,23 @@ type KeyInfo struct {
 	ModelLimitsEnabled bool
 	// ModelLimits is a JSON array of allowed model names.
 	ModelLimits string
+	// Subscription holds the active subscription binding for this key, if any.
+	Subscription *SubscriptionBinding
+}
+
+// SubscriptionBinding is the resolved subscription context attached to a key.
+type SubscriptionBinding struct {
+	UserSubscriptionID  string
+	PlanID              string
+	AllowedModels       string
+	DailyTokenLimit     int64
+	MonthlyTokenLimit   int64
+	DailyRequestLimit   int
+	MonthlyRequestLimit int
+	RequestsPerMinute   int
+	RequestsPerDay      int
+	QuotaExceededPolicy string
+	ExpiresAt           time.Time
 }
 
 // Middleware returns a Fiber handler that authenticates requests via Bearer token.
@@ -92,8 +109,11 @@ func Middleware(keyCache *cache.Cache[string, KeyInfo], hmacSecret []byte, datab
 		}
 		if keyInfo.KeyType != keygen.KeyTypeSession {
 			switch keyInfo.Status {
-			case "disabled", "expired", "quota_exhausted":
+			case "disabled", "expired":
 				return apierror.Send(c, fiber.StatusForbidden, "key_disabled", "api key is disabled")
+			case "quota_exhausted":
+				// Spend cap may be exhausted while subscription-covered models remain usable.
+				// Per-request enforcement happens in proxy checkLimits.
 			case "", "active":
 			default:
 				return apierror.Send(c, fiber.StatusForbidden, "key_disabled", "api key is disabled")

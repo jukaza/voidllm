@@ -27,6 +27,11 @@ func LoadKeysIntoCache(ctx context.Context, database *db.DB, keyCache *cache.Cac
 		)
 	}
 
+	subByKey, err := database.LoadAllActiveKeySubscriptionContexts(ctx)
+	if err != nil {
+		return fmt.Errorf("load key subscription contexts: %w", err)
+	}
+
 	entries := make(map[string]KeyInfo, len(records))
 
 	for _, r := range records {
@@ -61,6 +66,22 @@ func LoadKeysIntoCache(ctx context.Context, database *db.DB, keyCache *cache.Cac
 			ki.Role = RoleSystemAdmin
 		} else {
 			ki.Role = RoleMember
+		}
+
+		if subCtx, ok := subByKey[r.ID]; ok {
+			ki.Subscription = &SubscriptionBinding{
+				UserSubscriptionID:  subCtx.UserSubscriptionID,
+				PlanID:              subCtx.PlanID,
+				AllowedModels:       subCtx.AllowedModels,
+				DailyTokenLimit:     subCtx.DailyTokenLimit,
+				MonthlyTokenLimit:   subCtx.MonthlyTokenLimit,
+				DailyRequestLimit:   subCtx.DailyRequestLimit,
+				MonthlyRequestLimit: subCtx.MonthlyRequestLimit,
+				RequestsPerMinute:   subCtx.RequestsPerMinute,
+				RequestsPerDay:      subCtx.RequestsPerDay,
+				QuotaExceededPolicy: subCtx.QuotaExceededPolicy,
+				ExpiresAt:           subCtx.ExpiresAt,
+			}
 		}
 
 		entries[r.KeyHash] = ki

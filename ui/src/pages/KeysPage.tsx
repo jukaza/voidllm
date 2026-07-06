@@ -12,9 +12,11 @@ import { Textarea } from '../components/ui/Textarea'
 import { Toggle } from '../components/ui/Toggle'
 import { ExpiryField, defaultExpiryDateInput, dateInputToISO } from '../components/keys/ExpiryField'
 import { ModelLimitPicker, type ModelLimitOption } from '../components/keys/ModelLimitPicker'
+import { KeySubscriptionField } from '../components/keys/KeySubscriptionField'
 import { Banner } from '../components/ui/Banner'
 import { KeyHint } from '../components/ui/KeyHint'
-import { forgetApiKey, getRememberedApiKey, rememberApiKey } from '../lib/apiKeySecrets'
+import { forgetApiKey, rememberApiKey } from '../lib/apiKeySecrets'
+import { KeyCopyButton } from '../components/keys/KeyCopyButton'
 import { TimeAgo } from '../components/ui/TimeAgo'
 import { CopyButton } from '../components/ui/CopyButton'
 import { StatCard } from '../components/ui/StatCard'
@@ -769,6 +771,12 @@ function EditKeyDialog({ apiKey, onClose }: EditKeyDialogProps) {
           modelOptions={modelOptions}
           disabled={updateKey.isPending}
         />
+        <KeySubscriptionField
+          keyId={apiKey.id}
+          modelLimitsEnabled={modelLimitsEnabled}
+          modelLimits={modelLimits}
+          disabled={updateKey.isPending}
+        />
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="secondary" onClick={onClose} disabled={updateKey.isPending}>
             {t('common.cancel')}
@@ -861,14 +869,7 @@ export default function KeysPage() {
     {
       key: 'key_hint',
       header: t('keys.table.key'),
-      render: (row) => (
-        <KeyHint
-          hint={row.key_hint}
-          copyValue={getRememberedApiKey(row.id) ?? row.key_hint}
-          copyLabel={t('keys.copy')}
-          copiedLabel={t('common.copied')}
-        />
-      ),
+      render: (row) => <KeyCopyButton keyId={row.id} hint={row.key_hint} />,
     },
     {
       key: 'status',

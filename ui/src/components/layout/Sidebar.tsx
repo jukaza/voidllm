@@ -150,6 +150,14 @@ function IconPersonPlus() {
   )
 }
 
+function IconSubscription() {
+  return (
+    <svg {...iconProps}>
+      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+    </svg>
+  )
+}
+
 function IconSettings() {
   return (
     <svg {...iconProps}>
@@ -187,6 +195,7 @@ function buildNavigation(t: any): NavGroup[] {
         { label: t('sidebar.integrations'), path: '/integrations', icon: <IconIntegrations /> },
         { label: t('sidebar.playground'), path: '/playground', icon: <IconTerminal /> },
         { label: t('sidebar.wallet'), path: '/wallet', icon: <IconWallet /> },
+        { label: t('sidebar.plans'), path: '/plans', icon: <IconSubscription /> },
       ],
     },
     {
@@ -206,6 +215,7 @@ function buildNavigation(t: any): NavGroup[] {
         { label: t('sidebar.providers'), path: '/providers', icon: <IconBuilding /> },
         { label: t('sidebar.models'), path: '/models', icon: <IconCube /> },
         { label: t('sidebar.finance'), path: '/finance', icon: <IconWallet /> },
+        { label: t('sidebar.subscriptions'), path: '/subscriptions', icon: <IconSubscription /> },
         { label: t('sidebar.settings'), path: '/settings', icon: <IconSettings /> },
       ],
     },

@@ -10,7 +10,6 @@ import { Badge } from '../../components/ui/Badge'
 import { ModelLimitPicker } from '../../components/keys/ModelLimitPicker'
 import { useAPIKeys } from '../../hooks/useAPIKeys'
 import { useSiteConfig } from '../../hooks/useSiteConfig'
-import { getRememberedApiKey } from '../../lib/apiKeySecrets'
 import { useTranslation } from '../../lib/i18n'
 import {
   INTEGRATION_TOOLS,
@@ -427,11 +426,28 @@ export function IntegrationsTab() {
   useEffect(() => {
     if (activeKeys.length === 0) return
     if (!selectedKeyId) {
-      const first = activeKeys[0]
-      setSelectedKeyId(first.id)
-      setApiKey(getRememberedApiKey(first.id) ?? '')
+      setSelectedKeyId(activeKeys[0].id)
     }
   }, [activeKeys, selectedKeyId])
+
+  useEffect(() => {
+    if (!selectedKeyId) {
+      setApiKey('')
+      return
+    }
+    let cancelled = false
+    setApiKey('')
+    apiClient<{ key: string }>(`/keys/${selectedKeyId}/reveal`)
+      .then((res) => {
+        if (!cancelled) setApiKey(res.key)
+      })
+      .catch(() => {
+        if (!cancelled) setApiKey('')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [selectedKeyId])
 
   useEffect(() => {
     if (models.length === 0) return
@@ -446,13 +462,10 @@ export function IntegrationsTab() {
     }
   }, [models, defaultModel])
 
-  const onKeyChange = useCallback(
-    (id: string) => {
-      setSelectedKeyId(id)
-      setApiKey(getRememberedApiKey(id) ?? '')
-    },
-    [],
-  )
+  const onKeyChange = useCallback((id: string) => {
+    setSelectedKeyId(id)
+    setShowKey(false)
+  }, [])
 
   const baseUrlNoV1 = baseUrl.endsWith('/v1') ? baseUrl.slice(0, -3) : baseUrl
   const baseUrlV1 = baseUrl.endsWith('/v1') ? baseUrl : `${baseUrl}/v1`

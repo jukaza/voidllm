@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/google/uuid"
 	"github.com/jukaza/tavo/internal/apierror"
 	"github.com/jukaza/tavo/internal/auth"
 	"github.com/jukaza/tavo/internal/db"
@@ -200,7 +201,18 @@ func (h *Handler) createAPIKeyFromRequest(ctx context.Context, keyInfo *auth.Key
 	keyHash := keygen.Hash(plaintextKey, h.HMACSecret)
 	keyHint := keygen.Hint(plaintextKey)
 
+	keyID, err := uuid.NewV7()
+	if err != nil {
+		return createAPIKeyResponse{}, fmt.Errorf("generate key id: %w", err)
+	}
+	keyEnc, err := h.encryptStoredAPIKey(keyID.String(), plaintextKey)
+	if err != nil {
+		return createAPIKeyResponse{}, err
+	}
+
 	apiKey, err := h.DB.CreateAPIKey(ctx, db.CreateAPIKeyParams{
+		ID:                 keyID.String(),
+		KeyEncrypted:       keyEnc,
 		KeyHash:            keyHash,
 		KeyHint:            keyHint,
 		KeyType:            req.KeyType,
@@ -457,6 +469,18 @@ func (h *Handler) RotateAPIKey(c fiber.Ctx) error {
 
 	keyHash := keygen.Hash(plaintextKey, h.HMACSecret)
 	keyHint := keygen.Hint(plaintextKey)
+
+	newKeyID, err := uuid.NewV7()
+	if err != nil {
+		h.Log.ErrorContext(ctx, "rotate api key: generate id", slog.String("error", err.Error()))
+		return apierror.InternalError(c, "failed to rotate key")
+	}
+	keyEnc, err := h.encryptStoredAPIKey(newKeyID.String(), plaintextKey)
+	if err != nil {
+		h.Log.ErrorContext(ctx, "rotate api key: encrypt", slog.String("error", err.Error()))
+		return apierror.InternalError(c, "failed to rotate key")
+	}
+
 	rotatedName := strings.TrimSuffix(existing.Name, " (rotated)") + " (rotated)"
 
 	graceDeadline := time.Now().UTC().Add(rotateKeyGracePeriod)
@@ -473,6 +497,8 @@ func (h *Handler) RotateAPIKey(c fiber.Ctx) error {
 	}
 
 	rotated, err := h.DB.RotateKeyTx(ctx, existing.ID, oldExpiresAt, db.CreateAPIKeyParams{
+		ID:                 newKeyID.String(),
+		KeyEncrypted:       keyEnc,
 		KeyHash:            keyHash,
 		KeyHint:            keyHint,
 		KeyType:            existing.KeyType,

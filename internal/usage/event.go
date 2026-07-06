@@ -26,4 +26,7 @@ type Event struct {
 	LogType            string // consume | error
 	IsStream           bool
 	Meta               json.RawMessage
+	// BillingSource is "wallet" or "subscription".
+	BillingSource      string
+	SubscriptionID     string
 }

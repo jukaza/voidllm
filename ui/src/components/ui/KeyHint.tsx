@@ -6,6 +6,8 @@ export interface KeyHintProps extends React.HTMLAttributes<HTMLDivElement> {
   hint: string
   /** When set, shows a copy button that copies this value (full key or hint). */
   copyValue?: string
+  /** Async copy handler; takes precedence over copyValue when set. */
+  onCopy?: () => void | Promise<void>
   copyLabel?: string
   copiedLabel?: string
 }
@@ -13,6 +15,7 @@ export interface KeyHintProps extends React.HTMLAttributes<HTMLDivElement> {
 export function KeyHint({
   hint,
   copyValue,
+  onCopy,
   copyLabel = 'Copy',
   copiedLabel = 'Copied!',
   className,
@@ -29,9 +32,13 @@ export function KeyHint({
   const ellipsisIdx = hint.indexOf('...')
   const prefix = ellipsisIdx >= 0 ? hint.slice(0, ellipsisIdx + 3) : ''
   const suffix = ellipsisIdx >= 0 ? hint.slice(ellipsisIdx + 3) : hint
-  const canCopy = Boolean(copyValue)
+  const canCopy = Boolean(onCopy || copyValue)
 
   function handleCopy() {
+    if (onCopy) {
+      Promise.resolve(onCopy()).then(() => setCopied(true)).catch(() => undefined)
+      return
+    }
     if (!copyValue) return
     navigator.clipboard.writeText(copyValue).then(() => setCopied(true)).catch(() => undefined)
   }

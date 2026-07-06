@@ -35,6 +35,7 @@ import (
 	"github.com/jukaza/tavo/internal/circuitbreaker"
 	"github.com/jukaza/tavo/internal/config"
 	"github.com/jukaza/tavo/internal/db"
+	subsvc "github.com/jukaza/tavo/internal/subscription"
 	"github.com/jukaza/tavo/internal/usage"
 )
 
@@ -622,7 +623,7 @@ func TestPII_Stage0c_StreamIncomplete_StatusBadGateway(t *testing.T) {
 	if streamIncomplete {
 		eventStatusCode = http.StatusBadGateway
 	}
-	h.logUsageEvent(keyInfo, model, ui, 100, nil, eventStatusCode, "req-stage0c-1", model.Name, Deployment{}, false)
+	h.logUsageEvent(keyInfo, model, ui, 100, nil, eventStatusCode, "req-stage0c-1", model.Name, Deployment{}, false, subsvc.BillingWallet, "")
 
 	if h.UsageLogger.BufferLen() == 0 {
 		t.Fatal("no event in usage logger buffer after logUsageEvent for aborted stream")
@@ -635,7 +636,7 @@ func TestPII_Stage0c_StreamIncomplete_StatusBadGateway(t *testing.T) {
 	if streamIncomplete {
 		eventStatusCode = http.StatusBadGateway
 	}
-	h.logUsageEvent(keyInfo, model, ui, 100, nil, eventStatusCode, "req-stage0c-2", model.Name, Deployment{}, false)
+	h.logUsageEvent(keyInfo, model, ui, 100, nil, eventStatusCode, "req-stage0c-2", model.Name, Deployment{}, false, subsvc.BillingWallet, "")
 	after := h.UsageLogger.BufferLen()
 	if after != before+1 {
 		t.Errorf("buffer did not grow by 1 for complete stream: before=%d after=%d", before, after)

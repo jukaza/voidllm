@@ -85,21 +85,38 @@ func (tc *TokenCounter) Snapshot(keyID string) TokenUsageSnapshot {
 // is checked against its own limit independently. Returns ErrTokenBudgetExceeded
 // if any scope is over budget.
 func (tc *TokenCounter) CheckTokens(keyID string, keyLimits Limits) error {
+	return tc.CheckScopedTokens("key:"+keyID, keyLimits)
+}
+
+// CheckScopedTokens verifies token budgets for an arbitrary counter scope.
+func (tc *TokenCounter) CheckScopedTokens(scope string, limits Limits) error {
 	now := time.Now().UTC()
 	dayWindow := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC).Unix()
 	monthWindow := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC).Unix()
 
-	if keyLimits.DailyTokenLimit > 0 {
-		if tc.getCount(&tc.dailyCounters, "key:"+keyID, dayWindow) >= keyLimits.DailyTokenLimit {
+	if limits.DailyTokenLimit > 0 {
+		if tc.getCount(&tc.dailyCounters, scope, dayWindow) >= limits.DailyTokenLimit {
 			return ErrTokenBudgetExceeded
 		}
 	}
-	if keyLimits.MonthlyTokenLimit > 0 {
-		if tc.getCount(&tc.monthlyCounters, "key:"+keyID, monthWindow) >= keyLimits.MonthlyTokenLimit {
+	if limits.MonthlyTokenLimit > 0 {
+		if tc.getCount(&tc.monthlyCounters, scope, monthWindow) >= limits.MonthlyTokenLimit {
 			return ErrTokenBudgetExceeded
 		}
 	}
 	return nil
+}
+
+// AddScoped increments token counters for an arbitrary scope.
+func (tc *TokenCounter) AddScoped(scope string, tokens int64) {
+	if tokens <= 0 {
+		return
+	}
+	now := time.Now().UTC()
+	dayWindow := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC).Unix()
+	monthWindow := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC).Unix()
+	tc.addToScope(&tc.dailyCounters, scope, dayWindow, tokens)
+	tc.addToScope(&tc.monthlyCounters, scope, monthWindow, tokens)
 }
 
 // Seed loads token usage totals from the database into the in-memory counters.

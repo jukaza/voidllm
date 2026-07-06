@@ -30,6 +30,7 @@ import (
 	"github.com/jukaza/tavo/internal/metrics"
 	"github.com/jukaza/tavo/internal/pii"
 	"github.com/jukaza/tavo/internal/ratelimit"
+	subsvc "github.com/jukaza/tavo/internal/subscription"
 	"github.com/jukaza/tavo/internal/shutdown"
 	"github.com/jukaza/tavo/internal/tokens"
 	"github.com/jukaza/tavo/internal/upstream"
@@ -825,14 +826,6 @@ func (p *ProxyHandler) checkLimits(c fiber.Ctx, keyInfo *auth.KeyInfo, model str
 	}
 
 	if keyInfo.KeyType != keygen.KeyTypeSession {
-		if keyInfo.SpendCap > 0 && keyInfo.SpendUsed >= keyInfo.SpendCap {
-			if err := apierror.Send(c, fiber.StatusPaymentRequired, "spend_cap_exceeded",
-				"api key spend cap exceeded"); err != nil {
-				return err
-			}
-			return errResponseSent
-		}
-
 		trustForwarded := false
 		if p.KeysRuntime != nil {
 			trustForwarded = p.KeysRuntime.Get().TrustForwardedIP
@@ -862,12 +855,80 @@ func (p *ProxyHandler) checkLimits(c fiber.Ctx, keyInfo *auth.KeyInfo, model str
 		}
 	}
 
-	keyLimits := ratelimit.Limits{
-		RequestsPerMinute: keyInfo.RequestsPerMinute,
-		RequestsPerDay:    keyInfo.RequestsPerDay,
-		DailyTokenLimit:   keyInfo.DailyTokenLimit,
-		MonthlyTokenLimit: keyInfo.MonthlyTokenLimit,
+	billingPath, sub := subsvc.ResolveBillingPath(keyInfo, model)
+	if billingPath == subsvc.BillingSubscription {
+		if err := p.checkSubscriptionLimits(c, keyInfo, sub); err != nil {
+			if sub != nil && sub.QuotaExceededPolicy == "fallback_wallet" {
+				if err := p.checkWalletLimits(c, keyInfo); err != nil {
+					return err
+				}
+				c.Locals(billingPathKey, string(subsvc.BillingWallet))
+				return nil
+			}
+			return err
+		}
+		c.Locals(billingPathKey, string(subsvc.BillingSubscription))
+		if sub != nil {
+			c.Locals(subscriptionIDKey, sub.UserSubscriptionID)
+		}
+		return nil
 	}
+
+	if err := p.checkWalletLimits(c, keyInfo); err != nil {
+		return err
+	}
+	c.Locals(billingPathKey, string(subsvc.BillingWallet))
+	return nil
+}
+
+func (p *ProxyHandler) checkSubscriptionLimits(c fiber.Ctx, keyInfo *auth.KeyInfo, sub *auth.SubscriptionBinding) error {
+	if sub == nil {
+		return nil
+	}
+	subScope := subsvc.SubscriptionScope(sub.UserSubscriptionID)
+
+	rateLimits := subsvc.EffectiveRateLimits(keyInfo, sub, subsvc.BillingSubscription)
+	// Merge plan daily request quota into RPD check (stricter wins).
+	if sub.DailyRequestLimit > 0 {
+		if rateLimits.RequestsPerDay == 0 || sub.DailyRequestLimit < rateLimits.RequestsPerDay {
+			rateLimits.RequestsPerDay = sub.DailyRequestLimit
+		}
+	}
+
+	if p.RateLimiter != nil {
+		if err := p.RateLimiter.CheckScopedRate(subScope, rateLimits); err != nil {
+			return p.sendRateLimitError(c, keyInfo.ID, "subscription rate limit exceeded")
+		}
+	}
+	if rl, ok := p.RateLimiter.(*ratelimit.RateLimiter); ok && rl != nil {
+		if err := rl.CheckScopedMonthlyRequests(subScope, sub.MonthlyRequestLimit); err != nil {
+			return p.sendRateLimitError(c, keyInfo.ID, "subscription monthly request limit exceeded")
+		}
+	}
+
+	if p.TokenCounter != nil {
+		if err := p.TokenCounter.CheckScopedTokens(subScope, subsvc.SubscriptionTokenLimits(sub)); err != nil {
+			metrics.RateLimitRejectionsTotal.WithLabelValues("token").Inc()
+			if err := apierror.Send(c, fiber.StatusTooManyRequests, "subscription_quota_exceeded", "subscription token quota exceeded"); err != nil {
+				return err
+			}
+			return errResponseSent
+		}
+	}
+	return nil
+}
+
+func (p *ProxyHandler) checkWalletLimits(c fiber.Ctx, keyInfo *auth.KeyInfo) error {
+	if keyInfo.KeyType != keygen.KeyTypeSession {
+		if keyInfo.SpendCap > 0 && keyInfo.SpendUsed >= keyInfo.SpendCap {
+			if err := apierror.Send(c, fiber.StatusPaymentRequired, "spend_cap_exceeded",
+				"api key spend cap exceeded"); err != nil {
+				return err
+			}
+			return errResponseSent
+		}
+	}
+
 	if p.Wallet != nil && keyInfo.UserID != "" {
 		if err := p.Wallet.Check(keyInfo.UserID); err != nil {
 			p.Log.LogAttrs(c.Context(), slog.LevelWarn, "insufficient wallet balance",
@@ -882,33 +943,40 @@ func (p *ProxyHandler) checkLimits(c fiber.Ctx, keyInfo *auth.KeyInfo, model str
 		}
 	}
 
+	keyLimits := ratelimit.Limits{
+		RequestsPerMinute: keyInfo.RequestsPerMinute,
+		RequestsPerDay:    keyInfo.RequestsPerDay,
+		DailyTokenLimit:   keyInfo.DailyTokenLimit,
+		MonthlyTokenLimit: keyInfo.MonthlyTokenLimit,
+	}
+
 	if p.RateLimiter != nil {
 		if err := p.RateLimiter.CheckRate(keyInfo.ID, keyLimits); err != nil {
-			metrics.RateLimitRejectionsTotal.WithLabelValues("request").Inc()
-			p.Log.LogAttrs(c.Context(), slog.LevelWarn, "rate limit exceeded",
-				slog.String("key_id", keyInfo.ID),
-			)
-			if err := apierror.Send(c, fiber.StatusTooManyRequests, "rate_limit_exceeded", "rate limit exceeded"); err != nil {
-				return err
-			}
-			return errResponseSent
+			return p.sendRateLimitError(c, keyInfo.ID, "rate limit exceeded")
 		}
 	}
 
 	if p.TokenCounter != nil {
 		if err := p.TokenCounter.CheckTokens(keyInfo.ID, keyLimits); err != nil {
 			metrics.RateLimitRejectionsTotal.WithLabelValues("token").Inc()
-			p.Log.LogAttrs(c.Context(), slog.LevelWarn, "token budget exceeded",
-				slog.String("key_id", keyInfo.ID),
-			)
 			if err := apierror.Send(c, fiber.StatusTooManyRequests, "token_limit_exceeded", "token budget exceeded"); err != nil {
 				return err
 			}
 			return errResponseSent
 		}
 	}
-
 	return nil
+}
+
+func (p *ProxyHandler) sendRateLimitError(c fiber.Ctx, keyID, msg string) error {
+	metrics.RateLimitRejectionsTotal.WithLabelValues("request").Inc()
+	p.Log.LogAttrs(c.Context(), slog.LevelWarn, "rate limit exceeded",
+		slog.String("key_id", keyID),
+	)
+	if err := apierror.Send(c, fiber.StatusTooManyRequests, "rate_limit_exceeded", msg); err != nil {
+		return err
+	}
+	return errResponseSent
 }
 
 func (p *ProxyHandler) checkProductModelRPM(c fiber.Ctx, model Model) error {
@@ -1155,6 +1223,8 @@ func (p *ProxyHandler) handleStreamingResponse(c fiber.Ctx, resp *http.Response,
 	// context is recycled by fasthttp after the handler exits and must not be
 	// accessed inside the SendStreamWriter closure.
 	respStatusCode := resp.StatusCode
+	streamBillingPath := billingPathFromCtx(c)
+	streamSubscriptionID := subscriptionIDFromCtx(c)
 
 	// upstreamCancel, resp.Body.Close, and the drain tracking call are all
 	// handled inside the closure. SendStreamWriter's goroutine outlives
@@ -1598,7 +1668,7 @@ func (p *ProxyHandler) handleStreamingResponse(c fiber.Ctx, resp *http.Response,
 			if streamIncomplete {
 				eventStatusCode = http.StatusBadGateway
 			}
-			p.logUsageEvent(keyInfo, model, streamUI, durationMS, ttftMS, eventStatusCode, requestID, requestedModelName, usedDep, true)
+			p.logUsageEvent(keyInfo, model, streamUI, durationMS, ttftMS, eventStatusCode, requestID, requestedModelName, usedDep, true, streamBillingPath, streamSubscriptionID)
 		}
 
 		metrics.ProxyDurationSeconds.WithLabelValues(model.Name, "true").Observe(time.Since(startTime).Seconds())
@@ -1710,7 +1780,7 @@ func (p *ProxyHandler) handleBufferedResponse(c fiber.Ctx, resp *http.Response, 
 		// For non-streaming responses TTFT equals total duration: the entire
 		// response body is the first (and only) "token delivery".
 		ttftMS := durationMS
-		p.logUsageEvent(keyInfo, model, ui, durationMS, &ttftMS, resp.StatusCode, requestID, requestedModelName, usedDep, false)
+		p.logUsageEvent(keyInfo, model, ui, durationMS, &ttftMS, resp.StatusCode, requestID, requestedModelName, usedDep, false, billingPathFromCtx(c), subscriptionIDFromCtx(c))
 	}
 
 	metrics.ProxyDurationSeconds.WithLabelValues(model.Name, "false").Observe(time.Since(startTime).Seconds())
@@ -1792,13 +1862,17 @@ func computeRevenue(model Model, ui UsageInfo) (revenue *float64, sellBD *usage.
 // is recycled by fasthttp after the handler exits.
 // requestedModelName is the canonical name the client originally asked for; equal
 // to model.Name when no fallback occurred.
-func (p *ProxyHandler) logUsageEvent(keyInfo *auth.KeyInfo, model Model, ui UsageInfo, durationMS int, ttftMS *int, statusCode int, requestID string, requestedModelName string, usedDep Deployment, isStream bool) {
+func (p *ProxyHandler) logUsageEvent(keyInfo *auth.KeyInfo, model Model, ui UsageInfo, durationMS int, ttftMS *int, statusCode int, requestID string, requestedModelName string, usedDep Deployment, isStream bool, billingPath subsvc.BillingPath, subscriptionID string) {
 	if keyInfo == nil {
 		return
 	}
 
 	deploymentID := deploymentLogID(usedDep)
 	revenue, sellBD, billPerToken, billPerRequest, hasRevenue := computeRevenue(model, ui)
+	if billingPath == subsvc.BillingSubscription {
+		revenue = nil
+		hasRevenue = false
+	}
 
 	var tps *float64
 	if durationMS > 0 && ui.CompletionTokens > 0 {
@@ -1826,6 +1900,11 @@ func (p *ProxyHandler) logUsageEvent(keyInfo *auth.KeyInfo, model Model, ui Usag
 		})
 	}
 
+	billingSource := "wallet"
+	if billingPath == subsvc.BillingSubscription {
+		billingSource = "subscription"
+	}
+
 	p.UsageLogger.Log(usage.Event{
 		KeyID:              keyInfo.ID,
 		KeyType:            keyInfo.KeyType,
@@ -1847,6 +1926,8 @@ func (p *ProxyHandler) logUsageEvent(keyInfo *auth.KeyInfo, model Model, ui Usag
 		LogType:            usage.LogTypeFromStatus(statusCode),
 		IsStream:           isStream,
 		Meta:               meta,
+		BillingSource:      billingSource,
+		SubscriptionID:     subscriptionID,
 	})
 
 	if p.UpstreamLimiter != nil && deploymentID != "" && ui.TotalTokens > 0 {

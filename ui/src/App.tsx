@@ -26,6 +26,8 @@ import ChannelsPage from './pages/analytics/ChannelsPage'
 import AccountSettingsPage from './pages/account/AccountSettingsPage'
 import PlaygroundPage from './pages/PlaygroundPage'
 import SystemUsersPage from './pages/SystemUsersPage'
+import SubscriptionsPage from './pages/SubscriptionsPage'
+import PlansPage from './pages/PlansPage'
 import CatalogPage from './pages/CatalogPage'
 import SystemSettingsPage from './pages/settings/SystemSettingsPage'
 import LegalPage from './pages/storefront/LegalPage'
@@ -110,6 +112,7 @@ export default function App() {
                 <Route path="/marketplace" element={<Navigate to="/finance/topups" replace />} />
                 <Route path="/marketplace/*" element={<Navigate to="/finance/topups" replace />} />
                 <Route path="/wallet" element={<WalletPage />} />
+                <Route path="/plans" element={<PlansPage />} />
                 <Route path="/models" element={<ModelsLayout />} />
                 <Route path="/analytics" element={<AnalyticsLayout />}>
                   <Route index element={<AnalyticsOverviewPage />} />
@@ -123,6 +126,7 @@ export default function App() {
                 <Route path="/account" element={<AccountSettingsPage />} />
                 <Route path="/profile" element={<Navigate to="/account" replace />} />
                 <Route path="/users" element={<SystemUsersPage />} />
+                <Route path="/subscriptions" element={<SubscriptionsPage />} />
                 <Route path="/settings" element={<SystemSettingsPage />} />
                 <Route path="/settings/*" element={<Navigate to="/settings" replace />} />
                 <Route

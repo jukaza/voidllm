@@ -12,7 +12,7 @@ import (
 // apiKeySelectColumns is the ordered column list used in all api_keys SELECT queries.
 // It must match the scan order in scanAPIKey exactly.
 // key_hash is included for cache population; it must never be exposed in API responses.
-const apiKeySelectColumns = "id, key_hash, key_hint, key_type, name, " +
+const apiKeySelectColumns = "id, key_hash, key_hint, key_encrypted, key_type, name, " +
 	"user_id, " +
 	"daily_token_limit, monthly_token_limit, requests_per_minute, requests_per_day, " +
 	"status, spend_cap, spend_used, ip_whitelist, ip_blacklist, " +
@@ -25,6 +25,7 @@ type APIKey struct {
 	ID                  string
 	KeyHash             string
 	KeyHint             string
+	KeyEncrypted        *string
 	KeyType             string
 	Name                string
 	UserID              *string
@@ -49,8 +50,12 @@ type APIKey struct {
 
 // CreateAPIKeyParams holds the input for creating an API key.
 type CreateAPIKeyParams struct {
+	// ID is optional; when empty a new UUIDv7 is generated.
+	ID string
 	// KeyHash is the HMAC-SHA256 hash of the raw key. Never store the raw key.
 	KeyHash            string
+	// KeyEncrypted is the AES-GCM ciphertext of the raw key for owner reveal (user keys only).
+	KeyEncrypted       *string
 	KeyHint            string
 	KeyType            string
 	Name               string
@@ -91,9 +96,13 @@ type UpdateAPIKeyParams struct {
 
 // CreateAPIKey inserts a new API key and returns the persisted record.
 func (d *DB) CreateAPIKey(ctx context.Context, params CreateAPIKeyParams) (*APIKey, error) {
-	id, err := uuid.NewV7()
-	if err != nil {
-		return nil, fmt.Errorf("create api key: generate id: %w", err)
+	idStr := strings.TrimSpace(params.ID)
+	if idStr == "" {
+		id, err := uuid.NewV7()
+		if err != nil {
+			return nil, fmt.Errorf("create api key: generate id: %w", err)
+		}
+		idStr = id.String()
 	}
 
 	p := d.dialect.Placeholder
@@ -102,34 +111,35 @@ func (d *DB) CreateAPIKey(ctx context.Context, params CreateAPIKeyParams) (*APIK
 		status = "active"
 	}
 	insertQuery := "INSERT INTO api_keys " +
-		"(id, key_hash, key_hint, key_type, name, " +
+		"(id, key_hash, key_hint, key_encrypted, key_type, name, " +
 		"user_id, " +
 		"daily_token_limit, monthly_token_limit, requests_per_minute, requests_per_day, " +
 		"status, spend_cap, spend_used, ip_whitelist, ip_blacklist, " +
 		"model_limits_enabled, model_limits, " +
 		"expires_at, login_ip, user_agent, created_by, created_at, updated_at) " +
 		"VALUES (" +
-		p(1) + ", " + p(2) + ", " + p(3) + ", " + p(4) + ", " + p(5) + ", " +
-		p(6) + ", " +
-		p(7) + ", " + p(8) + ", " + p(9) + ", " + p(10) + ", " +
-		p(11) + ", " + p(12) + ", 0, " + p(13) + ", " + p(14) + ", " +
-		p(15) + ", " + p(16) + ", " +
-		p(17) + ", " + p(18) + ", " + p(19) + ", " + p(20) + ", " +
+		p(1) + ", " + p(2) + ", " + p(3) + ", " + p(4) + ", " + p(5) + ", " + p(6) + ", " +
+		p(7) + ", " +
+		p(8) + ", " + p(9) + ", " + p(10) + ", " + p(11) + ", " +
+		p(12) + ", " + p(13) + ", 0, " + p(14) + ", " + p(15) + ", " +
+		p(16) + ", " + p(17) + ", " +
+		p(18) + ", " + p(19) + ", " + p(20) + ", " + p(21) + ", " +
 		"CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
 
 	selectQuery := "SELECT " + apiKeySelectColumns +
 		" FROM api_keys WHERE id = " + p(1) + " AND deleted_at IS NULL"
 
 	var key *APIKey
-	err = d.WithTx(ctx, func(q Querier) error {
+	err := d.WithTx(ctx, func(q Querier) error {
 		modelLimitsEnabled := 0
 		if params.ModelLimitsEnabled {
 			modelLimitsEnabled = 1
 		}
 		_, execErr := q.ExecContext(ctx, insertQuery,
-			id.String(),
+			idStr,
 			params.KeyHash,
 			params.KeyHint,
+			params.KeyEncrypted,
 			params.KeyType,
 			params.Name,
 			params.UserID,
@@ -152,7 +162,7 @@ func (d *DB) CreateAPIKey(ctx context.Context, params CreateAPIKeyParams) (*APIK
 			return translateError(execErr)
 		}
 
-		row := q.QueryRowContext(ctx, selectQuery, id.String())
+		row := q.QueryRowContext(ctx, selectQuery, idStr)
 		var scanErr error
 		key, scanErr = scanAPIKey(row)
 		return scanErr
@@ -217,26 +227,11 @@ func (d *DB) ListAPIKeys(ctx context.Context, userID, cursor string, limit int, 
 
 	var keys []APIKey
 	for rows.Next() {
-		var (
-			k                  APIKey
-			modelLimitsEnabled int
-		)
-		if err := scanAPIKeyRow(
-			rows,
-			&k.ID, &k.KeyHash, &k.KeyHint, &k.KeyType, &k.Name,
-			&k.UserID,
-			&k.DailyTokenLimit, &k.MonthlyTokenLimit,
-			&k.RequestsPerMinute, &k.RequestsPerDay,
-			&k.Status, &k.SpendCap, &k.SpendUsed,
-			&k.IPWhitelist, &k.IPBlacklist,
-			&modelLimitsEnabled, &k.ModelLimits,
-			&k.ExpiresAt, &k.LastUsedAt,
-			&k.CreatedBy, &k.CreatedAt, &k.UpdatedAt, &k.DeletedAt,
-		); err != nil {
+		k, err := scanAPIKeyFromRows(rows)
+		if err != nil {
 			return nil, fmt.Errorf("list api keys scan: %w", err)
 		}
-		k.ModelLimitsEnabled = modelLimitsEnabled == 1
-		keys = append(keys, k)
+		keys = append(keys, *k)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("list api keys rows: %w", err)
@@ -450,9 +445,13 @@ type RotateKeyTxResult struct {
 // ID of the key being rotated; oldExpiresAt is the grace-period deadline to write
 // onto the old row. Both records are returned on success.
 func (d *DB) RotateKeyTx(ctx context.Context, oldID string, oldExpiresAt string, newParams CreateAPIKeyParams) (*RotateKeyTxResult, error) {
-	newID, err := uuid.NewV7()
-	if err != nil {
-		return nil, fmt.Errorf("rotate key tx: generate id: %w", err)
+	newIDStr := strings.TrimSpace(newParams.ID)
+	if newIDStr == "" {
+		newID, err := uuid.NewV7()
+		if err != nil {
+			return nil, fmt.Errorf("rotate key tx: generate id: %w", err)
+		}
+		newIDStr = newID.String()
 	}
 
 	p := d.dialect.Placeholder
@@ -466,22 +465,22 @@ func (d *DB) RotateKeyTx(ctx context.Context, oldID string, oldExpiresAt string,
 		modelLimitsEnabled = 1
 	}
 	insertQuery := "INSERT INTO api_keys " +
-		"(id, key_hash, key_hint, key_type, name, " +
+		"(id, key_hash, key_hint, key_encrypted, key_type, name, " +
 		"user_id, " +
 		"daily_token_limit, monthly_token_limit, requests_per_minute, requests_per_day, " +
 		"status, spend_cap, spend_used, ip_whitelist, ip_blacklist, " +
 		"model_limits_enabled, model_limits, " +
 		"expires_at, created_by, created_at, updated_at) " +
 		"VALUES (" +
-		p(1) + ", " + p(2) + ", " + p(3) + ", " + p(4) + ", " + p(5) + ", " +
-		p(6) + ", " +
-		p(7) + ", " + p(8) + ", " + p(9) + ", " + p(10) + ", " +
-		p(11) + ", " + p(12) + ", 0, " + p(13) + ", " + p(14) + ", " +
-		p(15) + ", " + p(16) + ", " +
-		p(17) + ", " + p(18) + ", " +
+		p(1) + ", " + p(2) + ", " + p(3) + ", " + p(4) + ", " + p(5) + ", " + p(6) + ", " +
+		p(7) + ", " +
+		p(8) + ", " + p(9) + ", " + p(10) + ", " + p(11) + ", " +
+		p(12) + ", " + p(13) + ", 0, " + p(14) + ", " + p(15) + ", " +
+		p(16) + ", " + p(17) + ", " +
+		p(18) + ", " + p(19) + ", " +
 		"CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
 
-	updateQuery := "UPDATE api_keys SET expires_at = " + p(1) + ", updated_at = CURRENT_TIMESTAMP" +
+	updateQuery := "UPDATE api_keys SET expires_at = " + p(1) + ", key_encrypted = NULL, updated_at = CURRENT_TIMESTAMP" +
 		" WHERE id = " + p(2) + " AND deleted_at IS NULL"
 
 	selectQuery := "SELECT " + apiKeySelectColumns +
@@ -490,9 +489,10 @@ func (d *DB) RotateKeyTx(ctx context.Context, oldID string, oldExpiresAt string,
 	var result RotateKeyTxResult
 	txErr := d.WithTx(ctx, func(q Querier) error {
 		_, execErr := q.ExecContext(ctx, insertQuery,
-			newID.String(),
+			newIDStr,
 			newParams.KeyHash,
 			newParams.KeyHint,
+			newParams.KeyEncrypted,
 			newParams.KeyType,
 			newParams.Name,
 			newParams.UserID,
@@ -525,7 +525,7 @@ func (d *DB) RotateKeyTx(ctx context.Context, oldID string, oldExpiresAt string,
 			return fmt.Errorf("update old key expiry: %w", ErrNotFound)
 		}
 
-		newRow := q.QueryRowContext(ctx, selectQuery, newID.String())
+		newRow := q.QueryRowContext(ctx, selectQuery, newIDStr)
 		var scanErr error
 		result.NewKey, scanErr = scanAPIKey(newRow)
 		if scanErr != nil {
@@ -571,15 +571,15 @@ func scanAPIKeyRow(scanner apiKeyScanner, dest ...any) error {
 	return scanner.Scan(dest...)
 }
 
-// scanAPIKey scans a single API key row returned by QueryRowContext.
-func scanAPIKey(row *sql.Row) (*APIKey, error) {
+func scanAPIKeyFields(scanner apiKeyScanner) (*APIKey, error) {
 	var (
 		k                  APIKey
 		modelLimitsEnabled int
+		keyEncrypted       sql.NullString
 	)
 	err := scanAPIKeyRow(
-		row,
-		&k.ID, &k.KeyHash, &k.KeyHint, &k.KeyType, &k.Name,
+		scanner,
+		&k.ID, &k.KeyHash, &k.KeyHint, &keyEncrypted, &k.KeyType, &k.Name,
 		&k.UserID,
 		&k.DailyTokenLimit, &k.MonthlyTokenLimit,
 		&k.RequestsPerMinute, &k.RequestsPerDay,
@@ -592,8 +592,21 @@ func scanAPIKey(row *sql.Row) (*APIKey, error) {
 	if err != nil {
 		return nil, err
 	}
+	if keyEncrypted.Valid && strings.TrimSpace(keyEncrypted.String) != "" {
+		v := keyEncrypted.String
+		k.KeyEncrypted = &v
+	}
 	k.ModelLimitsEnabled = modelLimitsEnabled == 1
 	return &k, nil
+}
+
+func scanAPIKeyFromRows(rows *sql.Rows) (*APIKey, error) {
+	return scanAPIKeyFields(rows)
+}
+
+// scanAPIKey scans a single API key row returned by QueryRowContext.
+func scanAPIKey(row *sql.Row) (*APIKey, error) {
+	return scanAPIKeyFields(row)
 }
 
 // CountUserAPIKeys returns active user_key count for a user.

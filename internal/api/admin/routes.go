@@ -28,6 +28,7 @@ func RegisterRoutes(app *fiber.App, handler *Handler, keyCache *cache.Cache[stri
 	app.Get("/api/v1/public/site", handler.GetPublicSite)
 	app.Get("/api/v1/public/features", handler.GetPublicFeatures)
 	app.Get("/api/v1/public/topup-config", handler.GetPublicTopupConfig)
+	app.Get("/api/v1/public/subscription-packages", handler.PublicSubscriptionCatalog)
 	app.Get("/api/v1/public/llm-setup", handler.HandleCliSetup)
 	app.Post("/api/v1/webhooks/sepay", handler.SepayWebhook)
 
@@ -85,6 +86,10 @@ func RegisterRoutes(app *fiber.App, handler *Handler, keyCache *cache.Cache[stri
 	api.Get("/keys", auth.RequireRole(auth.RoleMember), handler.ListAPIKeys)
 	api.Get("/keys/:key_id/usage", auth.RequireRole(auth.RoleMember), handler.GetAPIKeyUsage)
 	api.Get("/keys/:key_id/limits", auth.RequireRole(auth.RoleMember), handler.GetAPIKeyLimits)
+	api.Get("/keys/:key_id/subscription-binding", auth.RequireRole(auth.RoleMember), handler.GetKeySubscriptionBinding)
+	api.Post("/keys/:key_id/subscription-binding", auth.RequireRole(auth.RoleMember), handler.BindKeySubscription)
+	api.Delete("/keys/:key_id/subscription-binding", auth.RequireRole(auth.RoleMember), handler.ReleaseKeySubscription)
+	api.Get("/keys/:key_id/reveal", auth.RequireRole(auth.RoleMember), handler.RevealAPIKey)
 	api.Get("/keys/:key_id", auth.RequireRole(auth.RoleMember), handler.GetAPIKey)
 	api.Patch("/keys/:key_id", auth.RequireRole(auth.RoleMember), handler.UpdateAPIKey)
 	api.Delete("/keys/:key_id", auth.RequireRole(auth.RoleMember), handler.DeleteAPIKey)
@@ -149,6 +154,24 @@ func RegisterRoutes(app *fiber.App, handler *Handler, keyCache *cache.Cache[stri
 	api.Get("/providers/:provider_id", auth.RequireRole(auth.RoleSystemAdmin), handler.GetProvider)
 	api.Patch("/providers/:provider_id", auth.RequireRole(auth.RoleSystemAdmin), handler.UpdateProvider)
 	api.Delete("/providers/:provider_id", auth.RequireRole(auth.RoleSystemAdmin), handler.DeleteProvider)
+
+	// Subscriptions — system_admin manages catalog; users bind to keys.
+	api.Get("/admin/subscription-packages", auth.RequireRole(auth.RoleSystemAdmin), handler.ListSubscriptionPackages)
+	api.Post("/admin/subscription-packages", auth.RequireRole(auth.RoleSystemAdmin), handler.CreateSubscriptionPackage)
+	api.Patch("/admin/subscription-packages/:id", auth.RequireRole(auth.RoleSystemAdmin), handler.UpdateSubscriptionPackage)
+	api.Delete("/admin/subscription-packages/:id", auth.RequireRole(auth.RoleSystemAdmin), handler.DeleteSubscriptionPackage)
+	api.Post("/admin/subscription-packages/:id/cover", auth.RequireRole(auth.RoleSystemAdmin), handler.UploadSubscriptionPackageCover)
+
+	api.Get("/admin/subscription-plans", auth.RequireRole(auth.RoleSystemAdmin), handler.ListSubscriptionPlans)
+	api.Post("/admin/subscription-plans", auth.RequireRole(auth.RoleSystemAdmin), handler.CreateSubscriptionPlan)
+	api.Patch("/admin/subscription-plans/:id", auth.RequireRole(auth.RoleSystemAdmin), handler.UpdateSubscriptionPlan)
+	api.Delete("/admin/subscription-plans/:id", auth.RequireRole(auth.RoleSystemAdmin), handler.DeleteSubscriptionPlan)
+
+	api.Get("/admin/user-subscriptions", auth.RequireRole(auth.RoleSystemAdmin), handler.ListAdminUserSubscriptions)
+	api.Post("/admin/user-subscriptions", auth.RequireRole(auth.RoleSystemAdmin), handler.GrantUserSubscription)
+
+	api.Get("/my-subscriptions", handler.MySubscriptions)
+	api.Post("/me/subscription-orders", handler.CreateSubscriptionOrder)
 
 	// Finance monitoring — system_admin only.
 	api.Get("/admin/finance/summary", auth.RequireRole(auth.RoleSystemAdmin), handler.FinanceSummary)

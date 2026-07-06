@@ -116,13 +116,17 @@ func (l *Logger) Log(event Event) {
 	// Increment the in-memory token counter immediately so that subsequent
 	// CheckTokens calls reflect this request even before it reaches the DB.
 	if l.tokenCounter != nil && event.TotalTokens > 0 {
-		l.tokenCounter.Add(event.KeyID, int64(event.TotalTokens))
+		if event.BillingSource == "subscription" && event.SubscriptionID != "" {
+			l.tokenCounter.AddScoped("sub:"+event.SubscriptionID, int64(event.TotalTokens))
+		} else {
+			l.tokenCounter.Add(event.KeyID, int64(event.TotalTokens))
+		}
 	}
 
 	// Reduce the in-memory wallet balance immediately so that subsequent
 	// balance checks reflect this request's spend before the DB flush. The
 	// ledger write happens in flush() alongside the usage_events insert.
-	if l.wallet != nil && event.Revenue != nil && *event.Revenue > 0 && event.UserID != "" {
+	if event.BillingSource != "subscription" && l.wallet != nil && event.Revenue != nil && *event.Revenue > 0 && event.UserID != "" {
 		l.wallet.DebitMemory(event.UserID, *event.Revenue)
 	}
 
@@ -320,6 +324,9 @@ func (l *Logger) flush(events []Event) error {
 	// on the next successful debit.
 	if l.wallet != nil {
 		for _, ev := range events {
+			if ev.BillingSource == "subscription" {
+				continue
+			}
 			if ev.Revenue != nil && *ev.Revenue > 0 && ev.UserID != "" {
 				l.wallet.PersistDebit(ctx, ev.UserID, *ev.Revenue, ev.RequestID,
 					"Usage: "+ev.ModelName)
@@ -328,6 +335,9 @@ func (l *Logger) flush(events []Event) error {
 	}
 
 	for _, ev := range events {
+		if ev.BillingSource == "subscription" {
+			continue
+		}
 		if ev.Revenue != nil && *ev.Revenue > 0 && ev.KeyID != "" {
 			if _, err := l.database.IncrementKeySpend(ctx, ev.KeyID, *ev.Revenue); err != nil {
 				l.log.LogAttrs(ctx, slog.LevelError, "increment key spend failed",

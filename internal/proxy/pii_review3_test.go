@@ -32,6 +32,7 @@ import (
 	"github.com/jukaza/tavo/internal/auth"
 	"github.com/jukaza/tavo/internal/config"
 	"github.com/jukaza/tavo/internal/db"
+	subsvc "github.com/jukaza/tavo/internal/subscription"
 	"github.com/jukaza/tavo/internal/usage"
 )
 
@@ -328,7 +329,7 @@ func TestPII_Review3_TruncatedStream_UsageStatus(t *testing.T) {
 	if streamIncomplete {
 		eventStatusCode = http.StatusBadGateway
 	}
-	h.logUsageEvent(keyInfo, model, ui, 120, nil, eventStatusCode, "req-trunc-1", model.Name, Deployment{}, false)
+	h.logUsageEvent(keyInfo, model, ui, 120, nil, eventStatusCode, "req-trunc-1", model.Name, Deployment{}, false, subsvc.BillingWallet, "")
 
 	// Verify the event was enqueued in the logger's buffer.
 	if h.UsageLogger.BufferLen() == 0 {
@@ -342,7 +343,7 @@ func TestPII_Review3_TruncatedStream_UsageStatus(t *testing.T) {
 		eventStatusCode = http.StatusBadGateway
 	}
 	before := h.UsageLogger.BufferLen()
-	h.logUsageEvent(keyInfo, model, ui, 120, nil, eventStatusCode, "req-trunc-2", model.Name, Deployment{}, false)
+	h.logUsageEvent(keyInfo, model, ui, 120, nil, eventStatusCode, "req-trunc-2", model.Name, Deployment{}, false, subsvc.BillingWallet, "")
 	after := h.UsageLogger.BufferLen()
 	if after != before+1 {
 		t.Fatalf("FIX 4: expected buffer to grow by 1 for complete stream; before=%d after=%d", before, after)

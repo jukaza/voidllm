@@ -55,6 +55,8 @@ type TopupRequest struct {
 	ExpiresAt    *string
 	SepayTxID    string
 	CompletedAt  *string
+	OrderKind    string
+	PlanID       string
 }
 
 // CreateSepayTopupParams describes a pending SePay order.
@@ -71,7 +73,8 @@ type CreateSepayTopupParams struct {
 const walletSelectColumns = "id, user_id, balance, currency, created_at, updated_at"
 const transactionSelectColumns = "id, user_id, type, amount, balance_after, ref_id, description, created_at"
 const topupSelectColumns = "id, user_id, amount, payment_ref, status, reviewed_by, reviewed_at, note, created_at, " +
-	"trade_no, pay_amount, credit_amount, bonus_amount, bonus_detail, expires_at, sepay_tx_id, completed_at"
+	"trade_no, pay_amount, credit_amount, bonus_amount, bonus_detail, expires_at, sepay_tx_id, completed_at, " +
+	"order_kind, plan_id"
 
 // CreateWallet creates an empty wallet for a user. It returns ErrConflict if
 // the user already has a wallet.
@@ -236,9 +239,9 @@ func (d *DB) CreateSepayTopupOrder(ctx context.Context, params CreateSepayTopupP
 
 	p := d.dialect.Placeholder
 	insertQuery := "INSERT INTO topup_requests (id, user_id, amount, payment_ref, status, created_at, " +
-		"trade_no, pay_amount, credit_amount, bonus_amount, bonus_detail, expires_at) " +
+		"trade_no, pay_amount, credit_amount, bonus_amount, bonus_detail, expires_at, order_kind) " +
 		"VALUES (" + p(1) + ", " + p(2) + ", " + p(3) + ", " + p(4) + ", 'pending', CURRENT_TIMESTAMP, " +
-		p(5) + ", " + p(6) + ", " + p(7) + ", " + p(8) + ", " + p(9) + ", " + p(10) + ")"
+		p(5) + ", " + p(6) + ", " + p(7) + ", " + p(8) + ", " + p(9) + ", " + p(10) + ", 'wallet')"
 	selectQuery := "SELECT " + topupSelectColumns + " FROM topup_requests WHERE id = " + p(1)
 
 	var tr *TopupRequest
@@ -601,6 +604,7 @@ func scanTopupRequestFromScanner(row topupScanner) (*TopupRequest, error) {
 	err := row.Scan(
 		&t.ID, &t.UserID, &t.Amount, &t.PaymentRef, &t.Status, &t.ReviewedBy, &t.ReviewedAt, &t.Note, &t.CreatedAt,
 		&t.TradeNo, &payAmount, &creditAmount, &t.BonusAmount, &t.BonusDetail, &t.ExpiresAt, &t.SepayTxID, &t.CompletedAt,
+		&t.OrderKind, &t.PlanID,
 	)
 	if err != nil {
 		return nil, err
@@ -610,6 +614,9 @@ func scanTopupRequestFromScanner(row topupScanner) (*TopupRequest, error) {
 	}
 	if creditAmount.Valid {
 		t.CreditAmount = creditAmount.Float64
+	}
+	if t.OrderKind == "" {
+		t.OrderKind = "wallet"
 	}
 	return &t, nil
 }

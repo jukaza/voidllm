@@ -25,6 +25,9 @@ var ErrForeignKey = errors.New("foreign key violation")
 // ErrAmountMismatch is returned when a SePay transfer amount does not match the order.
 var ErrAmountMismatch = errors.New("amount mismatch")
 
+// ErrInsufficientBalance is returned when a wallet debit would exceed available balance.
+var ErrInsufficientBalance = errors.New("insufficient wallet balance")
+
 // translateError maps low-level driver errors to domain sentinels.
 // sql.ErrNoRows becomes ErrNotFound, UNIQUE constraint violations become ErrConflict,
 // FOREIGN KEY constraint violations become ErrForeignKey,
