@@ -10,7 +10,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	"github.com/voidmind-io/voidllm/internal/site"
+	"github.com/jukaza/tavo/internal/site"
 )
 
 // registerSiteUploads serves uploaded site assets (custom logos) from disk.

@@ -3,7 +3,7 @@ package admin
 import (
 	"context"
 
-	"github.com/voidmind-io/voidllm/internal/db"
+	"github.com/jukaza/tavo/internal/db"
 )
 
 func (h *Handler) buildMeResponse(ctx context.Context, user *db.User, role string) (meResponse, error) {

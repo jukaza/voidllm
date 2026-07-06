@@ -2118,7 +2118,7 @@ var SwaggerInfo = &swag.Spec{
 	Host:             "",
 	BasePath:         "/api/v1",
 	Schemes:          []string{},
-	Title:            "VoidLLM API",
+	Title:            "Tavo API",
 	Description:      "Prepaid LLM API marketplace with OpenAI-compatible proxy, wallet billing, and model catalog.",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,

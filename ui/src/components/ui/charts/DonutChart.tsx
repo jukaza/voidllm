@@ -95,7 +95,9 @@ export function DonutChart({
                   className="block w-2.5 h-2.5 rounded-full shrink-0"
                   style={{ background: seg.color }}
                 />
-                <span className="text-text-secondary">{seg.label}</span>
+                <span className="font-medium" style={{ color: seg.color }}>
+                  {seg.label}
+                </span>
               </div>
               <span className="text-text-tertiary tabular-nums">{pct}%</span>
             </div>

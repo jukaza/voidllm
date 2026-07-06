@@ -7,11 +7,11 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	"github.com/voidmind-io/voidllm/internal/apierror"
-	"github.com/voidmind-io/voidllm/internal/audit"
-	"github.com/voidmind-io/voidllm/internal/auth"
-	"github.com/voidmind-io/voidllm/internal/db"
-	"github.com/voidmind-io/voidllm/pkg/keygen"
+	"github.com/jukaza/tavo/internal/apierror"
+	"github.com/jukaza/tavo/internal/audit"
+	"github.com/jukaza/tavo/internal/auth"
+	"github.com/jukaza/tavo/internal/db"
+	"github.com/jukaza/tavo/pkg/keygen"
 )
 
 func (h *Handler) issueUserSession(c fiber.Ctx, userID, auditAction string) (loginResponse, error) {
@@ -29,11 +29,29 @@ func (h *Handler) issueUserSession(c fiber.Ctx, userID, auditAction string) (log
 		return loginResponse{}, fmt.Errorf("authentication failed")
 	}
 
+	ip := clientIP(c)
+	ua := clientUserAgent(c)
+
 	if !policy.AllowMultiple {
 		if err := h.DB.RevokeUserSessions(ctx, userID); err != nil {
 			h.Log.ErrorContext(ctx, "session: revoke old sessions", slog.String("error", err.Error()))
 		}
-	} else if policy.MaxConcurrent > 0 {
+	} else {
+		// Replace prior sessions from this browser instead of stacking a new row on
+		// every re-login (common after dev server restarts).
+		if ua != "" {
+			revoked, err := h.DB.RevokeUserSessionsByMatchingClient(ctx, userID, ip, ua)
+			if err != nil {
+				h.Log.ErrorContext(ctx, "session: revoke same-client sessions", slog.String("error", err.Error()))
+			} else {
+				for _, sessionID := range revoked {
+					h.evictSessionFromCache(userID, sessionID)
+				}
+			}
+		}
+	}
+
+	if policy.AllowMultiple && policy.MaxConcurrent > 0 {
 		// Keep room for the new session.
 		if err := h.DB.TrimOldestUserSessions(ctx, userID, policy.MaxConcurrent-1); err != nil {
 			h.Log.ErrorContext(ctx, "session: trim sessions", slog.String("error", err.Error()))
@@ -53,9 +71,6 @@ func (h *Handler) issueUserSession(c fiber.Ctx, userID, auditAction string) (log
 	}
 	expiresAt := time.Now().UTC().Add(ttl)
 	expiresAtStr := expiresAt.Format(time.RFC3339)
-
-	ip := clientIP(c)
-	ua := clientUserAgent(c)
 
 	apiKey, err := h.DB.CreateAPIKey(ctx, db.CreateAPIKeyParams{
 		KeyHash:   keyHash,

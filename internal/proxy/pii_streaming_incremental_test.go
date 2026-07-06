@@ -25,7 +25,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/voidmind-io/voidllm/internal/circuitbreaker"
+	"github.com/jukaza/tavo/internal/circuitbreaker"
 )
 
 // ── Matrix 25: Split pseudonym, incremental delivery, usage logging ───────────

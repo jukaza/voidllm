@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/voidmind-io/voidllm/internal/config"
-	"github.com/voidmind-io/voidllm/internal/db"
+	"github.com/jukaza/tavo/internal/config"
+	"github.com/jukaza/tavo/internal/db"
 )
 
 // migrationOrder lists tables in foreign-key-safe order so that referenced
@@ -45,18 +45,18 @@ var migrationOrder = []string{
 // to the target.
 func runMigrate(args []string) {
 	fs := flag.NewFlagSet("migrate", flag.ExitOnError)
-	fromDSN := fs.String("from", "", "Source database DSN (e.g., /data/voidllm.db or postgres://...)")
+	fromDSN := fs.String("from", "", "Source database DSN (e.g., /data/tavo.db or postgres://...)")
 	toDSN := fs.String("to", "", "Target database DSN")
 	dryRun := fs.Bool("dry-run", false, "Count rows only, don't write")
 	fs.Parse(args) //nolint:errcheck // ExitOnError handles the error
 
 	if *fromDSN == "" || *toDSN == "" {
-		fmt.Println("Usage: voidllm migrate --from <source-dsn> --to <target-dsn> [--dry-run]")
+		fmt.Println("Usage: tavo migrate --from <source-dsn> --to <target-dsn> [--dry-run]")
 		fmt.Println()
 		fmt.Println("Examples:")
-		fmt.Println("  voidllm migrate --from /data/voidllm.db --to postgres://user:pass@host:5432/voidllm")
-		fmt.Println("  voidllm migrate --from postgres://... --to /data/backup.db")
-		fmt.Println("  voidllm migrate --from /data/voidllm.db --to /data/copy.db --dry-run")
+		fmt.Println("  tavo migrate --from /data/tavo.db --to postgres://user:pass@host:5432/tavo")
+		fmt.Println("  tavo migrate --from postgres://... --to /data/backup.db")
+		fmt.Println("  tavo migrate --from /data/tavo.db --to /data/copy.db --dry-run")
 		os.Exit(1)
 	}
 
@@ -67,7 +67,7 @@ func runMigrate(args []string) {
 	srcDSN := cleanDSN(*fromDSN)
 	dstDSN := cleanDSN(*toDSN)
 
-	fmt.Println("VoidLLM Database Migration")
+	fmt.Println("Tavo Database Migration")
 	fmt.Printf("  Source: %s (%s)\n", redactDSN(srcDSN), srcDriver)
 	fmt.Printf("  Target: %s (%s)\n", redactDSN(dstDSN), dstDriver)
 	if *dryRun {

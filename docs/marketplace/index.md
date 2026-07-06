@@ -1,12 +1,12 @@
 ---
 title: "Chuyển đổi sang Web bán API (Marketplace)"
-description: "Tài liệu dự án chuyển VoidLLM thành nền tảng bán lại API theo mô hình ví trả trước"
+description: "Tài liệu dự án chuyển Tavo thành nền tảng bán lại API theo mô hình ví trả trước"
 section: marketplace
 order: 0
 ---
-# Chuyển đổi VoidLLM → Web bán API
+# Chuyển đổi Tavo → Web bán API
 
-Bộ tài liệu này mô tả kế hoạch chuyển VoidLLM (LLM gateway tự host cho doanh nghiệp nội bộ) thành **nền tảng bán lại API**: nhiều nhà cung cấp đưa API custom vào hệ thống, admin đóng gói thành các model công khai và bán cho khách hàng cuối theo mô hình **ví trả trước**.
+Bộ tài liệu này mô tả kế hoạch chuyển Tavo (LLM gateway tự host cho doanh nghiệp nội bộ) thành **nền tảng bán lại API**: nhiều nhà cung cấp đưa API custom vào hệ thống, admin đóng gói thành các model công khai và bán cho khách hàng cuối theo mô hình **ví trả trước**.
 
 ## Danh mục tài liệu
 

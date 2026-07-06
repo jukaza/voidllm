@@ -1,24 +1,24 @@
 apiVersion: v2
-name: voidllm
+name: tavo
 description: Privacy-first LLM proxy and API key marketplace with load balancing, prepaid wallet, and built-in admin UI. Self-hosted, single binary, sub-500us overhead.
 type: application
 version: 0.0.21
 appVersion: "0.0.21"
-home: https://voidllm.ai
-icon: https://voidllm.ai/logo.svg
+home: https://api.tavo.io.vn
+icon: https://api.tavo.io.vn/logo.svg
 sources:
-  - https://github.com/voidmind-io/voidllm
+  - https://github.com/jukaza/tavo
 maintainers:
-  - name: VoidMind
-    email: hello@voidmind.io
-    url: https://voidmind.io
+  - name: Tavo
+    email: hello@tavo.io.vn
+    url: https://tavo.io.vn
 annotations:
   artifacthub.io/license: BUSL-1.1
   artifacthub.io/links: |
     - name: Documentation
-      url: https://github.com/voidmind-io/voidllm/tree/main/docs
-    - name: Blog
-      url: https://voidllm.ai/blog
+      url: https://github.com/jukaza/tavo/tree/main/docs
+    - name: Source
+      url: https://github.com/jukaza/tavo
 keywords:
   - llm
   - proxy

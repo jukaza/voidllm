@@ -8,11 +8,11 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	"github.com/voidmind-io/voidllm/internal/apierror"
-	"github.com/voidmind-io/voidllm/internal/db"
-	"github.com/voidmind-io/voidllm/internal/provider"
-	voidredis "github.com/voidmind-io/voidllm/internal/redis"
-	"github.com/voidmind-io/voidllm/pkg/crypto"
+	"github.com/jukaza/tavo/internal/apierror"
+	"github.com/jukaza/tavo/internal/db"
+	"github.com/jukaza/tavo/internal/provider"
+	voidredis "github.com/jukaza/tavo/internal/redis"
+	"github.com/jukaza/tavo/pkg/crypto"
 )
 
 // providerRequest is the JSON body for creating/updating a provider.

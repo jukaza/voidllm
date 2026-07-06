@@ -28,7 +28,7 @@ type migrationRunner interface {
 }
 
 // migrationLockKey is the PostgreSQL advisory lock key used to serialize
-// concurrent migration runs. Derived from CRC-32 of "voidllm-schema-migrations".
+// concurrent migration runs. Derived from CRC-32 of "tavo-schema-migrations".
 // Stable across deployments so all pods contend on the same lock.
 const migrationLockKey int64 = 8370235791
 

@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/voidmind-io/voidllm/internal/config"
-	"github.com/voidmind-io/voidllm/internal/logger"
+	"github.com/jukaza/tavo/internal/config"
+	"github.com/jukaza/tavo/internal/logger"
 )
 
 // logLine writes a single message at each level and returns the captured output.

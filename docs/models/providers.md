@@ -6,7 +6,7 @@ order: 1
 ---
 # Provider Setup
 
-VoidLLM supports 6 providers. Each handles request/response translation differently.
+Tavo supports 6 providers. Each handles request/response translation differently.
 
 ## OpenAI
 
@@ -23,7 +23,7 @@ models:
 
 ## Anthropic
 
-VoidLLM translates between the OpenAI request format and Anthropic's Messages API automatically. Your clients send OpenAI-format requests, VoidLLM handles the conversion.
+Tavo translates between the OpenAI request format and Anthropic's Messages API automatically. Your clients send OpenAI-format requests, Tavo handles the conversion.
 
 ```yaml
 models:
@@ -33,11 +33,11 @@ models:
     api_key: ${ANTHROPIC_KEY}
 ```
 
-Note: Claude Code talks directly to Anthropic's API for LLM access — you can't route its LLM requests through VoidLLM. Point other OpenAI-compatible clients at VoidLLM's `/v1` proxy endpoint instead.
+Note: Claude Code talks directly to Anthropic's API for LLM access — you can't route its LLM requests through Tavo. Point other OpenAI-compatible clients at Tavo's `/v1` proxy endpoint instead.
 
 ## Azure OpenAI
 
-Azure uses deployment names instead of model names in the URL. VoidLLM handles the URL mapping.
+Azure uses deployment names instead of model names in the URL. Tavo handles the URL mapping.
 
 ```yaml
 models:
@@ -49,9 +49,9 @@ models:
     azure_api_version: "2024-10-21"
 ```
 
-The `azure_deployment` is your Azure deployment name (not the model name). VoidLLM constructs the URL as `{base_url}/openai/deployments/{deployment}/chat/completions?api-version={version}`.
+The `azure_deployment` is your Azure deployment name (not the model name). Tavo constructs the URL as `{base_url}/openai/deployments/{deployment}/chat/completions?api-version={version}`.
 
-Azure uses the `api-key` header instead of `Authorization: Bearer`. VoidLLM handles this automatically.
+Azure uses the `api-key` header instead of `Authorization: Bearer`. Tavo handles this automatically.
 
 ## Ollama
 
@@ -133,4 +133,4 @@ models:
 
 ## Upstream API Key Storage
 
-Upstream provider API keys are encrypted at rest with AES-256-GCM. The encryption key is derived from `VOIDLLM_ENCRYPTION_KEY`. Keys are decrypted in memory only when needed for upstream requests.
+Upstream provider API keys are encrypted at rest with AES-256-GCM. The encryption key is derived from `TAVO_ENCRYPTION_KEY`. Keys are decrypted in memory only when needed for upstream requests.

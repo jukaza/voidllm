@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/voidmind-io/voidllm/internal/config"
-	"github.com/voidmind-io/voidllm/internal/db"
+	"github.com/jukaza/tavo/internal/config"
+	"github.com/jukaza/tavo/internal/db"
 )
 
 // defaultBatchSize is the maximum number of rows deleted in a single

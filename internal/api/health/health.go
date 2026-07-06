@@ -5,10 +5,10 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/voidmind-io/voidllm/internal/db"
+	"github.com/jukaza/tavo/internal/db"
 )
 
-// Version is set at build time via -ldflags "-X 'github.com/voidmind-io/voidllm/internal/api/health.Version=...'".
+// Version is set at build time via -ldflags "-X 'github.com/jukaza/tavo/internal/api/health.Version=...'".
 var Version = "dev"
 
 // ShutdownChecker reports whether the server is draining connections.

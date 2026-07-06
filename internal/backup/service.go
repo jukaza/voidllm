@@ -17,9 +17,9 @@ import (
 	"github.com/robfig/cron/v3"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/voidmind-io/voidllm/internal/config"
-	"github.com/voidmind-io/voidllm/internal/db"
-	"github.com/voidmind-io/voidllm/pkg/crypto"
+	"github.com/jukaza/tavo/internal/config"
+	"github.com/jukaza/tavo/internal/db"
+	"github.com/jukaza/tavo/pkg/crypto"
 )
 
 // Service orchestrates cloud backups and restores.

@@ -140,7 +140,7 @@ export default function DashboardPage() {
   const { data: site } = useSiteConfig()
   const { data: features } = usePublicFeatures()
   const { t } = useTranslation()
-  const systemName = site?.system_name ?? 'VoidLLM'
+  const systemName = site?.system_name ?? 'Tavo'
   const playgroundEnabled = features?.modules.playground !== false
   const [showUpdateDialog, setShowUpdateDialog] = useState(false)
 

@@ -9,8 +9,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/voidmind-io/voidllm/internal/config"
-	"github.com/voidmind-io/voidllm/pkg/crypto"
+	"github.com/jukaza/tavo/internal/config"
+	"github.com/jukaza/tavo/pkg/crypto"
 )
 
 // deletedModelNameSuffix is appended to model.name on soft-delete so the API-visible

@@ -8,7 +8,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	"github.com/voidmind-io/voidllm/internal/apierror"
+	"github.com/jukaza/tavo/internal/apierror"
 )
 
 const oauthExchangeTTL = 2 * time.Minute

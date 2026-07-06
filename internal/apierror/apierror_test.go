@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/voidmind-io/voidllm/internal/apierror"
+	"github.com/jukaza/tavo/internal/apierror"
 )
 
 // newApp builds a minimal Fiber app that invokes fn on GET /test.

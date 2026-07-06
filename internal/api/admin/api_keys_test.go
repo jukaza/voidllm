@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/voidmind-io/voidllm/internal/auth"
-	"github.com/voidmind-io/voidllm/pkg/keygen"
+	"github.com/jukaza/tavo/internal/auth"
+	"github.com/jukaza/tavo/pkg/keygen"
 )
 
 func TestCreateAPIKey(t *testing.T) {

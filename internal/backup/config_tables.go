@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/voidmind-io/voidllm/internal/db"
+	"github.com/jukaza/tavo/internal/db"
 )
 
 // ConfigPayload is the JSON format for config-scope cloud backups.

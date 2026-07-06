@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/voidmind-io/voidllm/internal/shutdown"
+	"github.com/jukaza/tavo/internal/shutdown"
 )
 
 func TestNew(t *testing.T) {

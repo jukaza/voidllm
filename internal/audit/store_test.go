@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/voidmind-io/voidllm/internal/audit"
-	"github.com/voidmind-io/voidllm/internal/db"
+	"github.com/jukaza/tavo/internal/audit"
+	"github.com/jukaza/tavo/internal/db"
 )
 
 // insertAuditLog inserts a single audit_logs row directly into the database,

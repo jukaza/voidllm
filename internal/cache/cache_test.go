@@ -4,7 +4,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/voidmind-io/voidllm/internal/cache"
+	"github.com/jukaza/tavo/internal/cache"
 )
 
 // newIntCache is a convenience constructor for Cache[string, int].

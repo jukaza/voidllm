@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/voidmind-io/voidllm/internal/audit"
-	"github.com/voidmind-io/voidllm/internal/config"
-	"github.com/voidmind-io/voidllm/internal/db"
+	"github.com/jukaza/tavo/internal/audit"
+	"github.com/jukaza/tavo/internal/config"
+	"github.com/jukaza/tavo/internal/db"
 )
 
 // newTestDB opens a named in-memory SQLite database, runs migrations, and

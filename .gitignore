@@ -6,8 +6,8 @@ tmp/
 ui/dist/
 
 # Config (never commit secrets)
-voidllm.yaml
-voidllm.dev.yaml
+tavo.yaml
+tavo.dev.yaml
 *.license.jwt
 
 # Uploaded site assets (custom logos, etc.)
@@ -42,6 +42,6 @@ node_modules/
 .claude/
 
 # Binary (built by go build)
-/voidllm
-/voidllm-server
+/tavo
+/tavo-server
 /bench

@@ -12,4 +12,4 @@ export const DEFAULT_SETTINGS_DRAFT: SettingsDraft = {
   require_terms_on_login: false,
 }
 
-export const SETTINGS_DRAFT_STORAGE_KEY = 'voidllm.admin_settings.draft.v1'
+export const SETTINGS_DRAFT_STORAGE_KEY = 'tavo.admin_settings.draft.v1'

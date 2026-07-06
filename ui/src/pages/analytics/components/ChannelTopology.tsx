@@ -9,7 +9,7 @@ import { useSiteConfig } from '../../../hooks/useSiteConfig'
 function ChannelHubLabel() {
   const { data } = useSiteConfig()
   return (
-    <span className="text-sm font-bold text-text-primary">{data?.system_name ?? 'VoidLLM'}</span>
+    <span className="text-sm font-bold text-text-primary">{data?.system_name ?? 'Tavo'}</span>
   )
 }
 

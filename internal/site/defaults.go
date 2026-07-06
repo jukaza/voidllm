@@ -26,7 +26,7 @@ func defaultHomePageContent(name string) string {
 }
 
 func defaultAnnouncements(name string) []Announcement {
-	zaloURL := "https://zalo.me/g/voidllm-hotro"
+	zaloURL := "https://zalo.me/g/tavo-hotro"
 	qrURL := "https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=" + url.QueryEscape(zaloURL)
 	content := fmt.Sprintf(`## 🎉 Khai trường — Chào mừng đến với **%s**
 

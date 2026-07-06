@@ -1,14 +1,14 @@
 services:
-  voidllm:
-    image: ghcr.io/voidmind-io/voidllm:latest
+  tavo:
+    image: ghcr.io/jukaza/tavo:latest
     ports:
       - "8080:8080"
     volumes:
-      - ./voidllm.yaml:/etc/voidllm/voidllm.yaml:ro
-      - ./voidllm.license.jwt:/etc/voidllm/voidllm.license.jwt:ro
+      - ./tavo.yaml:/etc/tavo/tavo.yaml:ro
+      - ./tavo.license.jwt:/etc/tavo/tavo.license.jwt:ro
     environment:
-      - VOIDLLM_ADMIN_KEY=${VOIDLLM_ADMIN_KEY}
-      - VOIDLLM_ENCRYPTION_KEY=${VOIDLLM_ENCRYPTION_KEY}
+      - TAVO_ADMIN_KEY=${TAVO_ADMIN_KEY}
+      - TAVO_ENCRYPTION_KEY=${TAVO_ENCRYPTION_KEY}
     depends_on:
       postgres:
         condition: service_healthy
@@ -19,13 +19,13 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: voidllm
-      POSTGRES_USER: voidllm
+      POSTGRES_DB: tavo
+      POSTGRES_USER: tavo
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U voidllm"]
+      test: ["CMD-SHELL", "pg_isready -U tavo"]
       interval: 5s
       timeout: 3s
       retries: 5

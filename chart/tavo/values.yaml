@@ -2,7 +2,7 @@
 replicaCount: 1
 
 image:
-  repository: ghcr.io/voidmind-io/voidllm
+  repository: ghcr.io/jukaza/tavo
   # -- Overrides the image tag (default: Chart appVersion)
   tag: ""
   pullPolicy: IfNotPresent
@@ -19,7 +19,7 @@ serviceAccount:
   name: ""
 
 # ---------------------------------------------------------------------------
-# VoidLLM application configuration (rendered as voidllm.yaml ConfigMap)
+# Tavo application configuration (rendered as tavo.yaml ConfigMap)
 # ---------------------------------------------------------------------------
 config:
   server:
@@ -44,8 +44,8 @@ config:
     # -- Database driver: sqlite or postgres
     driver: sqlite
     # -- SQLite path (ignored when postgres). PG example:
-    #    postgres://user:pass@host:5432/voidllm?sslmode=require
-    dsn: /data/voidllm.db
+    #    postgres://user:pass@host:5432/tavo?sslmode=require
+    dsn: /data/tavo.db
     maxOpenConns: 25
     maxIdleConns: 5
     connMaxLifetime: 5m
@@ -57,7 +57,7 @@ config:
 
   redis:
     # -- Key prefix for all Redis keys. Used when redis subchart is enabled.
-    keyPrefix: "voidllm:"
+    keyPrefix: "tavo:"
 
   logging:
     level: info
@@ -65,7 +65,7 @@ config:
 
   settings:
     bootstrap:
-      adminEmail: "admin@voidllm.local"
+      adminEmail: "admin@tavo.local"
     usage:
       bufferSize: 1000
       flushInterval: 5s
@@ -136,14 +136,14 @@ ingress:
   # kubernetes.io/ingress.class: nginx
   # cert-manager.io/cluster-issuer: letsencrypt-prod
   hosts:
-    - host: voidllm.example.com
+    - host: tavo.example.com
       paths:
         - path: /
           pathType: Prefix
   tls: []
-  # - secretName: voidllm-tls
+  # - secretName: tavo-tls
   #   hosts:
-  #     - voidllm.example.com
+  #     - tavo.example.com
 
 # ---------------------------------------------------------------------------
 # Persistence (SQLite only — ignored when database.driver=postgres)
@@ -214,12 +214,12 @@ istio:
           protocol: HTTPS
         tls:
           mode: SIMPLE
-          credentialName: voidllm-tls
+          credentialName: tavo-tls
         hosts:
-          - voidllm.example.com
+          - tavo.example.com
   virtualService:
     hosts:
-      - voidllm.example.com
+      - tavo.example.com
 
 # ---------------------------------------------------------------------------
 # Optional subcharts
@@ -229,8 +229,8 @@ istio:
 postgresql:
   enabled: false
   auth:
-    database: voidllm
-    username: voidllm
+    database: tavo
+    username: tavo
     password: ""
   primary:
     persistence:
@@ -246,7 +246,7 @@ redis:
 # ---------------------------------------------------------------------------
 # Schema migration pre-upgrade hook (PostgreSQL multi-replica deployments)
 # ---------------------------------------------------------------------------
-# When enabled, a Helm pre-upgrade Job runs "voidllm migrate-schema" before
+# When enabled, a Helm pre-upgrade Job runs "tavo migrate-schema" before
 # the Deployment is updated. PostgreSQL advisory locking ensures the job runs
 # exactly once even if the Job pod is restarted. Recommended when
 # replicaCount > 1 and database.driver is postgres.

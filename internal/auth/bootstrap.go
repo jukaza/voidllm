@@ -13,10 +13,10 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/voidmind-io/voidllm/internal/cache"
-	"github.com/voidmind-io/voidllm/internal/config"
-	"github.com/voidmind-io/voidllm/internal/db"
-	"github.com/voidmind-io/voidllm/pkg/keygen"
+	"github.com/jukaza/tavo/internal/cache"
+	"github.com/jukaza/tavo/internal/config"
+	"github.com/jukaza/tavo/internal/db"
+	"github.com/jukaza/tavo/pkg/keygen"
 )
 
 // BootstrapResult holds the plaintext credentials generated during a successful
@@ -92,7 +92,7 @@ func Bootstrap(ctx context.Context, sqlDB *sql.DB, dialect db.Dialect,
 	}
 
 	if count > 0 {
-		log.Warn("VOIDLLM_ADMIN_KEY is set but database already has keys, ignoring")
+		log.Warn("TAVO_ADMIN_KEY is set but database already has keys, ignoring")
 		return nil, nil
 	}
 
@@ -157,7 +157,7 @@ func Bootstrap(ctx context.Context, sqlDB *sql.DB, dialect db.Dialect,
 		Name:    "Bootstrap Admin Key",
 	})
 
-	os.Unsetenv("VOIDLLM_ADMIN_KEY")
+	os.Unsetenv("TAVO_ADMIN_KEY")
 
 	log.Warn("bootstrap complete, system admin and wallet created",
 		slog.String("key_hint", keyHint))

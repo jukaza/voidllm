@@ -3,7 +3,7 @@ package pii
 import (
 	"fmt"
 
-	"github.com/voidmind-io/voidllm/internal/config"
+	"github.com/jukaza/tavo/internal/config"
 )
 
 // maxGazetteerInlineTerms is the maximum total number of term values that may

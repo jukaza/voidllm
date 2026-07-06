@@ -1,4 +1,4 @@
-// Package shutdown coordinates graceful shutdown of the VoidLLM server by
+// Package shutdown coordinates graceful shutdown of the Tavo server by
 // tracking in-flight requests and providing an orderly drain sequence before
 // the process exits.
 package shutdown

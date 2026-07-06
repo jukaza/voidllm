@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/voidmind-io/voidllm/pkg/keygen"
+	"github.com/jukaza/tavo/pkg/keygen"
 )
 
 

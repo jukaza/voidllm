@@ -1,5 +1,5 @@
 // Package keygen provides API key generation, HMAC-SHA256 hashing, and
-// prefix validation for VoidLLM's authentication system.
+// prefix validation for Tavo's authentication system.
 package keygen
 
 import (

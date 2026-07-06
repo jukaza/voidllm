@@ -1,7 +1,11 @@
+import type { TokenBarSegment } from '../../../lib/tokenColors'
+
 export interface HorizontalBarItem {
   label: string
   value: number
   detail?: string
+  /** When set, renders a stacked bar colored by token type. */
+  segments?: TokenBarSegment[]
 }
 
 export interface HorizontalBarProps {
@@ -17,7 +21,8 @@ export function HorizontalBar({ items, maxValue, color }: HorizontalBarProps) {
     <div className="space-y-5">
       {items.map((item, idx) => {
         const pct = max > 0 ? (item.value / max) * 100 : 0
-        const opacity = Math.max(1 - idx * 0.2, 0.2)
+        const hasSegments = (item.segments?.length ?? 0) > 0
+        const opacity = hasSegments ? 1 : Math.max(1 - idx * 0.2, 0.2)
 
         const barStyle: React.CSSProperties = color
           ? { width: `${pct}%`, background: color, opacity }
@@ -35,8 +40,26 @@ export function HorizontalBar({ items, maxValue, color }: HorizontalBarProps) {
                 <span className="text-xs text-text-tertiary shrink-0 tabular-nums">{item.detail}</span>
               )}
             </div>
-            <div className="h-2.5 rounded-full bg-[#25252d] overflow-hidden">
-              <div className="h-full rounded-full transition-all duration-500" style={barStyle} />
+            <div className="h-2.5 rounded-full bg-bg-tertiary overflow-hidden">
+              {hasSegments ? (
+                <div
+                  className="flex h-full rounded-full overflow-hidden transition-all duration-500"
+                  style={{ width: `${pct}%` }}
+                >
+                  {item.segments!.map((seg, segIdx) => {
+                    const segPct = item.value > 0 ? (seg.value / item.value) * 100 : 0
+                    return (
+                      <div
+                        key={segIdx}
+                        className="h-full shrink-0"
+                        style={{ width: `${segPct}%`, backgroundColor: seg.color }}
+                      />
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="h-full rounded-full transition-all duration-500" style={barStyle} />
+              )}
             </div>
           </div>
         )

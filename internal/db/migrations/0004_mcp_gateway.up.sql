@@ -11,7 +11,7 @@
 -- 1. MCP SERVERS
 -- =============================================================================
 -- Registry of external MCP servers. auth_token_enc is AES-256-GCM encrypted
--- via VOIDLLM_ENCRYPTION_KEY; NULL when auth_type = 'none'.
+-- via TAVO_ENCRYPTION_KEY; NULL when auth_type = 'none'.
 -- alias is a stable short name used in tool call logs and config references.
 -- is_active: 0/1 integer flag; soft-delete is via deleted_at.
 

@@ -1,5 +1,5 @@
 // Package config handles loading, environment variable interpolation, defaulting,
-// and validation of the VoidLLM configuration file (voidllm.yaml).
+// and validation of the Tavo configuration file (tavo.yaml).
 package config
 
 import (
@@ -12,7 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Config is the top-level configuration structure for VoidLLM.
+// Config is the top-level configuration structure for Tavo.
 type Config struct {
 	Server     ServerConfig      `yaml:"server"`
 	Database   DatabaseConfig    `yaml:"database"`
@@ -214,7 +214,7 @@ type LoggingConfig struct {
 // startup when settings.admin_key is set and the database is empty.
 type BootstrapConfig struct {
 	// AdminEmail is the email address of the initial system-admin user.
-	// Defaults to "admin@voidllm.local".
+	// Defaults to "admin@tavo.local".
 	AdminEmail string `yaml:"admin_email"`
 }
 
@@ -540,17 +540,17 @@ func Load(path string) (*Config, bool, error) {
 }
 
 // findConfigFile returns the path to the configuration file by checking, in order:
-//  1. The VOIDLLM_CONFIG environment variable
-//  2. ./voidllm.yaml in the current working directory
-//  3. /etc/voidllm/voidllm.yaml
+//  1. The TAVO_CONFIG environment variable
+//  2. ./tavo.yaml in the current working directory
+//  3. /etc/tavo/tavo.yaml
 func findConfigFile() (string, error) {
-	if v := os.Getenv("VOIDLLM_CONFIG"); v != "" {
+	if v := os.Getenv("TAVO_CONFIG"); v != "" {
 		return v, nil
 	}
 
 	candidates := []string{
-		"./voidllm.yaml",
-		"/etc/voidllm/voidllm.yaml",
+		"./tavo.yaml",
+		"/etc/tavo/tavo.yaml",
 	}
 	for _, p := range candidates {
 		if _, err := os.Stat(p); err == nil {
@@ -558,7 +558,7 @@ func findConfigFile() (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("no config file found; set VOIDLLM_CONFIG or place voidllm.yaml in the current directory")
+	return "", fmt.Errorf("no config file found; set TAVO_CONFIG or place tavo.yaml in the current directory")
 }
 
 // loadDefaults returns a Config populated entirely from environment
@@ -566,10 +566,10 @@ func findConfigFile() (string, error) {
 // file is found.
 func loadDefaults() (*Config, error) {
 	var cfg Config
-	cfg.Settings.AdminKey = os.Getenv("VOIDLLM_ADMIN_KEY")
-	cfg.Settings.EncryptionKey = os.Getenv("VOIDLLM_ENCRYPTION_KEY")
-	cfg.Database.DSN = os.Getenv("VOIDLLM_DATABASE_DSN")
-	cfg.Database.Driver = os.Getenv("VOIDLLM_DATABASE_DRIVER")
+	cfg.Settings.AdminKey = os.Getenv("TAVO_ADMIN_KEY")
+	cfg.Settings.EncryptionKey = os.Getenv("TAVO_ENCRYPTION_KEY")
+	cfg.Database.DSN = os.Getenv("TAVO_DATABASE_DSN")
+	cfg.Database.Driver = os.Getenv("TAVO_DATABASE_DRIVER")
 	cfg.setDefaults()
 	if err := cfg.validate(); err != nil {
 		return nil, fmt.Errorf("config: %w", err)
@@ -610,7 +610,7 @@ func (c *Config) setDefaults() {
 		c.Database.Driver = "sqlite"
 	}
 	if c.Database.DSN == "" && c.Database.Driver == "sqlite" {
-		c.Database.DSN = "voidllm.db"
+		c.Database.DSN = "tavo.db"
 	}
 	if c.Database.Driver == "postgres" {
 		if c.Database.MaxOpenConns == 0 {
@@ -637,7 +637,7 @@ func (c *Config) setDefaults() {
 
 	// Redis
 	if c.Redis.KeyPrefix == "" {
-		c.Redis.KeyPrefix = "voidllm:"
+		c.Redis.KeyPrefix = "tavo:"
 	}
 
 	// Settings usage
@@ -669,7 +669,7 @@ func (c *Config) setDefaults() {
 
 	// Bootstrap
 	if c.Settings.Bootstrap.AdminEmail == "" {
-		c.Settings.Bootstrap.AdminEmail = "admin@voidllm.local"
+		c.Settings.Bootstrap.AdminEmail = "admin@tavo.local"
 	}
 
 	// OTel

@@ -72,8 +72,8 @@ describe('Markdown', () => {
 
   describe('Links', () => {
     it('renders [text](url) as an anchor with the correct href', () => {
-      render(<Markdown>{'[VoidLLM](https://example.com)'}</Markdown>)
-      const link = screen.getByRole('link', { name: 'VoidLLM' })
+      render(<Markdown>{'[Tavo](https://example.com)'}</Markdown>)
+      const link = screen.getByRole('link', { name: 'Tavo' })
       expect(link).toBeInTheDocument()
       expect(link).toHaveAttribute('href', 'https://example.com')
     })

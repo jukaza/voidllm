@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/voidmind-io/voidllm/internal/auth"
-	"github.com/voidmind-io/voidllm/internal/db"
+	"github.com/jukaza/tavo/internal/auth"
+	"github.com/jukaza/tavo/internal/db"
 )
 
 func mustCreateUser(t *testing.T, database *db.DB, email, displayName string) *db.User {

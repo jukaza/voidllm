@@ -1,4 +1,4 @@
-// Package logger provides structured logging utilities for VoidLLM.
+// Package logger provides structured logging utilities for Tavo.
 package logger
 
 import (
@@ -9,7 +9,7 @@ import (
 
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/voidmind-io/voidllm/internal/config"
+	"github.com/jukaza/tavo/internal/config"
 )
 
 // RequestIDHandler wraps a slog.Handler and automatically adds a request_id

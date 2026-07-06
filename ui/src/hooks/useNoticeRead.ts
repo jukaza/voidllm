@@ -11,10 +11,10 @@ function subscribe(onStoreChange: () => void) {
     if (e.key === LAST_READ_NOTICE_KEY || e.key === null) onStoreChange()
   }
   window.addEventListener('storage', handler)
-  window.addEventListener('voidllm-notice-read', onStoreChange)
+  window.addEventListener('tavo-notice-read', onStoreChange)
   return () => {
     window.removeEventListener('storage', handler)
-    window.removeEventListener('voidllm-notice-read', onStoreChange)
+    window.removeEventListener('tavo-notice-read', onStoreChange)
   }
 }
 
@@ -32,7 +32,7 @@ export function useNoticeRead(announcements: SiteAnnouncement[]) {
   const markRead = useCallback(() => {
     if (announcements.length === 0) return
     localStorage.setItem(LAST_READ_NOTICE_KEY, fingerprint)
-    window.dispatchEvent(new Event('voidllm-notice-read'))
+    window.dispatchEvent(new Event('tavo-notice-read'))
   }, [announcements.length, fingerprint])
 
   return { isUnread, unreadCount, markRead }

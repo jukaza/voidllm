@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/voidmind-io/voidllm/internal/jsonx"
+	"github.com/jukaza/tavo/internal/jsonx"
 )
 
 // toolIDCharsetRe and toolNameCharsetRe are precompiled conservative charset

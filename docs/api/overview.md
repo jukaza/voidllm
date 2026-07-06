@@ -6,7 +6,7 @@ order: 1
 ---
 # API Reference
 
-VoidLLM exposes two API surfaces: the **Proxy API** (OpenAI-compatible, for LLM requests) and the **Admin API** (for management).
+Tavo exposes two API surfaces: the **Proxy API** (OpenAI-compatible, for LLM requests) and the **Admin API** (for management).
 
 ## Authentication
 
@@ -32,7 +32,7 @@ The proxy forwards requests to upstream LLM providers. Any OpenAI-compatible end
 | `POST /v1/audio/speech` | Text to speech |
 | `GET /v1/models` | List available models |
 
-VoidLLM does not validate request bodies beyond extracting the `model` field. The upstream provider handles validation.
+Tavo does not validate request bodies beyond extracting the `model` field. The upstream provider handles validation.
 
 ## Admin API (`/api/v1/*`)
 
@@ -93,12 +93,12 @@ Management endpoints for keys, models, usage, wallet, and users.
 
 ## Swagger UI
 
-When VoidLLM is running, the full OpenAPI spec is available at:
+When Tavo is running, the full OpenAPI spec is available at:
 
 - **Swagger UI:** `http://localhost:8080/api/docs`
 - **OpenAPI JSON:** `http://localhost:8080/api/docs/swagger.json`
 
-A static copy of the spec is also available in the repository: [swagger.yaml](https://github.com/voidmind-io/voidllm/blob/main/docs/api/swagger.yaml)
+A static copy of the spec is also available in the repository: [swagger.yaml](https://github.com/jukaza/tavo/blob/main/docs/api/swagger.yaml)
 
 ## Error Format
 

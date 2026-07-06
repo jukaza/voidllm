@@ -10,10 +10,10 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	"github.com/voidmind-io/voidllm/internal/auth"
-	"github.com/voidmind-io/voidllm/internal/cache"
-	"github.com/voidmind-io/voidllm/internal/db"
-	"github.com/voidmind-io/voidllm/pkg/keygen"
+	"github.com/jukaza/tavo/internal/auth"
+	"github.com/jukaza/tavo/internal/cache"
+	"github.com/jukaza/tavo/internal/db"
+	"github.com/jukaza/tavo/pkg/keygen"
 )
 
 // doLogin performs a POST /api/v1/auth/login and returns the session token.

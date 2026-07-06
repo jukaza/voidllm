@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/voidmind-io/voidllm/internal/jsonx"
+	"github.com/jukaza/tavo/internal/jsonx"
 )
 
 // maxAnthropicToolBlocks is the adapter-level cap on the number of distinct

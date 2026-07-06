@@ -2,9 +2,9 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ include "voidllm.fullname" . }}-migrate-schema
+  name: {{ include "tavo.fullname" . }}-migrate-schema
   labels:
-    {{- include "voidllm.labels" . | nindent 4 }}
+    {{- include "tavo.labels" . | nindent 4 }}
   annotations:
     "helm.sh/hook": pre-upgrade
     "helm.sh/hook-weight": "-5"
@@ -15,7 +15,7 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "voidllm.selectorLabels" . | nindent 8 }}
+        {{- include "tavo.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: migrate-schema
     spec:
       restartPolicy: OnFailure
@@ -23,7 +23,7 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "voidllm.serviceAccountName" . }}
+      serviceAccountName: {{ include "tavo.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
@@ -35,22 +35,22 @@ spec:
           args:
             - migrate-schema
             - --config
-            - /etc/voidllm/voidllm.yaml
+            - /etc/tavo/tavo.yaml
           envFrom:
             - secretRef:
-                name: {{ include "voidllm.fullname" . }}
+                name: {{ include "tavo.fullname" . }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
             - name: config
-              mountPath: /etc/voidllm
+              mountPath: /etc/tavo
               readOnly: true
             - name: tmp
               mountPath: /tmp
       volumes:
         - name: config
           configMap:
-            name: {{ include "voidllm.fullname" . }}-config
+            name: {{ include "tavo.fullname" . }}-config
         - name: tmp
           emptyDir: {}
       {{- with .Values.nodeSelector }}

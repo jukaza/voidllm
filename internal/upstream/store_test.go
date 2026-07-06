@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/voidmind-io/voidllm/internal/config"
-	"github.com/voidmind-io/voidllm/internal/db"
-	"github.com/voidmind-io/voidllm/pkg/crypto"
+	"github.com/jukaza/tavo/internal/config"
+	"github.com/jukaza/tavo/internal/db"
+	"github.com/jukaza/tavo/pkg/crypto"
 )
 
 func testEncryptionKey() []byte {

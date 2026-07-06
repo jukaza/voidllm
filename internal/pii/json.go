@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/voidmind-io/voidllm/internal/jsonx"
+	"github.com/jukaza/tavo/internal/jsonx"
 )
 
 // knownContentPartTypes is the set of non-text content-part type values that

@@ -1,4 +1,4 @@
-// Package otel initialises the OpenTelemetry SDK for VoidLLM.
+// Package otel initialises the OpenTelemetry SDK for Tavo.
 // It is intentionally thin: it wires a single OTLP/gRPC exporter, sets up the
 // global TracerProvider and propagator, and returns a shutdown function the
 // caller must invoke during application shutdown to flush buffered spans.

@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/voidmind-io/voidllm/internal/config"
+	"github.com/jukaza/tavo/internal/config"
 )
 
 // modelConfigs is a helper that returns a minimal valid slice of ModelConfig

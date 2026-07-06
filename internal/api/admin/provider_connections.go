@@ -12,9 +12,9 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	"github.com/voidmind-io/voidllm/internal/apierror"
-	"github.com/voidmind-io/voidllm/internal/db"
-	"github.com/voidmind-io/voidllm/pkg/crypto"
+	"github.com/jukaza/tavo/internal/apierror"
+	"github.com/jukaza/tavo/internal/db"
+	"github.com/jukaza/tavo/pkg/crypto"
 )
 
 func connectionAAD(id string) []byte {

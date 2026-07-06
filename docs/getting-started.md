@@ -6,42 +6,42 @@ order: 1
 ---
 # Getting Started
 
-VoidLLM runs as a single binary with the admin UI embedded. No separate frontend server, no Node.js, no extra containers.
+Tavo runs as a single binary with the admin UI embedded. No separate frontend server, no Node.js, no extra containers.
 
 ## Quick Start (Docker)
 
 ```bash
 docker run -p 8080:8080 \
-  -v voidllm_data:/data \
-  -e VOIDLLM_ENCRYPTION_KEY=$(openssl rand -base64 32) \
-  -e VOIDLLM_ADMIN_KEY=my-admin-key-at-least-32-chars!! \
-  ghcr.io/voidmind-io/voidllm:latest
+  -v tavo_data:/data \
+  -e TAVO_ENCRYPTION_KEY=$(openssl rand -base64 32) \
+  -e TAVO_ADMIN_KEY=my-admin-key-at-least-32-chars!! \
+  ghcr.io/jukaza/tavo:latest
 ```
 
 ## Quick Start (Binary)
 
-Download the latest binary for your platform from the [releases page](https://github.com/voidmind-io/voidllm/releases/latest):
+Download the latest binary for your platform from the [releases page](https://github.com/jukaza/tavo/releases/latest):
 
 ```bash
 # Linux (amd64)
-curl -sL https://github.com/voidmind-io/voidllm/releases/latest/download/voidllm-linux-amd64.tar.gz | tar xz
-export VOIDLLM_ADMIN_KEY=$(openssl rand -base64 32)
-export VOIDLLM_ENCRYPTION_KEY=$(openssl rand -base64 32)
-./voidllm
+curl -sL https://github.com/jukaza/tavo/releases/latest/download/tavo-linux-amd64.tar.gz | tar xz
+export TAVO_ADMIN_KEY=$(openssl rand -base64 32)
+export TAVO_ENCRYPTION_KEY=$(openssl rand -base64 32)
+./tavo
 ```
 
 Available for: Linux (amd64, arm64), Windows (amd64, arm64), macOS (amd64, arm64).
 
-The database defaults to `./voidllm.db` in the current directory. No config file required - VoidLLM starts with sensible defaults and the bootstrap wizard handles initial setup.
+The database defaults to `./tavo.db` in the current directory. No config file required - Tavo starts with sensible defaults and the bootstrap wizard handles initial setup.
 
-On first start, VoidLLM prints your credentials to stdout:
+On first start, Tavo prints your credentials to stdout:
 
 ```
 ========================================
  BOOTSTRAP COMPLETE - COPY THESE NOW
 ========================================
   API Key:    vl_uk_a3f2...
-  Email:      admin@voidllm.local
+  Email:      admin@tavo.local
   Password:   <random>
 ========================================
 ```
@@ -52,7 +52,7 @@ On first start, VoidLLM prints your credentials to stdout:
 
 ## Add a Model
 
-Edit `voidllm.yaml` or use the UI (Models -> Create Model):
+Edit `tavo.yaml` or use the UI (Models -> Create Model):
 
 ```yaml
 models:
@@ -74,13 +74,13 @@ curl http://localhost:8080/v1/chat/completions \
   -d '{"model": "default", "messages": [{"role": "user", "content": "hello"}]}'
 ```
 
-VoidLLM resolves `default` to whatever model you configured with that alias, forwards the request, and streams the response back. Under 500 microseconds of overhead.
+Tavo resolves `default` to whatever model you configured with that alias, forwards the request, and streams the response back. Under 500 microseconds of overhead.
 
 ## Connect Your IDE
 
 ### Cursor / Windsurf (LLM Proxy)
 
-Change the base URL to your VoidLLM instance:
+Change the base URL to your Tavo instance:
 ```
 Base URL: http://localhost:8080/v1
 API Key: vl_uk_...

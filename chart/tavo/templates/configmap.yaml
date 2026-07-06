@@ -1,11 +1,11 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "voidllm.fullname" . }}-config
+  name: {{ include "tavo.fullname" . }}-config
   labels:
-    {{- include "voidllm.labels" . | nindent 4 }}
+    {{- include "tavo.labels" . | nindent 4 }}
 data:
-  voidllm.yaml: |
+  tavo.yaml: |
     server:
       proxy:
         port: {{ .Values.config.server.proxy.port }}
@@ -33,7 +33,7 @@ data:
       driver: {{ .Values.config.database.driver }}
       {{- end }}
       {{- if .Values.postgresql.enabled }}
-      dsn: postgres://{{ .Values.postgresql.auth.username }}:${POSTGRES_PASSWORD}@{{ include "voidllm.fullname" . }}-postgresql:5432/{{ .Values.postgresql.auth.database }}?sslmode=disable
+      dsn: postgres://{{ .Values.postgresql.auth.username }}:${POSTGRES_PASSWORD}@{{ include "tavo.fullname" . }}-postgresql:5432/{{ .Values.postgresql.auth.database }}?sslmode=disable
       {{- else }}
       dsn: {{ .Values.config.database.dsn }}
       {{- end }}
@@ -51,8 +51,8 @@ data:
     {{- if .Values.redis.enabled }}
     redis:
       enabled: true
-      url: redis://{{ include "voidllm.fullname" . }}-redis-master:6379
-      key_prefix: {{ .Values.config.redis.keyPrefix | default "voidllm:" }}
+      url: redis://{{ include "tavo.fullname" . }}-redis-master:6379
+      key_prefix: {{ .Values.config.redis.keyPrefix | default "tavo:" }}
     {{- end }}
 
     logging:
@@ -60,10 +60,10 @@ data:
       format: {{ .Values.config.logging.format }}
 
     settings:
-      admin_key: ${VOIDLLM_ADMIN_KEY}
-      encryption_key: ${VOIDLLM_ENCRYPTION_KEY}
+      admin_key: ${TAVO_ADMIN_KEY}
+      encryption_key: ${TAVO_ENCRYPTION_KEY}
       {{- if .Values.secrets.license }}
-      license: ${VOIDLLM_LICENSE}
+      license: ${TAVO_LICENSE}
       {{- end }}
       bootstrap:
         admin_email: {{ .Values.config.settings.bootstrap.adminEmail | quote }}

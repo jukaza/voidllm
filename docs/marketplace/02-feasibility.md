@@ -73,7 +73,7 @@ React Router đã tách route public (`/login`, `/invite/:token`) và protected 
 
 ## Rủi ro / lưu ý (landmines)
 
-1. **Đừng xoá migration cũ** — chỉ thêm migration mới; DB đang chạy (`voidllm.db`) sẽ hỏng nếu đổi lịch sử migration.
+1. **Đừng xoá migration cũ** — chỉ thêm migration mới; DB đang chạy (`tavo.db`) sẽ hỏng nếu đổi lịch sử migration.
 2. **Race âm ví khi trừ tiền async** — chấp nhận với trả trước; có thể siết bằng "soft floor" (chặn request khi balance < ước tính chi phí request).
 3. **Streaming không trả usage** với vài provider custom nếu client không set `stream_options.include_usage` — cần fallback ước tính token hoặc ép include_usage phía proxy.
 4. **RBAC rút gọn** đụng tất cả `RequireRole` trong routes.go — nên map `org_admin/team_admin/member` → `customer` bằng migration thay vì sửa từng chỗ ngay, xoá dần sau.

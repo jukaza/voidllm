@@ -29,10 +29,10 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/voidmind-io/voidllm/internal/auth"
-	"github.com/voidmind-io/voidllm/internal/config"
-	"github.com/voidmind-io/voidllm/internal/db"
-	"github.com/voidmind-io/voidllm/internal/usage"
+	"github.com/jukaza/tavo/internal/auth"
+	"github.com/jukaza/tavo/internal/config"
+	"github.com/jukaza/tavo/internal/db"
+	"github.com/jukaza/tavo/internal/usage"
 )
 
 // ── FIX 2: raw byte cap before adapter ────────────────────────────────────────

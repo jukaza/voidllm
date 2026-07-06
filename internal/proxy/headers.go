@@ -56,7 +56,7 @@ func setUpstreamHeaders(req *http.Request, c fiber.Ctx, model Model) {
 		req.Header.Set("Authorization", "Bearer "+model.APIKey)
 	}
 
-	req.Header.Set("User-Agent", "VoidLLM/0.1")
+	req.Header.Set("User-Agent", "Tavo/0.1")
 }
 
 // copyResponseHeaders copies allowlisted upstream response headers onto the

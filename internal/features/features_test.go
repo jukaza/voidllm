@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/voidmind-io/voidllm/internal/config"
-	"github.com/voidmind-io/voidllm/internal/features"
+	"github.com/jukaza/tavo/internal/config"
+	"github.com/jukaza/tavo/internal/features"
 )
 
 type mapStore struct {

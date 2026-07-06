@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -60,6 +61,69 @@ func (d *DB) CountUserSessions(ctx context.Context, userID string) (int, error) 
 		return 0, fmt.Errorf("count user sessions: %w", translateError(err))
 	}
 	return count, nil
+}
+
+// RevokeUserSessionsByMatchingClient hard-deletes active session keys for a user
+// that share the same login_ip and user_agent. Used when allow_multiple is enabled
+// so a fresh login from the same browser replaces stale sessions instead of
+// accumulating a new device row after server restarts.
+// Returns the revoked session IDs. Empty userAgent is a no-op.
+func (d *DB) RevokeUserSessionsByMatchingClient(ctx context.Context, userID, loginIP, userAgent string) ([]string, error) {
+	userAgent = strings.TrimSpace(userAgent)
+	if userAgent == "" {
+		return nil, nil
+	}
+
+	p := d.dialect.Placeholder
+	selectQuery := "SELECT id FROM api_keys WHERE user_id = " + p(1) +
+		" AND key_type = " + p(2) + " AND deleted_at IS NULL"
+	args := []any{userID, sessionKeyType}
+	argN := 3
+	if loginIP != "" {
+		selectQuery += " AND login_ip = " + p(argN)
+		args = append(args, loginIP)
+		argN++
+	}
+	selectQuery += " AND user_agent = " + p(argN)
+	args = append(args, userAgent)
+
+	rows, err := d.sql.QueryContext(ctx, selectQuery, args...)
+	if err != nil {
+		return nil, fmt.Errorf("revoke sessions by client select: %w", translateError(err))
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if scanErr := rows.Scan(&id); scanErr != nil {
+			return nil, fmt.Errorf("revoke sessions by client scan: %w", scanErr)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("revoke sessions by client rows: %w", err)
+	}
+	if len(ids) == 0 {
+		return nil, nil
+	}
+
+	deleteQuery := "DELETE FROM api_keys WHERE user_id = " + p(1) +
+		" AND key_type = " + p(2) + " AND deleted_at IS NULL"
+	deleteArgs := []any{userID, sessionKeyType}
+	deleteArgN := 3
+	if loginIP != "" {
+		deleteQuery += " AND login_ip = " + p(deleteArgN)
+		deleteArgs = append(deleteArgs, loginIP)
+		deleteArgN++
+	}
+	deleteQuery += " AND user_agent = " + p(deleteArgN)
+	deleteArgs = append(deleteArgs, userAgent)
+
+	if _, err := d.sql.ExecContext(ctx, deleteQuery, deleteArgs...); err != nil {
+		return nil, fmt.Errorf("revoke sessions by client delete: %w", translateError(err))
+	}
+	return ids, nil
 }
 
 // RevokeUserSessionByID hard-deletes one session key owned by userID.

@@ -1,6 +1,6 @@
 ---
 title: "Kubernetes Deployment"
-description: "Deploy VoidLLM with Helm, Istio, and health probes"
+description: "Deploy Tavo with Helm, Istio, and health probes"
 section: deployment
 order: 2
 ---
@@ -9,10 +9,10 @@ order: 2
 ## Basic Installation
 
 ```bash
-helm repo add voidllm https://voidmind-io.github.io/voidllm
+helm repo add tavo https://jukaza.github.io/tavo
 helm repo update
 
-helm install voidllm voidllm/voidllm \
+helm install tavo tavo/tavo \
   --set secrets.adminKey=$(openssl rand -base64 32) \
   --set secrets.encryptionKey=$(openssl rand -base64 32)
 ```
@@ -20,29 +20,29 @@ helm install voidllm voidllm/voidllm \
 Check bootstrap credentials in the pod logs:
 
 ```bash
-kubectl logs deploy/voidllm | grep "BOOTSTRAP"
+kubectl logs deploy/tavo | grep "BOOTSTRAP"
 ```
 
 ## With PostgreSQL
 
-The Helm chart includes a Bitnami PostgreSQL subchart. When enabled, VoidLLM automatically switches from SQLite to PostgreSQL - no manual config needed.
+The Helm chart includes a Bitnami PostgreSQL subchart. When enabled, Tavo automatically switches from SQLite to PostgreSQL - no manual config needed.
 
 ```bash
-helm install voidllm voidllm/voidllm \
+helm install tavo tavo/tavo \
   --set postgresql.enabled=true \
   --set postgresql.auth.password=$(openssl rand -base64 16) \
   --set secrets.adminKey=$(openssl rand -base64 32) \
   --set secrets.encryptionKey=$(openssl rand -base64 32)
 ```
 
-The password must be set explicitly - VoidLLM and the PostgreSQL subchart share this value to authenticate. Default username is `voidllm`, default database is `voidllm`.
+The password must be set explicitly - Tavo and the PostgreSQL subchart share this value to authenticate. Default username is `tavo`, default database is `tavo`.
 
 Pod-to-pod traffic within the cluster is unencrypted (`sslmode=disable`). If you need encrypted database connections, use an external PostgreSQL with a custom DSN:
 
 ```bash
-helm install voidllm voidllm/voidllm \
+helm install tavo tavo/tavo \
   --set config.database.driver=postgres \
-  --set config.database.dsn="postgres://user:pass@external-db:5432/voidllm?sslmode=require"
+  --set config.database.dsn="postgres://user:pass@external-db:5432/tavo?sslmode=require"
 ```
 
 ## With Redis (Multi-Instance)
@@ -50,7 +50,7 @@ helm install voidllm voidllm/voidllm \
 Redis enables distributed rate limiting and instant cache invalidation. Requires an Enterprise license. Without Redis, run only one replica.
 
 ```bash
-helm install voidllm voidllm/voidllm \
+helm install tavo tavo/tavo \
   --set postgresql.enabled=true \
   --set postgresql.auth.password=$(openssl rand -base64 16) \
   --set redis.enabled=true \
@@ -62,7 +62,7 @@ helm install voidllm voidllm/voidllm \
 
 Multi-instance requires both PostgreSQL (shared state) and Redis (distributed rate limiting + cache invalidation).
 
-**Note:** Schema migrations currently run on every pod startup. With multiple replicas, pods may briefly race during rolling updates. PostgreSQL's transaction isolation prevents corruption, but you may see transient errors in logs. A dedicated migration hook is planned ([#48](https://github.com/voidmind-io/voidllm/issues/48)).
+**Note:** Schema migrations currently run on every pod startup. With multiple replicas, pods may briefly race during rolling updates. PostgreSQL's transaction isolation prevents corruption, but you may see transient errors in logs. A dedicated migration hook is planned ([#48](https://github.com/jukaza/tavo/issues/48)).
 
 ## Enterprise Features
 
@@ -80,7 +80,7 @@ Enterprise features are disabled by default and must be explicitly enabled. Add 
 --set config.settings.otel.endpoint=tempo:4317
 ```
 
-See the full [values.yaml](https://github.com/voidmind-io/voidllm/blob/main/chart/voidllm/values.yaml) for all Helm configuration options.
+See the full [values.yaml](https://github.com/jukaza/tavo/blob/main/chart/tavo/values.yaml) for all Helm configuration options.
 
 ## Istio Support
 
@@ -89,7 +89,7 @@ istio:
   enabled: true
   virtualService:
     hosts:
-      - voidllm.example.com
+      - tavo.example.com
   gateway:
     servers:
       - port:
@@ -98,9 +98,9 @@ istio:
           protocol: HTTPS
         tls:
           mode: SIMPLE
-          credentialName: voidllm-tls
+          credentialName: tavo-tls
         hosts:
-          - voidllm.example.com
+          - tavo.example.com
 ```
 
 ## Health Probes
@@ -127,7 +127,7 @@ readinessProbe:
 
 ## Graceful Shutdown
 
-VoidLLM supports phased graceful shutdown for zero-downtime deployments:
+Tavo supports phased graceful shutdown for zero-downtime deployments:
 
 1. **SIGTERM received** - `/readyz` returns 503 (K8s stops routing new traffic)
 2. **Drain period** (configurable, default 25s) - in-flight requests complete

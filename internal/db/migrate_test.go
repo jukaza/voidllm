@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/voidmind-io/voidllm/internal/config"
+	"github.com/jukaza/tavo/internal/config"
 )
 
 // openTestDB opens an in-memory SQLite DB for migration tests.

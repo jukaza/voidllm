@@ -1,4 +1,4 @@
-// VoidLLM Benchmark CLI
+// Tavo Benchmark CLI
 //
 // Measures proxy overhead for LLM paths using embedded mock servers
 // and the Vegeta load testing library.
@@ -102,20 +102,20 @@ func main() {
 	}
 	defer mockLLM.Close()
 
-	// ─── Build and start VoidLLM ─────────────────────────────────
+	// ─── Build and start Tavo ─────────────────────────────────
 	if !*jsonOutput {
-		fmt.Printf("%sBuilding VoidLLM...%s\n", dim, reset)
+		fmt.Printf("%sBuilding Tavo...%s\n", dim, reset)
 	}
 
 	proxyBin, err := buildProxy()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error building VoidLLM: %v\n", err)
+		fmt.Fprintf(os.Stderr, "error building Tavo: %v\n", err)
 		os.Exit(1)
 	}
 	defer os.Remove(proxyBin)
 
 	if !*jsonOutput {
-		fmt.Printf("%sStarting VoidLLM proxy...%s\n", dim, reset)
+		fmt.Printf("%sStarting Tavo proxy...%s\n", dim, reset)
 	}
 
 	proxyAddr, apiKey, proxyCmd, err := startProxy(proxyBin, mockLLM.URL())
@@ -225,16 +225,16 @@ func writeMetricsJSON(dir, scenario string, samples []metricSample) {
 	fmt.Printf("Metrics written to %s\n", path)
 }
 
-// ─── VoidLLM Proxy Management ────────────────────────────────────
+// ─── Tavo Proxy Management ────────────────────────────────────
 
 func buildProxy() (string, error) {
-	f, err := os.CreateTemp("", "bench-voidllm-proxy-*")
+	f, err := os.CreateTemp("", "bench-tavo-proxy-*")
 	if err != nil {
 		return "", fmt.Errorf("create temp: %w", err)
 	}
 	out := f.Name()
 	f.Close()
-	cmd := exec.Command("go", "build", "-o", out, "./cmd/voidllm")
+	cmd := exec.Command("go", "build", "-o", out, "./cmd/tavo")
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		return "", fmt.Errorf("build: %w", err)
@@ -283,8 +283,8 @@ settings:
 
 	cmd = exec.Command(bin, "--config", configPath)
 	cmd.Env = append(os.Environ(),
-		"VOIDLLM_ADMIN_KEY=bench-admin-key-12345678901234567890",
-		"VOIDLLM_ENCRYPTION_KEY=bench-encryption-key-1234567890",
+		"TAVO_ADMIN_KEY=bench-admin-key-12345678901234567890",
+		"TAVO_ENCRYPTION_KEY=bench-encryption-key-1234567890",
 	)
 
 	stdout, err := cmd.StdoutPipe()
@@ -339,7 +339,7 @@ settings:
 }
 
 func printBanner(scenario string) {
-	line := fmt.Sprintf("VoidLLM Benchmark — %s", scenario)
+	line := fmt.Sprintf("Tavo Benchmark — %s", scenario)
 	width := len(line) + 4
 	border := strings.Repeat("═", width)
 	fmt.Printf("\n%s%s╔%s╗%s\n", bold, yellow, border, reset)

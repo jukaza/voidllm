@@ -11,9 +11,9 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	"github.com/voidmind-io/voidllm/internal/db"
-	"github.com/voidmind-io/voidllm/internal/ratelimit"
-	"github.com/voidmind-io/voidllm/internal/upstream"
+	"github.com/jukaza/tavo/internal/db"
+	"github.com/jukaza/tavo/internal/ratelimit"
+	"github.com/jukaza/tavo/internal/upstream"
 )
 
 type comboRRState struct {

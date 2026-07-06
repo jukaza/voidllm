@@ -1,5 +1,5 @@
 // Package db provides database access primitives, dialect abstraction,
-// transaction helpers, and the embedded migration runner for VoidLLM.
+// transaction helpers, and the embedded migration runner for Tavo.
 package db
 
 import (

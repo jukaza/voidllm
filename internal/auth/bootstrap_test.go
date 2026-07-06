@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/voidmind-io/voidllm/internal/cache"
-	"github.com/voidmind-io/voidllm/internal/config"
-	"github.com/voidmind-io/voidllm/internal/db"
-	"github.com/voidmind-io/voidllm/pkg/keygen"
+	"github.com/jukaza/tavo/internal/cache"
+	"github.com/jukaza/tavo/internal/config"
+	"github.com/jukaza/tavo/internal/db"
+	"github.com/jukaza/tavo/pkg/keygen"
 
 	_ "modernc.org/sqlite"
 )
@@ -22,7 +22,7 @@ func defaultBootstrapCfg(adminKey string) config.SettingsConfig {
 	return config.SettingsConfig{
 		AdminKey: adminKey,
 		Bootstrap: config.BootstrapConfig{
-			AdminEmail: "admin@voidllm.local",
+			AdminEmail: "admin@tavo.local",
 		},
 	}
 }
@@ -158,8 +158,8 @@ func TestBootstrap_CreatesEntities(t *testing.T) {
 		Scan(&email, &isAdmin); err != nil {
 		t.Fatalf("query user: %v", err)
 	}
-	if email != "admin@voidllm.local" {
-		t.Errorf("user email = %q, want %q", email, "admin@voidllm.local")
+	if email != "admin@tavo.local" {
+		t.Errorf("user email = %q, want %q", email, "admin@tavo.local")
 	}
 	if isAdmin != 1 {
 		t.Errorf("is_system_admin = %d, want 1", isAdmin)

@@ -7,9 +7,9 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/voidmind-io/voidllm/internal/apierror"
-	"github.com/voidmind-io/voidllm/internal/db"
-	voidredis "github.com/voidmind-io/voidllm/internal/redis"
+	"github.com/jukaza/tavo/internal/apierror"
+	"github.com/jukaza/tavo/internal/db"
+	voidredis "github.com/jukaza/tavo/internal/redis"
 )
 
 // createModelAliasRequest is the JSON body accepted by the Create*Alias handlers.

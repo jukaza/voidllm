@@ -2,7 +2,7 @@
 // sensitive values (such as upstream API keys) in the database.
 //
 // Nonce safety: AES-256-GCM with random 96-bit nonces is safe for up to
-// approximately 2^48 encryptions under the same key. For typical VoidLLM
+// approximately 2^48 encryptions under the same key. For typical Tavo
 // deployments (hundreds to thousands of stored API keys), this provides
 // an enormous safety margin. Key rotation is recommended well before
 // reaching this threshold.

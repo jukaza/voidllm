@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/voidmind-io/voidllm/internal/auth"
-	"github.com/voidmind-io/voidllm/internal/db"
+	"github.com/jukaza/tavo/internal/auth"
+	"github.com/jukaza/tavo/internal/db"
 )
 
 func insertUsageEventHTTP(t *testing.T, database *db.DB, id, keyID, modelName string, promptTokens, compTokens, totalTokens int64, createdAt time.Time) {

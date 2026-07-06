@@ -13,7 +13,7 @@ import (
 	"bytes"
 	"errors"
 
-	"github.com/voidmind-io/voidllm/internal/jsonx"
+	"github.com/jukaza/tavo/internal/jsonx"
 )
 
 // errUnparseableSSE is returned by RestoreSSEStream when a data: line carries

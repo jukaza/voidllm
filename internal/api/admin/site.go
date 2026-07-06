@@ -6,8 +6,8 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	"github.com/voidmind-io/voidllm/internal/apierror"
-	"github.com/voidmind-io/voidllm/internal/site"
+	"github.com/jukaza/tavo/internal/apierror"
+	"github.com/jukaza/tavo/internal/site"
 )
 
 // GetPublicSite handles GET /api/v1/public/site — unauthenticated branding and

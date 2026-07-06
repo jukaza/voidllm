@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/voidmind-io/voidllm/internal/db"
-	"github.com/voidmind-io/voidllm/pkg/crypto"
+	"github.com/jukaza/tavo/internal/db"
+	"github.com/jukaza/tavo/pkg/crypto"
 )
 
 // ErrProviderPaused is returned when routing is attempted against a paused provider.

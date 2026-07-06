@@ -1,21 +1,21 @@
-# VoidLLM Helm Chart
+# Tavo Helm Chart
 
 Privacy-first LLM proxy and AI gateway. Zero knowledge of your prompts.
 
 ## Quick Start
 
 ```bash
-helm repo add voidllm https://voidmind-io.github.io/voidllm
+helm repo add tavo https://jukaza.github.io/tavo
 helm repo update
-helm install voidllm voidllm/voidllm \
+helm install tavo tavo/tavo \
   --set secrets.adminKey=$(openssl rand -base64 32) \
   --set secrets.encryptionKey=$(openssl rand -base64 32)
 ```
 
-Open the service URL - VoidLLM prints bootstrap credentials to the pod logs:
+Open the service URL - Tavo prints bootstrap credentials to the pod logs:
 
 ```bash
-kubectl logs deploy/voidllm | grep "BOOTSTRAP"
+kubectl logs deploy/tavo | grep "BOOTSTRAP"
 ```
 
 ## Features
@@ -85,7 +85,7 @@ istio:
   enabled: true
   virtualService:
     hosts:
-      - voidllm.example.com
+      - tavo.example.com
   gateway:
     servers:
       - port:
@@ -94,9 +94,9 @@ istio:
           protocol: HTTPS
         tls:
           mode: SIMPLE
-          credentialName: voidllm-tls
+          credentialName: tavo-tls
         hosts:
-          - voidllm.example.com
+          - tavo.example.com
 ```
 
 ## Persistence
@@ -110,7 +110,7 @@ persistence:
 
 ## Links
 
-- [GitHub](https://github.com/voidmind-io/voidllm)
-- [Documentation](https://github.com/voidmind-io/voidllm/tree/main/docs)
-- [Website](https://voidllm.ai)
-- [Blog](https://voidllm.ai/blog)
+- [GitHub](https://github.com/jukaza/tavo)
+- [Documentation](https://github.com/jukaza/tavo/tree/main/docs)
+- [Website](https://github.com/jukaza/tavo/tree/main/docs)
+- [Blog](https://github.com/jukaza/tavo/tree/main/docs/blog)

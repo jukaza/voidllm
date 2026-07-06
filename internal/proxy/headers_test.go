@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/voidmind-io/voidllm/internal/config"
+	"github.com/jukaza/tavo/internal/config"
 )
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -135,7 +135,7 @@ func TestSetUpstreamHeaders_UserAgentSet(t *testing.T) {
 	resp.Body.Close()
 
 	// Proxy must always override with its own User-Agent.
-	wantUA := "VoidLLM/0.1"
+	wantUA := "Tavo/0.1"
 	if ua := captured.Header.Get("User-Agent"); ua != wantUA {
 		t.Errorf("User-Agent = %q, want %q", ua, wantUA)
 	}
@@ -443,8 +443,8 @@ func TestHandle_RoundTripHeaders(t *testing.T) {
 	if v := capturedHeaders.Get("X-Custom-Header"); v != "" {
 		t.Errorf("upstream X-Custom-Header = %q, want empty (should be dropped)", v)
 	}
-	if capturedHeaders.Get("User-Agent") != "VoidLLM/0.1" {
-		t.Errorf("upstream User-Agent = %q, want %q", capturedHeaders.Get("User-Agent"), "VoidLLM/0.1")
+	if capturedHeaders.Get("User-Agent") != "Tavo/0.1" {
+		t.Errorf("upstream User-Agent = %q, want %q", capturedHeaders.Get("User-Agent"), "Tavo/0.1")
 	}
 
 	// Client response assertions.

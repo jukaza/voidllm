@@ -153,7 +153,7 @@ const translations = {
     'settings.saved_preview': 'Preview settings saved in this browser',
     'settings.saved_security': 'Security settings saved',
     'settings.security_load_error': 'Failed to load security settings',
-    'settings.security_load_error_hint': 'Rebuild and restart voidllm-server, then refresh. You need system admin access.',
+    'settings.security_load_error_hint': 'Rebuild and restart tavo-server, then refresh. You need system admin access.',
     'settings.status_register': 'Registration',
     'settings.status_payment': 'SePay',
     'settings.status_enforce_balance': 'Enforce balance',
@@ -273,7 +273,7 @@ const translations = {
     'settings.backup_s3_region': 'Region',
     'settings.backup_s3_region_hint': 'R2: use auto (leave empty or type auto).',
     'settings.backup_s3_bucket': 'Bucket',
-    'settings.backup_s3_bucket_hint': 'R2 bucket name you created (e.g. voidllm-backups).',
+    'settings.backup_s3_bucket_hint': 'R2 bucket name you created (e.g. tavo-backups).',
     'settings.backup_s3_prefix': 'Prefix',
     'settings.backup_s3_prefix_hint': 'Folder prefix in the bucket (default: backups).',
     'settings.backup_s3_access_key': 'Access key ID',
@@ -331,18 +331,18 @@ const translations = {
     'settings.backup_delete_confirm': 'Delete this backup from cloud and history?',
     'settings.backup_deleted': 'Backup deleted',
     'settings.backup_db_title': 'Manual database copy',
-    'settings.backup_db_desc': 'VoidLLM defaults to SQLite (single file). Use cloud backup above for routine backups.',
-    'settings.backup_sqlite_default': 'This project uses SQLite by default (voidllm.yaml: database.driver=sqlite, dsn=./voidllm.db). PostgreSQL is optional for multi-instance production.',
-    'settings.backup_sqlite_path_hint': 'Default path when running from the project root. Docker/K8s may use /data/voidllm.db instead.',
+    'settings.backup_db_desc': 'Tavo defaults to SQLite (single file). Use cloud backup above for routine backups.',
+    'settings.backup_sqlite_default': 'This project uses SQLite by default (tavo.yaml: database.driver=sqlite, dsn=./tavo.db). PostgreSQL is optional for multi-instance production.',
+    'settings.backup_sqlite_path_hint': 'Default path when running from the project root. Docker/K8s may use /data/tavo.db instead.',
     'settings.backup_postgres_optional': 'PostgreSQL (optional — production / Kubernetes only)',
-    'settings.backup_postgres_hint': 'Only if you set database.driver=postgres in voidllm.yaml. Not used in default dev setup.',
-    'settings.backup_yaml_hint': 'Also back up voidllm.yaml (encryption keys and bootstrap secrets).',
+    'settings.backup_postgres_hint': 'Only if you set database.driver=postgres in tavo.yaml. Not used in default dev setup.',
+    'settings.backup_yaml_hint': 'Also back up tavo.yaml (encryption keys and bootstrap secrets).',
     'settings.payment_load_error': 'Failed to load payment settings',
     'settings.payment_setup_title': 'SePay setup guide',
     'settings.payment_setup_desc': 'Follow these steps in the SePay dashboard, then paste credentials below.',
     'settings.payment_setup_step1': 'Add the same bank account in SePay (Bank accounts menu).',
     'settings.payment_setup_step2': 'Create a webhook: Webhooks → Add → event "Money in" only.',
-    'settings.payment_setup_step3': 'Paste the VoidLLM webhook URL below into SePay step 1 (Callback URL).',
+    'settings.payment_setup_step3': 'Paste the Tavo webhook URL below into SePay step 1 (Callback URL).',
     'settings.payment_setup_step4': 'Step 2: select the bank account that matches this page.',
     'settings.payment_setup_step5': 'Step 3 Security: choose API Key (simple) or HMAC-SHA256 (recommended). Copy the key immediately — SePay only shows it once.',
     'settings.payment_setup_step6': 'Test with "Send test" in SePay or a small real transfer, then check Finance → Top-ups.',
@@ -358,7 +358,7 @@ const translations = {
     'settings.payment_account_number': 'Account number',
     'settings.payment_account_name': 'Account holder name',
     'settings.payment_webhook_auth_mode': 'Webhook authentication',
-    'settings.payment_webhook_auth_mode_hint': 'Must match SePay step 3. VoidLLM supports API Key and HMAC-SHA256. OAuth 2.0 is not supported.',
+    'settings.payment_webhook_auth_mode_hint': 'Must match SePay step 3. Tavo supports API Key and HMAC-SHA256. OAuth 2.0 is not supported.',
     'settings.payment_webhook_auth_api_key': 'API Key',
     'settings.payment_webhook_auth_hmac': 'HMAC-SHA256 (recommended)',
     'settings.payment_webhook_token': 'API Key',
@@ -1002,7 +1002,7 @@ const translations = {
     'models.add_deployment_link': '+ Add Deployment',
     'models.save_changes': 'Save Changes',
     // login
-    'login.title': 'VoidLLM',
+    'login.title': 'Tavo',
     'login.subtitle': 'Sign in to your workspace',
     'login.email': 'Email',
     'login.password': 'Password',
@@ -1255,7 +1255,7 @@ const translations = {
     'settings.saved_preview': 'Đã lưu cài đặt xem trước trên trình duyệt',
     'settings.saved_security': 'Đã lưu cài đặt bảo mật',
     'settings.security_load_error': 'Không tải được cài đặt bảo mật',
-    'settings.security_load_error_hint': 'Build lại và restart voidllm-server, rồi refresh. Cần quyền system admin.',
+    'settings.security_load_error_hint': 'Build lại và restart tavo-server, rồi refresh. Cần quyền system admin.',
     'settings.status_register': 'Đăng ký',
     'settings.status_payment': 'SePay',
     'settings.status_enforce_balance': 'Bắt buộc số dư',
@@ -1375,7 +1375,7 @@ const translations = {
     'settings.backup_s3_region': 'Region',
     'settings.backup_s3_region_hint': 'R2: dùng auto (để trống hoặc gõ auto).',
     'settings.backup_s3_bucket': 'Bucket',
-    'settings.backup_s3_bucket_hint': 'Tên bucket R2 bạn đã tạo (vd: voidllm-backups).',
+    'settings.backup_s3_bucket_hint': 'Tên bucket R2 bạn đã tạo (vd: tavo-backups).',
     'settings.backup_s3_prefix': 'Prefix',
     'settings.backup_s3_prefix_hint': 'Thư mục trong bucket (mặc định: backups).',
     'settings.backup_s3_access_key': 'Access key ID',
@@ -1433,18 +1433,18 @@ const translations = {
     'settings.backup_delete_confirm': 'Xóa backup này khỏi cloud và lịch sử?',
     'settings.backup_deleted': 'Đã xóa backup',
     'settings.backup_db_title': 'Sao chép database thủ công',
-    'settings.backup_db_desc': 'VoidLLM mặc định SQLite (một file). Nên dùng backup cloud ở trên cho thường ngày.',
-    'settings.backup_sqlite_default': 'Dự án dùng SQLite mặc định (voidllm.yaml: database.driver=sqlite, dsn=./voidllm.db). PostgreSQL chỉ khi chạy production nhiều instance.',
-    'settings.backup_sqlite_path_hint': 'Đường dẫn mặc định khi chạy từ thư mục project. Docker/K8s có thể dùng /data/voidllm.db.',
+    'settings.backup_db_desc': 'Tavo mặc định SQLite (một file). Nên dùng backup cloud ở trên cho thường ngày.',
+    'settings.backup_sqlite_default': 'Dự án dùng SQLite mặc định (tavo.yaml: database.driver=sqlite, dsn=./tavo.db). PostgreSQL chỉ khi chạy production nhiều instance.',
+    'settings.backup_sqlite_path_hint': 'Đường dẫn mặc định khi chạy từ thư mục project. Docker/K8s có thể dùng /data/tavo.db.',
     'settings.backup_postgres_optional': 'PostgreSQL (tùy chọn — production / Kubernetes)',
-    'settings.backup_postgres_hint': 'Chỉ khi bạn đặt database.driver=postgres trong voidllm.yaml. Dev mặc định không dùng.',
-    'settings.backup_yaml_hint': 'Nhớ backup voidllm.yaml (encryption key và bootstrap secret).',
+    'settings.backup_postgres_hint': 'Chỉ khi bạn đặt database.driver=postgres trong tavo.yaml. Dev mặc định không dùng.',
+    'settings.backup_yaml_hint': 'Nhớ backup tavo.yaml (encryption key và bootstrap secret).',
     'settings.payment_load_error': 'Không tải được cài đặt nạp tiền',
     'settings.payment_setup_title': 'Hướng dẫn cấu hình SePay',
     'settings.payment_setup_desc': 'Làm theo các bước trên dashboard SePay, sau đó dán thông tin xác thực bên dưới.',
     'settings.payment_setup_step1': 'Thêm tài khoản ngân hàng trên SePay (menu Tài khoản ngân hàng) — phải trùng số TK bên dưới.',
     'settings.payment_setup_step2': 'Tạo webhook: Webhooks → Thêm → chọn sự kiện Có tiền vào.',
-    'settings.payment_setup_step3': 'Bước 1: dán URL webhook VoidLLM (ô bên dưới) vào SePay.',
+    'settings.payment_setup_step3': 'Bước 1: dán URL webhook Tavo (ô bên dưới) vào SePay.',
     'settings.payment_setup_step4': 'Bước 2: chọn đúng tài khoản ngân hàng đã cấu hình.',
     'settings.payment_setup_step5': 'Bước 3 Bảo mật: chọn API Key (đơn giản) hoặc HMAC-SHA256 (khuyến nghị). Copy key ngay — SePay chỉ hiện một lần.',
     'settings.payment_setup_step6': 'Kiểm tra bằng Gửi thử trên SePay hoặc chuyển thử một khoản nhỏ, rồi xem Finance → Top-ups.',
@@ -1460,7 +1460,7 @@ const translations = {
     'settings.payment_account_number': 'Số tài khoản',
     'settings.payment_account_name': 'Tên chủ tài khoản',
     'settings.payment_webhook_auth_mode': 'Xác thực webhook',
-    'settings.payment_webhook_auth_mode_hint': 'Phải khớp bước 3 trên SePay. VoidLLM hỗ trợ API Key và HMAC-SHA256. Chưa hỗ trợ OAuth 2.0.',
+    'settings.payment_webhook_auth_mode_hint': 'Phải khớp bước 3 trên SePay. Tavo hỗ trợ API Key và HMAC-SHA256. Chưa hỗ trợ OAuth 2.0.',
     'settings.payment_webhook_auth_api_key': 'API Key',
     'settings.payment_webhook_auth_hmac': 'HMAC-SHA256 (khuyến nghị)',
     'settings.payment_webhook_token': 'API Key',
@@ -2105,7 +2105,7 @@ const translations = {
     'models.add_deployment_link': '+ Thêm triển khai',
     'models.save_changes': 'Lưu thay đổi',
     // login
-    'login.title': 'VoidLLM',
+    'login.title': 'Tavo',
     'login.subtitle': 'Đăng nhập vào không gian làm việc',
     'login.email': 'Email',
     'login.password': 'Mật khẩu',
@@ -2223,13 +2223,13 @@ const TranslationContext = createContext<TranslationContextType | undefined>(und
 export function TranslationProvider({ children }: { children: React.ReactNode }) {
   // Set default language to Vietnamese ('vi') as requested
   const [language, setLanguageState] = useState<Language>(() => {
-    const saved = localStorage.getItem('voidllm_lang')
+    const saved = localStorage.getItem('tavo_lang')
     return (saved === 'en' || saved === 'vi') ? saved : 'vi'
   })
 
   const setLanguage = (lang: Language) => {
     setLanguageState(lang)
-    localStorage.setItem('voidllm_lang', lang)
+    localStorage.setItem('tavo_lang', lang)
   }
 
   const t = (key: TranslationKey, variables?: Record<string, string | number>): string => {

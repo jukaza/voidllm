@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/voidmind-io/voidllm/internal/config"
+	"github.com/jukaza/tavo/internal/config"
 )
 
 // minimalValidYAMLWithPII returns a valid base config with the provided
@@ -17,7 +17,7 @@ server:
     port: 8080
 database:
   driver: sqlite
-  dsn: voidllm.db
+  dsn: tavo.db
 settings:
   encryption_key: aaaaaaaaaaaaaaaa
   usage:
@@ -161,7 +161,7 @@ func TestValidate_PII(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			path := writeTemp(t, "voidllm.yaml", tc.yaml)
+			path := writeTemp(t, "tavo.yaml", tc.yaml)
 			_, _, err := config.Load(path)
 
 			if tc.wantErr {
@@ -185,7 +185,7 @@ func TestValidate_PII(t *testing.T) {
 func TestPIIDefaults(t *testing.T) {
 	t.Parallel()
 
-	path := writeTemp(t, "voidllm.yaml", minimalValidYAML())
+	path := writeTemp(t, "tavo.yaml", minimalValidYAML())
 	cfg, _, err := config.Load(path)
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -232,7 +232,7 @@ func TestPIIIsEnabled_ExplicitTrue(t *testing.T) {
     enabled: true
     action: "pseudonymize"
 `)
-	path := writeTemp(t, "voidllm.yaml", yaml)
+	path := writeTemp(t, "tavo.yaml", yaml)
 	cfg, _, err := config.Load(path)
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -251,7 +251,7 @@ func TestPIIIsEnabled_ExplicitFalse(t *testing.T) {
 	yaml := minimalValidYAMLWithPII(`
     enabled: false
 `)
-	path := writeTemp(t, "voidllm.yaml", yaml)
+	path := writeTemp(t, "tavo.yaml", yaml)
 	cfg, _, err := config.Load(path)
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)

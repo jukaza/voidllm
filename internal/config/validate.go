@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/voidmind-io/voidllm/internal/provider"
+	"github.com/jukaza/tavo/internal/provider"
 )
 
 // validModelTypes is the set of accepted model type values in the YAML config.
@@ -90,7 +90,7 @@ func (c *Config) validate() error {
 	}
 
 	// --- database.dsn ---
-	// SQLite gets a default DSN ("voidllm.db") in setDefaults, so an empty DSN
+	// SQLite gets a default DSN ("tavo.db") in setDefaults, so an empty DSN
 	// here only happens for postgres where the caller must supply a value.
 	if c.Database.Driver == "postgres" && c.Database.DSN == "" {
 		errs = append(errs, fmt.Errorf("database.dsn: required for postgres driver"))

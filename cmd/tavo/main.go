@@ -10,10 +10,10 @@ import (
 	"runtime"
 	"strconv"
 
-	"github.com/voidmind-io/voidllm/internal/apierror"
-	"github.com/voidmind-io/voidllm/internal/app"
-	"github.com/voidmind-io/voidllm/internal/config"
-	"github.com/voidmind-io/voidllm/internal/logger"
+	"github.com/jukaza/tavo/internal/apierror"
+	"github.com/jukaza/tavo/internal/app"
+	"github.com/jukaza/tavo/internal/config"
+	"github.com/jukaza/tavo/internal/logger"
 )
 
 // exitWithPause exits with the given code. On Windows it waits for Enter
@@ -43,11 +43,11 @@ func main() {
 		}
 	}
 
-	configPath := flag.String("config", "", "path to voidllm.yaml config file")
+	configPath := flag.String("config", "", "path to tavo.yaml config file")
 	devMode := flag.Bool("dev", false, "enable development mode (pprof, debug logging, CORS *)")
 	flag.Parse()
 
-	if ok, _ := strconv.ParseBool(os.Getenv("VOIDLLM_DEV")); ok {
+	if ok, _ := strconv.ParseBool(os.Getenv("TAVO_DEV")); ok {
 		*devMode = true
 	}
 
@@ -55,7 +55,7 @@ func main() {
 	// not yet been initialized.
 	cfg, fromDefaults, err := config.Load(*configPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "voidllm: failed to load config: %v\n", err)
+		fmt.Fprintf(os.Stderr, "tavo: failed to load config: %v\n", err)
 		exitWithPause(1)
 	}
 

@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/voidmind-io/voidllm/internal/config"
+	"github.com/jukaza/tavo/internal/config"
 )
 
 // ErrModelNotFound is returned when a model name or alias cannot be resolved.

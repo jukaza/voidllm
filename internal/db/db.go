@@ -8,7 +8,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib" // registers "pgx" driver for database/sql
 	_ "modernc.org/sqlite"
 
-	"github.com/voidmind-io/voidllm/internal/config"
+	"github.com/jukaza/tavo/internal/config"
 )
 
 // DB wraps *sql.DB with dialect awareness and transaction support.

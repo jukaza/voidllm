@@ -8,11 +8,11 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/voidmind-io/voidllm/internal/apierror"
-	"github.com/voidmind-io/voidllm/internal/audit"
-	"github.com/voidmind-io/voidllm/internal/auth"
-	"github.com/voidmind-io/voidllm/internal/db"
-	"github.com/voidmind-io/voidllm/internal/security"
+	"github.com/jukaza/tavo/internal/apierror"
+	"github.com/jukaza/tavo/internal/audit"
+	"github.com/jukaza/tavo/internal/auth"
+	"github.com/jukaza/tavo/internal/db"
+	"github.com/jukaza/tavo/internal/security"
 )
 
 type setPasswordRequest struct {

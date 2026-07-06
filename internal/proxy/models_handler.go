@@ -33,7 +33,7 @@ func (p *ProxyHandler) ModelsHandler(c fiber.Ctx) error {
 			ID:      m.Name,
 			Object:  "model",
 			Created: 0,
-			OwnedBy: "voidllm",
+			OwnedBy: "tavo",
 			Aliases: m.Aliases,
 		}
 	}

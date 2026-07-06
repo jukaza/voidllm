@@ -18,6 +18,10 @@ export interface StatCardProps extends React.HTMLAttributes<HTMLDivElement> {
   trend?: { value: number; label?: string }
   /** Optional color name for the icon bubble. E.g. "purple", "green", "pink" */
   iconColor?: string
+  /** Optional Tailwind classes for the value text (e.g. token metric accents). */
+  valueClassName?: string
+  /** Inline color for the value — wins over valueClassName when set. */
+  valueStyle?: React.CSSProperties
 }
 
 function trendPrefix(value: number): string {
@@ -32,7 +36,17 @@ function trendColorClass(value: number): string {
   return 'text-text-tertiary'
 }
 
-export function StatCard({ label, value, icon, trend, iconColor, className, ...rest }: StatCardProps) {
+export function StatCard({
+  label,
+  value,
+  icon,
+  trend,
+  iconColor,
+  valueClassName,
+  valueStyle,
+  className,
+  ...rest
+}: StatCardProps) {
   const colorClasses = iconColor != null ? (iconColorMap[iconColor] ?? null) : null
 
   return (
@@ -70,7 +84,12 @@ export function StatCard({ label, value, icon, trend, iconColor, className, ...r
           </span>
         ) : null}
 
-        <div className="text-2xl font-semibold text-text-primary">{value}</div>
+        <div
+          className={cn('text-2xl font-semibold', valueStyle ? undefined : valueClassName ?? 'text-text-primary')}
+          style={valueStyle}
+        >
+          {value}
+        </div>
         <div className="text-sm text-text-tertiary mt-1">{label}</div>
 
         {trend != null ? (

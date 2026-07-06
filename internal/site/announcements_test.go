@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/voidmind-io/voidllm/internal/config"
-	"github.com/voidmind-io/voidllm/internal/db"
-	"github.com/voidmind-io/voidllm/internal/site"
+	"github.com/jukaza/tavo/internal/config"
+	"github.com/jukaza/tavo/internal/db"
+	"github.com/jukaza/tavo/internal/site"
 )
 
 func TestAnnouncementsRoundTrip(t *testing.T) {

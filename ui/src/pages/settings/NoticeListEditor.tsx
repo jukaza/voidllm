@@ -74,7 +74,7 @@ export function NoticeListEditor({ items, onChange }: NoticeListEditorProps) {
   }
 
   function insertSample() {
-    const item = createSampleOpeningAnnouncement(site?.system_name ?? 'VoidLLM')
+    const item = createSampleOpeningAnnouncement(site?.system_name ?? 'Tavo')
     onChange([...items, item])
     setActiveId(item.id)
     setShowPreview(true)

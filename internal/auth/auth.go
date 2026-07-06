@@ -1,5 +1,5 @@
 // Package auth provides Bearer token authentication middleware and RBAC
-// enforcement for VoidLLM's proxy and admin APIs.
+// enforcement for Tavo's proxy and admin APIs.
 package auth
 
 import (
@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/voidmind-io/voidllm/internal/apierror"
-	"github.com/voidmind-io/voidllm/internal/cache"
-	"github.com/voidmind-io/voidllm/internal/db"
-	"github.com/voidmind-io/voidllm/pkg/keygen"
+	"github.com/jukaza/tavo/internal/apierror"
+	"github.com/jukaza/tavo/internal/cache"
+	"github.com/jukaza/tavo/internal/db"
+	"github.com/jukaza/tavo/pkg/keygen"
 )
 
 // KeyInfo holds the authenticated identity and limits associated with an API key.

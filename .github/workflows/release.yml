@@ -45,7 +45,7 @@ jobs:
       - name: Compute image tags
         id: tags
         run: |
-          IMG=ghcr.io/voidmind-io/voidllm
+          IMG=ghcr.io/jukaza/tavo
           # Stable releases get the immutable version tag plus :latest.
           # Pre-releases (v*-beta.N) get the version tag plus a floating :beta,
           # and NEVER :latest — so users on :latest stay on stable.
@@ -78,7 +78,7 @@ jobs:
       - name: Sign container image
         run: |
           cosign sign --yes \
-            ghcr.io/voidmind-io/voidllm@${{ steps.build.outputs.digest }}
+            ghcr.io/jukaza/tavo@${{ steps.build.outputs.digest }}
 
   binaries:
     runs-on: ubuntu-latest
@@ -101,29 +101,29 @@ jobs:
       - name: Build binaries
         run: |
           VERSION=${GITHUB_REF_NAME#v}
-          LDFLAGS="-s -w -X 'github.com/voidmind-io/voidllm/internal/api/health.Version=${VERSION}'"
+          LDFLAGS="-s -w -X 'github.com/jukaza/tavo/internal/api/health.Version=${VERSION}'"
           declare -A TARGETS=(
-            ["linux/amd64"]="voidllm-linux-amd64.tar.gz"
-            ["linux/arm64"]="voidllm-linux-arm64.tar.gz"
-            ["windows/amd64"]="voidllm-windows-amd64.zip"
-            ["windows/arm64"]="voidllm-windows-arm64.zip"
-            ["darwin/amd64"]="voidllm-darwin-amd64.tar.gz"
-            ["darwin/arm64"]="voidllm-darwin-arm64.tar.gz"
+            ["linux/amd64"]="tavo-linux-amd64.tar.gz"
+            ["linux/arm64"]="tavo-linux-arm64.tar.gz"
+            ["windows/amd64"]="tavo-windows-amd64.zip"
+            ["windows/arm64"]="tavo-windows-arm64.zip"
+            ["darwin/amd64"]="tavo-darwin-amd64.tar.gz"
+            ["darwin/arm64"]="tavo-darwin-arm64.tar.gz"
           )
           mkdir -p dist
           for TARGET in "${!TARGETS[@]}"; do
             OS="${TARGET%/*}"
             ARCH="${TARGET#*/}"
             ARCHIVE="${TARGETS[$TARGET]}"
-            BINARY="voidllm"
+            BINARY="tavo"
             if [ "$OS" = "windows" ]; then
-              BINARY="voidllm.exe"
+              BINARY="tavo.exe"
             fi
             BUILDDIR="dist/build-${OS}-${ARCH}"
             mkdir -p "$BUILDDIR"
             CGO_ENABLED=0 GOOS="$OS" GOARCH="$ARCH" go build \
               -ldflags="$LDFLAGS" \
-              -o "$BUILDDIR/$BINARY" ./cmd/voidllm
+              -o "$BUILDDIR/$BINARY" ./cmd/tavo
             if [[ "$ARCHIVE" == *.tar.gz ]]; then
               tar -czf "dist/$ARCHIVE" -C "$BUILDDIR" "$BINARY"
             else
@@ -151,7 +151,7 @@ jobs:
       packages: write
     uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
     with:
-      image: ghcr.io/voidmind-io/voidllm
+      image: ghcr.io/jukaza/tavo
       digest: ${{ needs.docker.outputs.digest }}
     secrets:
       registry-username: ${{ github.actor }}

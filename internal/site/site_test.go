@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/voidmind-io/voidllm/internal/config"
-	"github.com/voidmind-io/voidllm/internal/db"
-	"github.com/voidmind-io/voidllm/internal/site"
+	"github.com/jukaza/tavo/internal/config"
+	"github.com/jukaza/tavo/internal/db"
+	"github.com/jukaza/tavo/internal/site"
 )
 
 func TestEnsureDefaultsAndUpdate(t *testing.T) {
@@ -41,7 +41,7 @@ func TestEnsureDefaultsAndUpdate(t *testing.T) {
 	name := "My AI Portal"
 	subtitle := "OpenAI-compatible marketplace"
 	zalo := "https://zalo.me/g/test"
-	telegram := "https://t.me/voidllm"
+	telegram := "https://t.me/tavo"
 	docs := "https://docs.example.com"
 	updated, err := site.Update(ctx, database, site.UpdateInput{
 		SystemName:      &name,

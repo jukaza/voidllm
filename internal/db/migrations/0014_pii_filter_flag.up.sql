@@ -2,7 +2,7 @@
 -- Description: Add pii_filter column to models and model_deployments.
 --
 -- The pii_filter flag controls per-model/deployment PII anonymization and
--- overrides the network-level default configured in voidllm.yaml. Without this
+-- overrides the network-level default configured in tavo.yaml. Without this
 -- column the flag was present in YAML config but lost on the YAML → DB → registry
 -- roundtrip, so the DB-persisted value always silently fell back to the network
 -- default regardless of what was declared in the YAML.

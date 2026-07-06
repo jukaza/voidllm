@@ -24,7 +24,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/voidmind-io/voidllm/internal/pii"
+	"github.com/jukaza/tavo/internal/pii"
 )
 
 // ── helpers ───────────────────────────────────────────────────────────────────

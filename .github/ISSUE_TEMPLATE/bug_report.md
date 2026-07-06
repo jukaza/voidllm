@@ -1,6 +1,6 @@
 ---
 name: Bug Report
-about: Report a bug in VoidLLM
+about: Report a bug in Tavo
 title: "[Bug] "
 labels: bug
 ---
@@ -11,7 +11,7 @@ A clear description of what the bug is.
 
 ## To Reproduce
 
-1. Configure VoidLLM with...
+1. Configure Tavo with...
 2. Send request...
 3. Observe...
 
@@ -21,7 +21,7 @@ What you expected to happen.
 
 ## Environment
 
-- VoidLLM version: (e.g., 0.1.0 or commit hash)
+- Tavo version: (e.g., 0.1.0 or commit hash)
 - OS: (e.g., Linux, macOS, Docker)
 - Database: (SQLite / PostgreSQL)
 - Upstream provider: (e.g., vLLM, Ollama, OpenAI, Anthropic)

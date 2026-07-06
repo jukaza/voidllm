@@ -30,8 +30,8 @@ import { BackupR2SetupGuide } from './components/BackupR2SetupGuide'
 import { LiveBadge } from './components/PreviewBadge'
 import { SettingsSectionCard } from './components/SettingsSectionCard'
 
-/** Default SQLite path in voidllm.dev.yaml / voidllm.yaml */
-const DEFAULT_SQLITE_PATH = './voidllm.db'
+/** Default SQLite path in tavo.dev.yaml / tavo.yaml */
+const DEFAULT_SQLITE_PATH = './tavo.db'
 
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`
@@ -129,7 +129,7 @@ export function BackupSettingsTab() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `voidllm-settings-${new Date().toISOString().slice(0, 10)}.json`
+      a.download = `tavo-settings-${new Date().toISOString().slice(0, 10)}.json`
       a.click()
       URL.revokeObjectURL(url)
       toast({ variant: 'success', message: t('settings.backup_exported') })
@@ -504,13 +504,13 @@ export function BackupSettingsTab() {
             </summary>
             <p className="mt-2 text-xs text-text-tertiary">{t('settings.backup_postgres_hint')}</p>
             <code className="mt-2 block break-all text-xs font-mono">
-              pg_dump -Fc postgres://user:pass@host:5432/voidllm &gt; voidllm.dump
+              pg_dump -Fc postgres://user:pass@host:5432/tavo &gt; tavo.dump
             </code>
             <Button
               size="sm"
               variant="ghost"
               className="mt-2"
-              onClick={() => copyDbCommand('pg_dump -Fc postgres://user:pass@host:5432/voidllm > voidllm.dump')}
+              onClick={() => copyDbCommand('pg_dump -Fc postgres://user:pass@host:5432/tavo > tavo.dump')}
             >
               {t('common.copy')}
             </Button>

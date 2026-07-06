@@ -9,6 +9,7 @@ import { formatCost, formatNumber, formatTokens } from '../../lib/utils'
 import { useTranslation } from '../../lib/i18n'
 import { BrandIcon } from '../../components/ui/BrandIcon'
 import { ChannelTopology } from './components/ChannelTopology'
+import { TOKEN_METRIC_STYLES } from '../../lib/tokenColors'
 
 const PERIODS = ['today', '24h', '7d', '30d'] as const
 type Period = (typeof PERIODS)[number]
@@ -64,14 +65,17 @@ export default function ChannelsPage() {
         <StatCard
           label={t('analytics.tokens_input')}
           value={isLoading ? '...' : formatTokens(totals?.prompt_tokens ?? 0)}
+          valueStyle={{ color: TOKEN_METRIC_STYLES.input.color }}
         />
         <StatCard
           label={t('analytics.tokens_output')}
           value={isLoading ? '...' : formatTokens(totals?.completion_tokens ?? 0)}
+          valueStyle={{ color: TOKEN_METRIC_STYLES.output.color }}
         />
         <StatCard
           label={t('analytics.tokens_cached')}
           value={isLoading ? '...' : formatTokens(totals?.cached_tokens ?? 0)}
+          valueStyle={{ color: TOKEN_METRIC_STYLES.cacheRead.color }}
         />
         <StatCard
           label={t('analytics.requests')}
@@ -154,14 +158,17 @@ function ChannelRow({
         <MetricPill
           label={t('analytics.tokens_input')}
           value={formatTokens(channel.prompt_tokens)}
+          valueColor={TOKEN_METRIC_STYLES.input.color}
         />
         <MetricPill
           label={t('analytics.tokens_output')}
           value={formatTokens(channel.completion_tokens)}
+          valueColor={TOKEN_METRIC_STYLES.output.color}
         />
         <MetricPill
           label={t('analytics.tokens_cached')}
           value={formatTokens(channel.cached_tokens)}
+          valueColor={TOKEN_METRIC_STYLES.cacheRead.color}
         />
         <MetricPill label={t('analytics.revenue')} value={formatCost(channel.revenue)} highlight />
       </button>
@@ -183,11 +190,24 @@ function ChannelRow({
                 <tr key={m.model_name} className="border-t border-border/50">
                   <td className="py-2 pl-8 text-text-primary font-medium">{m.model_name}</td>
                   <td className="py-2 text-right tabular-nums">{formatNumber(m.total_requests)}</td>
-                  <td className="py-2 text-right tabular-nums">{formatTokens(m.prompt_tokens)}</td>
-                  <td className="py-2 text-right tabular-nums">
+                  <td
+                    className="py-2 text-right tabular-nums font-medium"
+                    style={{ color: TOKEN_METRIC_STYLES.input.color }}
+                  >
+                    {formatTokens(m.prompt_tokens)}
+                  </td>
+                  <td
+                    className="py-2 text-right tabular-nums font-medium"
+                    style={{ color: TOKEN_METRIC_STYLES.output.color }}
+                  >
                     {formatTokens(m.completion_tokens)}
                   </td>
-                  <td className="py-2 text-right tabular-nums">{formatTokens(m.cached_tokens)}</td>
+                  <td
+                    className="py-2 text-right tabular-nums font-medium"
+                    style={{ color: TOKEN_METRIC_STYLES.cacheRead.color }}
+                  >
+                    {formatTokens(m.cached_tokens)}
+                  </td>
                   <td className="py-2 text-right tabular-nums text-accent">
                     {formatCost(m.revenue)}
                   </td>
@@ -201,12 +221,25 @@ function ChannelRow({
   )
 }
 
-function MetricPill({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+function MetricPill({
+  label,
+  value,
+  highlight,
+  valueColor,
+}: {
+  label: string
+  value: string
+  highlight?: boolean
+  valueColor?: string
+}) {
   return (
     <div className="text-right min-w-[88px] hidden sm:block">
       <div className="text-[10px] uppercase tracking-wide text-text-tertiary">{label}</div>
-      <div className={`text-sm tabular-nums ${highlight ? 'text-accent font-medium' : 'text-text-primary'}`}>
-        {value}
+      <div
+        className="text-sm tabular-nums font-medium"
+        style={highlight ? undefined : { color: valueColor }}
+      >
+        {highlight ? <span className="text-accent">{value}</span> : value}
       </div>
     </div>
   )

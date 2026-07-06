@@ -6,9 +6,9 @@ order: 2
 ---
 # Privacy Architecture
 
-VoidLLM is a zero-knowledge proxy. It never stores, logs, or persists any prompt or response content. This is not a configurable option - it is an architecture decision.
+Tavo is a zero-knowledge proxy. It never stores, logs, or persists any prompt or response content. This is not a configurable option - it is an architecture decision.
 
-## What VoidLLM stores
+## What Tavo stores
 
 | Data | Stored | Purpose |
 |---|---|---|
@@ -19,7 +19,7 @@ VoidLLM is a zero-knowledge proxy. It never stores, logs, or persists any prompt
 
 | Audit logs | Yes (Enterprise) | Admin action metadata |
 
-## What VoidLLM never stores
+## What Tavo never stores
 
 | Data | Stored | Why |
 |---|---|---|
@@ -34,7 +34,7 @@ VoidLLM is a zero-knowledge proxy. It never stores, logs, or persists any prompt
 The proxy reads exactly one field from the request body: `model`. This is used for routing. Everything else passes through as an opaque byte stream:
 
 1. Request arrives with `Authorization: Bearer vl_uk_...`
-2. VoidLLM validates the key (HMAC-SHA256 hash lookup in memory)
+2. Tavo validates the key (HMAC-SHA256 hash lookup in memory)
 3. Reads the `model` field for routing
 4. Rewrites the model name if using aliases
 5. Forwards the request body to the upstream provider
@@ -48,14 +48,14 @@ Content passes through process memory during streaming but is never written to d
 
 The zero-knowledge architecture significantly reduces the GDPR compliance surface area:
 
-- No personal data from prompts is processed or stored by VoidLLM
+- No personal data from prompts is processed or stored by Tavo
 - Usage metadata (API key ID, user ID, model, tokens) may qualify as personal data if linkable to an individual
-- VoidLLM acts as a data processor for usage metadata; you (the deployer) are the data controller
-- Data processing agreements with upstream LLM providers (for prompt/response content) are between you and the provider - VoidLLM is not a party
+- Tavo acts as a data processor for usage metadata; you (the deployer) are the data controller
+- Data processing agreements with upstream LLM providers (for prompt/response content) are between you and the provider - Tavo is not a party
 
 ## Data Minimization
 
-VoidLLM implements data minimization (GDPR Article 5(1)(c)) and Privacy by Design (Article 25) by architecture:
+Tavo implements data minimization (GDPR Article 5(1)(c)) and Privacy by Design (Article 25) by architecture:
 
 - Only the minimum data needed for routing and usage tracking is collected
 - Content data is never collected because there is no code path to collect it
@@ -63,7 +63,7 @@ VoidLLM implements data minimization (GDPR Article 5(1)(c)) and Privacy by Desig
 
 ## Comparison
 
-| | VoidLLM | Typical proxy |
+| | Tavo | Typical proxy |
 |---|---|---|
 | Prompt logging | Never (no code path) | Usually default, opt-out |
 | GDPR scope at proxy | Metadata only | Metadata + content |

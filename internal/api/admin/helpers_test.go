@@ -12,12 +12,12 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/voidmind-io/voidllm/internal/api/admin"
-	"github.com/voidmind-io/voidllm/internal/auth"
-	"github.com/voidmind-io/voidllm/internal/cache"
-	"github.com/voidmind-io/voidllm/internal/config"
-	"github.com/voidmind-io/voidllm/internal/db"
-	"github.com/voidmind-io/voidllm/pkg/keygen"
+	"github.com/jukaza/tavo/internal/api/admin"
+	"github.com/jukaza/tavo/internal/auth"
+	"github.com/jukaza/tavo/internal/cache"
+	"github.com/jukaza/tavo/internal/config"
+	"github.com/jukaza/tavo/internal/db"
+	"github.com/jukaza/tavo/pkg/keygen"
 )
 
 const testTimeout = 5 * time.Second

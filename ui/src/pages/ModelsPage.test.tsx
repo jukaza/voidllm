@@ -77,7 +77,7 @@ function makeWrapper() {
 }
 
 function renderModelsPage() {
-  localStorage.setItem('voidllm_lang', 'en')
+  localStorage.setItem('tavo_lang', 'en')
   const { Wrapper } = makeWrapper()
   return render(<ModelsPage />, { wrapper: Wrapper })
 }

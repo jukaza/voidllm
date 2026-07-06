@@ -14,8 +14,8 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/voidmind-io/voidllm/internal/config"
-	"github.com/voidmind-io/voidllm/internal/db"
+	"github.com/jukaza/tavo/internal/config"
+	"github.com/jukaza/tavo/internal/db"
 )
 
 // FullDumper produces a gzip-compressed full database backup stream.
@@ -55,7 +55,7 @@ func (d *FullDumper) Dump(ctx context.Context) (io.ReadCloser, error) {
 }
 
 func (d *FullDumper) dumpSQLite(ctx context.Context, w io.Writer) error {
-	tmpDir, err := os.MkdirTemp("", "voidllm-backup-*")
+	tmpDir, err := os.MkdirTemp("", "tavo-backup-*")
 	if err != nil {
 		return err
 	}
@@ -124,7 +124,7 @@ func (d *FullDumper) Restore(ctx context.Context, r io.Reader) error {
 }
 
 func (d *FullDumper) restoreSQLite(ctx context.Context, r io.Reader) error {
-	tmpDir, err := os.MkdirTemp("", "voidllm-restore-*")
+	tmpDir, err := os.MkdirTemp("", "tavo-restore-*")
 	if err != nil {
 		return err
 	}
@@ -220,7 +220,7 @@ func backupFileName(backupType, driver string) string {
 			ext = "db.gz"
 		}
 	}
-	return fmt.Sprintf("voidllm_%s_%s_%s.%s", backupType, driver, ts, ext)
+	return fmt.Sprintf("tavo_%s_%s_%s.%s", backupType, driver, ts, ext)
 }
 
 func s3Key(prefix, fileName string) string {

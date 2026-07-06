@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/voidmind-io/voidllm/internal/cache"
-	"github.com/voidmind-io/voidllm/pkg/keygen"
+	"github.com/jukaza/tavo/internal/cache"
+	"github.com/jukaza/tavo/pkg/keygen"
 )
 
 // testTimeout is the per-request timeout passed to app.Test in all subtests.

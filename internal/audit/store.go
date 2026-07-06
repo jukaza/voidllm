@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/voidmind-io/voidllm/internal/db"
+	"github.com/jukaza/tavo/internal/db"
 )
 
 // QueryParams holds filter and pagination parameters for audit log queries.

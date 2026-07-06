@@ -7,7 +7,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
-	"github.com/voidmind-io/voidllm/internal/apierror"
+	"github.com/jukaza/tavo/internal/apierror"
 )
 
 // newMiddlewareApp builds a Fiber app with RequestIDMiddleware registered

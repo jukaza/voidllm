@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/voidmind-io/voidllm/internal/config"
-	"github.com/voidmind-io/voidllm/internal/health"
-	"github.com/voidmind-io/voidllm/internal/proxy"
+	"github.com/jukaza/tavo/internal/config"
+	"github.com/jukaza/tavo/internal/health"
+	"github.com/jukaza/tavo/internal/proxy"
 )
 
 // newRegistry builds a one-model Registry pointing at the supplied base URL.

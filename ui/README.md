@@ -1,6 +1,6 @@
-# VoidLLM UI
+# Tavo UI
 
-The admin dashboard for VoidLLM — a single-page application embedded in the Go binary via `embed.FS`.
+The admin dashboard for Tavo — a single-page application embedded in the Go binary via `embed.FS`.
 
 ## Tech Stack
 
@@ -22,7 +22,7 @@ npm install
 npm run dev
 ```
 
-The dev server runs on `http://localhost:5173` and proxies API requests to `http://localhost:8080` (the Go backend). Start the backend separately with `air` or `go run ./cmd/voidllm`.
+The dev server runs on `http://localhost:5173` and proxies API requests to `http://localhost:8080` (the Go backend). Start the backend separately with `air` or `go run ./cmd/tavo`.
 
 ## Pages
 

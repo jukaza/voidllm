@@ -5,7 +5,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	"github.com/voidmind-io/voidllm/internal/security"
+	"github.com/jukaza/tavo/internal/security"
 )
 
 func clientIP(c fiber.Ctx) string {

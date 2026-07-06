@@ -10,7 +10,7 @@ order: 3
 
 The Helm chart and Docker image include production security defaults:
 
-- Non-root container user (`voidllm:voidllm`, UID 1000)
+- Non-root container user (`tavo:tavo`, UID 1000)
 - Read-only root filesystem
 - All Linux capabilities dropped
 - No privilege escalation
@@ -34,7 +34,7 @@ The Helm chart and Docker image include production security defaults:
         key: /certs/tls.key
   ```
 - **Network policies** - restrict pod-to-pod traffic in Kubernetes
-- **SSRF protection** - VoidLLM blocks connections to private/loopback IPs by default (configurable via `settings.mcp.allow_private_urls`)
+- **SSRF protection** - Tavo blocks connections to private/loopback IPs by default (configurable via `settings.mcp.allow_private_urls`)
 
 ## API Keys
 
@@ -45,7 +45,7 @@ The Helm chart and Docker image include production security defaults:
 
 ## Encryption Key
 
-The `VOIDLLM_ENCRYPTION_KEY` is critical:
+The `TAVO_ENCRYPTION_KEY` is critical:
 - Used to encrypt upstream API keys in the database
 - Used to derive the HMAC secret for API key validation
 - Changing it invalidates all stored upstream keys and API key hashes
@@ -53,18 +53,18 @@ The `VOIDLLM_ENCRYPTION_KEY` is critical:
 
 ## Headers
 
-- VoidLLM uses explicit allowlists for header forwarding - only known-safe headers are proxied to upstream providers
+- Tavo uses explicit allowlists for header forwarding - only known-safe headers are proxied to upstream providers
 - `Authorization` headers are rewritten per-provider (Bearer for OpenAI, api-key for Azure)
 - No redirect following - prevents SSRF via HTTP redirects
 
 ## Checklist
 
-- [ ] Use a strong `VOIDLLM_ENCRYPTION_KEY` (min 32 characters or base64-encoded 32 bytes)
-- [ ] Don't use `VOIDLLM_ADMIN_KEY` as a production API key (it's for bootstrap only)
+- [ ] Use a strong `TAVO_ENCRYPTION_KEY` (min 32 characters or base64-encoded 32 bytes)
+- [ ] Don't use `TAVO_ADMIN_KEY` as a production API key (it's for bootstrap only)
 - [ ] Separate admin port from proxy port in production
 - [ ] Enable TLS on admin port or terminate TLS at the reverse proxy
 - [ ] Set resource limits in Kubernetes
 - [ ] Use network policies to restrict access
 - [ ] Rotate API keys regularly
 - [ ] Monitor `/metrics` for unusual patterns
-- [ ] Report vulnerabilities to security@voidmind.io
+- [ ] Report vulnerabilities to security@tavo.io.vn

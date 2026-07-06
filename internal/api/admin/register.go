@@ -11,13 +11,13 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/voidmind-io/voidllm/internal/apierror"
-	"github.com/voidmind-io/voidllm/internal/auth"
-	"github.com/voidmind-io/voidllm/internal/db"
-	"github.com/voidmind-io/voidllm/internal/features"
-	"github.com/voidmind-io/voidllm/internal/security"
-	"github.com/voidmind-io/voidllm/internal/site"
-	"github.com/voidmind-io/voidllm/pkg/keygen"
+	"github.com/jukaza/tavo/internal/apierror"
+	"github.com/jukaza/tavo/internal/auth"
+	"github.com/jukaza/tavo/internal/db"
+	"github.com/jukaza/tavo/internal/features"
+	"github.com/jukaza/tavo/internal/security"
+	"github.com/jukaza/tavo/internal/site"
+	"github.com/jukaza/tavo/pkg/keygen"
 )
 
 // registerRequest is the JSON body accepted by Register.

@@ -1,10 +1,10 @@
 ---
 title: "Documentation"
-description: "VoidLLM documentation home - guides, reference, and API docs"
+description: "Tavo documentation home - guides, reference, and API docs"
 section: root
 order: 0
 ---
-# VoidLLM Documentation
+# Tavo Documentation
 
 Privacy-first LLM proxy and AI gateway. Self-hosted, single binary, sub-500us overhead.
 
@@ -15,6 +15,7 @@ Privacy-first LLM proxy and AI gateway. Self-hosted, single binary, sub-500us ov
 
 ## Deployment
 
+- [Local Development](deployment/local-dev.md) - backend + UI dev server, encryption key & DB checklist
 - [Binary](deployment/binary.md) - standalone binary, Linux/macOS/Windows
 - [Docker](deployment/docker.md) - Docker and Docker Compose
 - [Kubernetes](deployment/kubernetes.md) - Helm chart, Istio, health probes
@@ -45,7 +46,7 @@ Privacy-first LLM proxy and AI gateway. Self-hosted, single binary, sub-500us ov
 ## Resources
 
 - [Troubleshooting](troubleshooting.md) - common issues and solutions
-- [Blog](https://voidllm.ai/blog) - architecture deep-dives, benchmarks, guides
-- [FAQ](https://voidllm.ai/faq) - frequently asked questions
-- [GitHub](https://github.com/voidmind-io/voidllm) - source code, issues, releases
-- [Security Policy](https://github.com/voidmind-io/voidllm/blob/main/SECURITY.md) - vulnerability reporting
+- [Blog](https://github.com/jukaza/tavo/tree/main/docs/blog) - architecture deep-dives, benchmarks, guides
+- [FAQ](https://github.com/jukaza/tavo/tree/main/docs/faq) - frequently asked questions
+- [GitHub](https://github.com/jukaza/tavo) - source code, issues, releases
+- [Security Policy](https://github.com/jukaza/tavo/blob/main/SECURITY.md) - vulnerability reporting

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/voidmind-io/voidllm/internal/jsonx"
+	"github.com/jukaza/tavo/internal/jsonx"
 )
 
 // maxGeminiToolBlocks is the adapter-level cap on the number of distinct

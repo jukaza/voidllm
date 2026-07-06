@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/voidmind-io/voidllm/internal/cache"
-	"github.com/voidmind-io/voidllm/pkg/keygen"
+	"github.com/jukaza/tavo/internal/cache"
+	"github.com/jukaza/tavo/pkg/keygen"
 )
 
 func TestHasRole(t *testing.T) {

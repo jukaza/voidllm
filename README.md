@@ -1,31 +1,31 @@
-# VoidLLM
+# Tavo
 
-[![CI](https://github.com/voidmind-io/voidllm/actions/workflows/ci.yml/badge.svg)](https://github.com/voidmind-io/voidllm/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/voidmind-io/voidllm/graph/badge.svg?token=1OCK31RDMG)](https://codecov.io/gh/voidmind-io/voidllm)
-[![Go Report Card](https://goreportcard.com/badge/github.com/voidmind-io/voidllm)](https://goreportcard.com/report/github.com/voidmind-io/voidllm)
-[![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/voidllm)](https://artifacthub.io/packages/search?repo=voidllm)
-[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/voidmind-io/voidllm/badge)](https://securityscorecards.dev/viewer/?uri=github.com/voidmind-io/voidllm)
-[![Snyk](https://snyk.io/test/github/voidmind-io/voidllm/badge.svg)](https://snyk.io/test/github/voidmind-io/voidllm)
-[![Release](https://img.shields.io/github/v/release/voidmind-io/voidllm)](https://github.com/voidmind-io/voidllm/releases/latest)
-[![Go](https://img.shields.io/github/go-mod/go-version/voidmind-io/voidllm)](go.mod)
+[![CI](https://github.com/jukaza/tavo/actions/workflows/ci.yml/badge.svg)](https://github.com/jukaza/tavo/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/jukaza/tavo/graph/badge.svg?token=1OCK31RDMG)](https://codecov.io/gh/jukaza/tavo)
+[![Go Report Card](https://goreportcard.com/badge/github.com/jukaza/tavo)](https://goreportcard.com/report/github.com/jukaza/tavo)
+[![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/tavo)](https://artifacthub.io/packages/search?repo=tavo)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/jukaza/tavo/badge)](https://securityscorecards.dev/viewer/?uri=github.com/jukaza/tavo)
+[![Snyk](https://snyk.io/test/github/jukaza/tavo/badge.svg)](https://snyk.io/test/github/jukaza/tavo)
+[![Release](https://img.shields.io/github/v/release/jukaza/tavo)](https://github.com/jukaza/tavo/releases/latest)
+[![Go](https://img.shields.io/github/go-mod/go-version/jukaza/tavo)](go.mod)
 [![License: BSL 1.1](https://img.shields.io/badge/License-BSL_1.1-blue.svg)](LICENSE)
 
 **Self-hosted LLM API marketplace — sell OpenAI-compatible access with prepaid wallets.**
 
-VoidLLM is a single binary that combines a **public storefront**, **OpenAI-compatible proxy**, and **operator admin UI**. Customers sign up, top up a prepaid wallet, and call your models with reseller API keys. You configure upstream providers, set sell prices, approve top-ups, and monitor usage — without handing customers your raw provider keys.
+Tavo is a single binary that combines a **public storefront**, **OpenAI-compatible proxy**, and **operator admin UI**. Customers sign up, top up a prepaid wallet, and call your models with reseller API keys. You configure upstream providers, set sell prices, approve top-ups, and monitor usage — without handing customers your raw provider keys.
 
 Sub-2ms proxy overhead. Zero-knowledge by architecture: prompts and responses never touch disk.
 
 > **Current phase:** API routing and key issuance first. Wallet top-up enforcement is **off by default** (`settings.wallet.enforce_balance: false`) so customers can call the proxy immediately after signup. Turn billing on when you are ready to go live with prepaid balances.
 
-![VoidLLM Dashboard](docs/screenshots/VoidLLM-Dashboard.jpg)
+![Tavo Dashboard](docs/screenshots/Tavo-Dashboard.jpg)
 
 <details>
 <summary>More screenshots</summary>
 
-![Usage Analytics](docs/screenshots/VoidLLM-Usage.jpg)
-![API Keys](docs/screenshots/VoidLLM-Keys.jpg)
-![Playground](docs/screenshots/VoidLLM-Playground.jpg)
+![Usage Analytics](docs/screenshots/Tavo-Usage.jpg)
+![API Keys](docs/screenshots/Tavo-Keys.jpg)
+![Playground](docs/screenshots/Tavo-Playground.jpg)
 
 </details>
 
@@ -47,7 +47,7 @@ One deployment. No separate frontend server — the UI is embedded in the Go bin
 
 1. **Sign up** at `/register` — account, wallet, and first API key are created automatically
 2. **Get an API key** — issued on signup; create more from the dashboard
-3. **Call the API** — point any OpenAI SDK at your VoidLLM base URL
+3. **Call the API** — point any OpenAI SDK at your Tavo base URL
 
 When you enable `settings.wallet.enforce_balance: true`, add a top-up step: customers request credits, you approve them in the admin queue, and empty wallets receive `402`.
 
@@ -71,7 +71,7 @@ curl http://localhost:8080/v1/chat/completions \
 flowchart LR
     Visitor[Visitor] -->|signup| Store[Storefront UI]
     Store --> Wallet[(Prepaid wallet)]
-    App[Customer app / SDK] -->|OpenAI API| Proxy[VoidLLM proxy]
+    App[Customer app / SDK] -->|OpenAI API| Proxy[Tavo proxy]
     Proxy --> Check[Key auth + limits + balance]
     Check --> Route[Alias + load balancing]
     Route --> Upstream[OpenAI / Anthropic / Azure<br/>Ollama / vLLM / custom]
@@ -83,7 +83,7 @@ Authentication happens on every request. Rate limits and token budgets are enfor
 
 ## Privacy
 
-VoidLLM is zero-knowledge by architecture, not by configuration:
+Tavo is zero-knowledge by architecture, not by configuration:
 
 - No request or response bodies in logs, database, or persistent storage
 - No prompt caching — content passes through memory only
@@ -92,23 +92,23 @@ VoidLLM is zero-knowledge by architecture, not by configuration:
 ## Quick Start
 
 ```bash
-export VOIDLLM_ADMIN_KEY=$(openssl rand -base64 32)
-export VOIDLLM_ENCRYPTION_KEY=$(openssl rand -base64 32)
+export TAVO_ADMIN_KEY=$(openssl rand -base64 32)
+export TAVO_ENCRYPTION_KEY=$(openssl rand -base64 32)
 
 docker run -p 8080:8080 \
-  -e VOIDLLM_ADMIN_KEY -e VOIDLLM_ENCRYPTION_KEY \
-  -v voidllm_data:/data \
-  ghcr.io/voidmind-io/voidllm:latest
+  -e TAVO_ADMIN_KEY -e TAVO_ENCRYPTION_KEY \
+  -v tavo_data:/data \
+  ghcr.io/jukaza/tavo:latest
 ```
 
-On first start, VoidLLM prints bootstrap credentials to stdout:
+On first start, Tavo prints bootstrap credentials to stdout:
 
 ```
 ========================================
  BOOTSTRAP COMPLETE - COPY THESE NOW
 ========================================
   API Key:    vl_uk_a3f2...
-  Email:      admin@voidllm.local
+  Email:      admin@tavo.local
   Password:   <random>
 ========================================
 ```
@@ -125,10 +125,10 @@ Log in as `system_admin`, add models and providers, then open `/` in a private w
 ### Binary
 
 ```bash
-curl -sL https://github.com/voidmind-io/voidllm/releases/latest/download/voidllm-linux-amd64.tar.gz | tar xz
-export VOIDLLM_ADMIN_KEY=$(openssl rand -base64 32)
-export VOIDLLM_ENCRYPTION_KEY=$(openssl rand -base64 32)
-./voidllm
+curl -sL https://github.com/jukaza/tavo/releases/latest/download/tavo-linux-amd64.tar.gz | tar xz
+export TAVO_ADMIN_KEY=$(openssl rand -base64 32)
+export TAVO_ENCRYPTION_KEY=$(openssl rand -base64 32)
+./tavo
 ```
 
 Available for Linux, macOS, and Windows (amd64 and arm64).
@@ -175,10 +175,10 @@ models:
     bill_per_request: 0.001
 
 settings:
-  admin_key: ${VOIDLLM_ADMIN_KEY}
-  encryption_key: ${VOIDLLM_ENCRYPTION_KEY}
+  admin_key: ${TAVO_ADMIN_KEY}
+  encryption_key: ${TAVO_ENCRYPTION_KEY}
   bootstrap:
-    admin_email: admin@voidllm.local
+    admin_email: admin@tavo.local
   wallet:
     enforce_balance: false   # true = require positive balance (402 when empty)
 ```
@@ -192,16 +192,16 @@ Secrets use `${VAR}` interpolation — never hardcode API keys in config files.
 ### Docker Compose
 
 ```bash
-cp voidllm.yaml.example voidllm.yaml
-export VOIDLLM_ADMIN_KEY=$(openssl rand -base64 32)
-export VOIDLLM_ENCRYPTION_KEY=$(openssl rand -base64 32)
+cp tavo.yaml.example tavo.yaml
+export TAVO_ADMIN_KEY=$(openssl rand -base64 32)
+export TAVO_ENCRYPTION_KEY=$(openssl rand -base64 32)
 docker-compose up
 ```
 
 ### Kubernetes (Helm)
 
 ```bash
-helm install voidllm chart/voidllm/ \
+helm install tavo chart/tavo/ \
   --set secrets.adminKey=$(openssl rand -base64 32) \
   --set secrets.encryptionKey=$(openssl rand -base64 32)
 ```
@@ -213,14 +213,14 @@ PostgreSQL and Redis are optional subcharts for production multi-replica setups.
 ```bash
 # Prerequisites: Go 1.23+, Node 20+
 cd ui && npm ci && npm run build && cd ..
-go run ./cmd/voidllm --config voidllm.yaml
+go run ./cmd/tavo --config tavo.yaml
 ```
 
 ## Production Checklist
 
 - Use **PostgreSQL** instead of SQLite for production
 - Terminate **TLS** at a reverse proxy (Nginx, Caddy, Traefik)
-- Keep `VOIDLLM_ENCRYPTION_KEY` in a secrets manager (encrypts upstream API keys at rest)
+- Keep `TAVO_ENCRYPTION_KEY` in a secrets manager (encrypts upstream API keys at rest)
 - Do not use the bootstrap admin key as a customer API key
 - Scrape **`/metrics`** with Prometheus
 - Configure **database backups**
@@ -230,7 +230,7 @@ See [Security Hardening](docs/security/hardening.md) for the full list.
 
 ## Documentation
 
-**[Full docs](docs/index.md)** · **[Blog](https://voidllm.ai/blog)** · **[FAQ](https://voidllm.ai/faq)**
+**[Full docs](docs/index.md)** · **[Blog](https://github.com/jukaza/tavo/tree/main/docs/blog)** · **[FAQ](https://github.com/jukaza/tavo/tree/main/docs/faq)**
 
 | Topic | Guide |
 |---|---|
@@ -246,14 +246,14 @@ See [Security Hardening](docs/security/hardening.md) for the full list.
 
 ```bash
 # Migrate between SQLite and PostgreSQL
-voidllm migrate --from sqlite:///data/voidllm.db --to postgres://user:pass@host/db
+tavo migrate --from sqlite:///data/tavo.db --to postgres://user:pass@host/db
 ```
 
 ## Project
 
 - [Contributing](CONTRIBUTING.md)
 - [Changelog](CHANGELOG.md)
-- [Security](SECURITY.md) — report vulnerabilities to security@voidmind.io
+- [Security](SECURITY.md) — report vulnerabilities to security@tavo.io.vn
 - [Code of Conduct](CODE_OF_CONDUCT.md)
 
 ## License
@@ -263,4 +263,4 @@ competing hosted services prohibited. Converts to Apache 2.0 four years after ea
 
 ---
 
-Built by [VoidMind](https://voidmind.io) · [voidllm.ai](https://voidllm.ai)
+Built by [jukaza](https://github.com/jukaza) · [Docs](https://github.com/jukaza/tavo/tree/main/docs) · API: `api.tavo.io.vn`

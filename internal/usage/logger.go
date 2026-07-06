@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/voidmind-io/voidllm/internal/config"
-	"github.com/voidmind-io/voidllm/internal/db"
-	"github.com/voidmind-io/voidllm/internal/metrics"
-	"github.com/voidmind-io/voidllm/internal/ratelimit"
+	"github.com/jukaza/tavo/internal/config"
+	"github.com/jukaza/tavo/internal/db"
+	"github.com/jukaza/tavo/internal/metrics"
+	"github.com/jukaza/tavo/internal/ratelimit"
 )
 
 // rollupKey identifies a unique (key, model, hour) aggregation bucket.

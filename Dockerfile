@@ -18,18 +18,18 @@ COPY . .
 COPY --from=ui-builder /app/ui/dist ./ui/dist
 ARG VERSION=0.0.21
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
-    -ldflags="-s -w -X 'github.com/voidmind-io/voidllm/internal/api/health.Version=${VERSION}'" \
-    -o /voidllm ./cmd/voidllm
+    -ldflags="-s -w -X 'github.com/jukaza/tavo/internal/api/health.Version=${VERSION}'" \
+    -o /tavo ./cmd/tavo
 
 # Stage 3: Runtime
 FROM alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
 RUN apk upgrade --no-cache \
     && apk add --no-cache ca-certificates tzdata \
-    && addgroup -S voidllm && adduser -S -G voidllm voidllm \
-    && mkdir -p /data && chown voidllm:voidllm /data
-COPY --from=go-builder /voidllm /usr/local/bin/voidllm
+    && addgroup -S tavo && adduser -S -G tavo tavo \
+    && mkdir -p /data && chown tavo:tavo /data
+COPY --from=go-builder /tavo /usr/local/bin/tavo
 VOLUME ["/data"]
-ENV VOIDLLM_DATABASE_DSN=/data/voidllm.db
+ENV TAVO_DATABASE_DSN=/data/tavo.db
 EXPOSE 8080 8443
-USER voidllm
-ENTRYPOINT ["voidllm"]
+USER tavo
+ENTRYPOINT ["tavo"]

@@ -2,7 +2,7 @@
     "swagger": "2.0",
     "info": {
         "description": "Prepaid LLM API marketplace with OpenAI-compatible proxy, wallet billing, and model catalog.",
-        "title": "VoidLLM API",
+        "title": "Tavo API",
         "contact": {},
         "version": "0.2.0"
     },

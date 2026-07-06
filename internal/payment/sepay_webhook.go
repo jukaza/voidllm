@@ -89,7 +89,7 @@ func IsSepayWebhookIP(clientIP string) bool {
 	return false
 }
 
-// ExtractTradeNo finds the VoidLLM order reference (VL…NO…) in SePay transfer content/code.
+// ExtractTradeNo finds the Tavo order reference (VL…NO…) in SePay transfer content/code.
 // Arbitrary memo text is not accepted to avoid matching unrelated pending orders.
 func ExtractTradeNo(content, code string) string {
 	for _, raw := range []string{content, code} {

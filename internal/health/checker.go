@@ -15,10 +15,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/voidmind-io/voidllm/internal/config"
-	"github.com/voidmind-io/voidllm/internal/jsonx"
-	"github.com/voidmind-io/voidllm/internal/metrics"
-	"github.com/voidmind-io/voidllm/internal/proxy"
+	"github.com/jukaza/tavo/internal/config"
+	"github.com/jukaza/tavo/internal/jsonx"
+	"github.com/jukaza/tavo/internal/metrics"
+	"github.com/jukaza/tavo/internal/proxy"
 )
 
 // probeLevel identifies which probe produced a result so that the correct

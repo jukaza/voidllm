@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/voidmind-io/voidllm/internal/circuitbreaker"
-	"github.com/voidmind-io/voidllm/internal/config"
-	"github.com/voidmind-io/voidllm/internal/health"
-	"github.com/voidmind-io/voidllm/internal/proxy"
-	"github.com/voidmind-io/voidllm/internal/router"
+	"github.com/jukaza/tavo/internal/circuitbreaker"
+	"github.com/jukaza/tavo/internal/config"
+	"github.com/jukaza/tavo/internal/health"
+	"github.com/jukaza/tavo/internal/proxy"
+	"github.com/jukaza/tavo/internal/router"
 )
 
 // --- helpers ---------------------------------------------------------------

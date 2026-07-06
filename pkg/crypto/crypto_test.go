@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/voidmind-io/voidllm/pkg/crypto"
+	"github.com/jukaza/tavo/pkg/crypto"
 )
 
 // testKey returns a fixed 32-byte key suitable for deterministic tests.

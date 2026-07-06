@@ -8,9 +8,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/voidmind-io/voidllm/internal/config"
-	"github.com/voidmind-io/voidllm/internal/db"
-	"github.com/voidmind-io/voidllm/internal/logger"
+	"github.com/jukaza/tavo/internal/config"
+	"github.com/jukaza/tavo/internal/db"
+	"github.com/jukaza/tavo/internal/logger"
 )
 
 // runMigrateSchema is the entry point for the "migrate-schema" subcommand.
@@ -20,12 +20,12 @@ import (
 // PostgreSQL deployments to ensure migrations run exactly once.
 func runMigrateSchema(args []string) {
 	fs := flag.NewFlagSet("migrate-schema", flag.ExitOnError)
-	configPath := fs.String("config", "", "path to voidllm.yaml config file")
+	configPath := fs.String("config", "", "path to tavo.yaml config file")
 	fs.Parse(args) //nolint:errcheck // ExitOnError handles the error
 
 	cfg, _, err := config.Load(*configPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "voidllm migrate-schema: failed to load config: %v\n", err)
+		fmt.Fprintf(os.Stderr, "tavo migrate-schema: failed to load config: %v\n", err)
 		exitWithPause(1)
 	}
 

@@ -24,7 +24,7 @@ or sexual identity and orientation.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be reported
-to the project maintainers at **hello@voidmind.io**. All complaints will be reviewed
+to the project maintainers at **hello@tavo.io.vn**. All complaints will be reviewed
 and investigated.
 
 ## Attribution

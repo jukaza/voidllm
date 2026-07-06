@@ -105,7 +105,7 @@ export default function ProfitPage() {
             exportData(
               data.data as unknown as Record<string, unknown>[],
               REVENUE_HEADERS,
-              `voidllm-revenue-${groupBy}-${range}`,
+              `tavo-revenue-${groupBy}-${range}`,
               'csv',
             )
           }

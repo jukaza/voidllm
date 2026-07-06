@@ -1,5 +1,5 @@
 // Package update provides a background checker that periodically queries
-// GitHub Releases for new VoidLLM versions and caches the result in the
+// GitHub Releases for new Tavo versions and caches the result in the
 // settings table.
 package update
 
@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	githubReleasesURL = "https://api.github.com/repos/voidmind-io/voidllm/releases/latest"
+	githubReleasesURL = "https://api.github.com/repos/jukaza/tavo/releases/latest"
 	defaultInterval   = 24 * time.Hour
 	initialDelay      = 5 * time.Minute
 )
@@ -37,7 +37,7 @@ type UpdateInfo struct {
 	CheckedAt        string `json:"checked_at,omitempty"`
 }
 
-// Checker periodically queries GitHub Releases for new VoidLLM versions
+// Checker periodically queries GitHub Releases for new Tavo versions
 // and caches the result in the settings table.
 type Checker struct {
 	currentVersion string
@@ -129,7 +129,7 @@ func (c *Checker) check() {
 		return
 	}
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
-	req.Header.Set("User-Agent", "VoidLLM/"+c.currentVersion)
+	req.Header.Set("User-Agent", "Tavo/"+c.currentVersion)
 
 	resp, err := c.client.Do(req)
 	if err != nil {

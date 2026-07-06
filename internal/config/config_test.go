@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/voidmind-io/voidllm/internal/config"
+	"github.com/jukaza/tavo/internal/config"
 )
 
 // minimalValidYAML returns a YAML string that satisfies all validation
@@ -20,7 +20,7 @@ server:
     port: 8080
 database:
   driver: sqlite
-  dsn: voidllm.db
+  dsn: tavo.db
 settings:
   encryption_key: aaaaaaaaaaaaaaaa
   usage:
@@ -50,7 +50,7 @@ server:
     port: 8080
 database:
   driver: sqlite
-  dsn: voidllm.db
+  dsn: tavo.db
 settings:
   encryption_key: aaaaaaaaaaaaaaaa
   usage:
@@ -121,7 +121,7 @@ func TestInterpolateEnv(t *testing.T) {
 				t.Setenv(tc.envKey, tc.envVal)
 			}
 
-			path := writeTemp(t, "voidllm.yaml", modelWithAPIKey(tc.expr))
+			path := writeTemp(t, "tavo.yaml", modelWithAPIKey(tc.expr))
 			cfg, _, err := config.Load(path)
 			if err != nil {
 				t.Fatalf("Load() unexpected error: %v", err)
@@ -147,7 +147,7 @@ server:
     port: 8080
 database:
   driver: sqlite
-  dsn: voidllm.db
+  dsn: tavo.db
 settings:
   encryption_key: aaaaaaaaaaaaaaaa
   usage:
@@ -157,7 +157,7 @@ models:
     provider: openai
     base_url: "${SCHEME_PART}://${HOST_PART}"
 `
-	path := writeTemp(t, "voidllm.yaml", yaml)
+	path := writeTemp(t, "tavo.yaml", yaml)
 	cfg, _, err := config.Load(path)
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -175,7 +175,7 @@ func TestSetDefaults(t *testing.T) {
 
 	// Load a config that sets nothing except the required fields so that
 	// every default-filling branch is exercised.
-	path := writeTemp(t, "voidllm.yaml", minimalValidYAML())
+	path := writeTemp(t, "tavo.yaml", minimalValidYAML())
 	cfg, _, err := config.Load(path)
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -191,7 +191,7 @@ func TestSetDefaults(t *testing.T) {
 		{"proxy write timeout", cfg.Server.Proxy.WriteTimeout, 120 * time.Second},
 		{"proxy idle timeout", cfg.Server.Proxy.IdleTimeout, 60 * time.Second},
 		{"database driver", cfg.Database.Driver, "sqlite"},
-		{"database dsn", cfg.Database.DSN, "voidllm.db"},
+		{"database dsn", cfg.Database.DSN, "tavo.db"},
 		// Pool defaults are only applied for postgres; sqlite pins to 1 conn in db.Open.
 		{"database max open conns", cfg.Database.MaxOpenConns, 0},
 		{"database max idle conns", cfg.Database.MaxIdleConns, 0},
@@ -199,7 +199,7 @@ func TestSetDefaults(t *testing.T) {
 		{"cache key ttl", cfg.Cache.KeyTTL, 30 * time.Second},
 		{"cache model ttl", cfg.Cache.ModelTTL, 60 * time.Second},
 		{"cache alias ttl", cfg.Cache.AliasTTL, 60 * time.Second},
-		{"redis key prefix", cfg.Redis.KeyPrefix, "voidllm:"},
+		{"redis key prefix", cfg.Redis.KeyPrefix, "tavo:"},
 		{"max stream duration", cfg.Server.Proxy.MaxStreamDuration, 30 * time.Minute},
 		{"usage buffer size", cfg.Settings.Usage.BufferSize, 100}, // set explicitly in minimal YAML
 		{"usage flush interval", cfg.Settings.Usage.FlushInterval, 5 * time.Second},
@@ -219,7 +219,7 @@ func TestSetDefaults(t *testing.T) {
 func TestSetDefaults_DropOnFullNilIsTrue(t *testing.T) {
 	t.Parallel()
 
-	path := writeTemp(t, "voidllm.yaml", minimalValidYAML())
+	path := writeTemp(t, "tavo.yaml", minimalValidYAML())
 	cfg, _, err := config.Load(path)
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -233,7 +233,7 @@ func TestSetDefaults_DropOnFullNilIsTrue(t *testing.T) {
 func TestSetDefaults_TokenCountingNilIsEnabled(t *testing.T) {
 	t.Parallel()
 
-	path := writeTemp(t, "voidllm.yaml", minimalValidYAML())
+	path := writeTemp(t, "tavo.yaml", minimalValidYAML())
 	cfg, _, err := config.Load(path)
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -247,7 +247,7 @@ func TestSetDefaults_TokenCountingNilIsEnabled(t *testing.T) {
 func TestSetDefaults_CircuitBreakerNilIsEnabled(t *testing.T) {
 	t.Parallel()
 
-	path := writeTemp(t, "voidllm.yaml", minimalValidYAML())
+	path := writeTemp(t, "tavo.yaml", minimalValidYAML())
 	cfg, _, err := config.Load(path)
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -267,7 +267,7 @@ server:
     port: 8080
 database:
   driver: sqlite
-  dsn: voidllm.db
+  dsn: tavo.db
 settings:
   encryption_key: aaaaaaaaaaaaaaaa
   usage:
@@ -275,7 +275,7 @@ settings:
   circuit_breaker:
     enabled: false
 `
-	path := writeTemp(t, "voidllm.yaml", yaml)
+	path := writeTemp(t, "tavo.yaml", yaml)
 	cfg, _, err := config.Load(path)
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -295,14 +295,14 @@ server:
     port: 8080
 database:
   driver: sqlite
-  dsn: voidllm.db
+  dsn: tavo.db
 settings:
   encryption_key: aaaaaaaaaaaaaaaa
   usage:
     buffer_size: 50
     drop_on_full: false
 `
-	path := writeTemp(t, "voidllm.yaml", yaml)
+	path := writeTemp(t, "tavo.yaml", yaml)
 	cfg, _, err := config.Load(path)
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -347,7 +347,7 @@ server:
     port: -1
 database:
   driver: sqlite
-  dsn: voidllm.db
+  dsn: tavo.db
 settings:
   encryption_key: key
   usage:
@@ -364,7 +364,7 @@ server:
     port: 65536
 database:
   driver: sqlite
-  dsn: voidllm.db
+  dsn: tavo.db
 settings:
   encryption_key: key
   usage:
@@ -383,7 +383,7 @@ server:
     port: 65536
 database:
   driver: sqlite
-  dsn: voidllm.db
+  dsn: tavo.db
 settings:
   encryption_key: key
   usage:
@@ -402,7 +402,7 @@ server:
     port: 0
 database:
   driver: sqlite
-  dsn: voidllm.db
+  dsn: tavo.db
 settings:
   encryption_key: key
   usage:
@@ -422,7 +422,7 @@ server:
       key: /path/to/key.pem
 database:
   driver: sqlite
-  dsn: voidllm.db
+  dsn: tavo.db
 settings:
   encryption_key: key
   usage:
@@ -443,7 +443,7 @@ server:
       cert: /path/to/cert.pem
 database:
   driver: sqlite
-  dsn: voidllm.db
+  dsn: tavo.db
 settings:
   encryption_key: key
   usage:
@@ -460,7 +460,7 @@ server:
     port: 8080
 database:
   driver: mysql
-  dsn: root@tcp(localhost)/voidllm
+  dsn: root@tcp(localhost)/tavo
 settings:
   encryption_key: key
   usage:
@@ -470,7 +470,7 @@ settings:
 			errContains: "database.driver",
 		},
 		{
-			// An empty DSN in YAML is filled by setDefaults to "voidllm.db"
+			// An empty DSN in YAML is filled by setDefaults to "tavo.db"
 			// before validation runs, so the empty-DSN validation branch is
 			// unreachable via Load(). Verify that the default is applied and
 			// no error is returned.
@@ -497,7 +497,7 @@ server:
     port: 8080
 database:
   driver: sqlite
-  dsn: voidllm.db
+  dsn: tavo.db
 settings:
   encryption_key: key
   usage:
@@ -518,7 +518,7 @@ server:
     port: 8080
 database:
   driver: sqlite
-  dsn: voidllm.db
+  dsn: tavo.db
 settings:
   encryption_key: key
   usage:
@@ -539,7 +539,7 @@ server:
     port: 8080
 database:
   driver: sqlite
-  dsn: voidllm.db
+  dsn: tavo.db
 settings:
   encryption_key: key
   usage:
@@ -560,7 +560,7 @@ server:
     port: 8080
 database:
   driver: sqlite
-  dsn: voidllm.db
+  dsn: tavo.db
 settings:
   encryption_key: key
   usage:
@@ -581,7 +581,7 @@ server:
     port: 8080
 database:
   driver: sqlite
-  dsn: voidllm.db
+  dsn: tavo.db
 settings:
   encryption_key: key
   usage:
@@ -602,7 +602,7 @@ server:
     port: 8080
 database:
   driver: sqlite
-  dsn: voidllm.db
+  dsn: tavo.db
 settings:
   encryption_key: key
   usage:
@@ -626,7 +626,7 @@ server:
     port: 8080
 database:
   driver: sqlite
-  dsn: voidllm.db
+  dsn: tavo.db
 settings:
   encryption_key: key
   usage:
@@ -652,7 +652,7 @@ server:
     port: 8080
 database:
   driver: sqlite
-  dsn: voidllm.db
+  dsn: tavo.db
 settings:
   encryption_key: ""
   usage:
@@ -669,7 +669,7 @@ server:
     port: 8080
 database:
   driver: sqlite
-  dsn: voidllm.db
+  dsn: tavo.db
 settings:
   encryption_key: key
   usage:
@@ -687,7 +687,7 @@ server:
     port: 8080
 database:
   driver: sqlite
-  dsn: voidllm.db
+  dsn: tavo.db
 settings:
   encryption_key: key
   usage:
@@ -704,7 +704,7 @@ server:
     port: 8080
 database:
   driver: sqlite
-  dsn: voidllm.db
+  dsn: tavo.db
 settings:
   encryption_key: key
   soft_limit_threshold: 1.1
@@ -722,7 +722,7 @@ server:
     port: 8080
 database:
   driver: sqlite
-  dsn: voidllm.db
+  dsn: tavo.db
 settings:
   encryption_key: key
   soft_limit_threshold: -0.1
@@ -740,7 +740,7 @@ server:
     port: 8080
 database:
   driver: sqlite
-  dsn: voidllm.db
+  dsn: tavo.db
 settings:
   encryption_key: supersecretkey
   usage:
@@ -757,7 +757,7 @@ server:
     port: 8080
 database:
   driver: sqlite
-  dsn: voidllm.db
+  dsn: tavo.db
 settings:
   encryption_key: key
   usage:
@@ -776,7 +776,7 @@ server:
     port: 8080
 database:
   driver: sqlite
-  dsn: voidllm.db
+  dsn: tavo.db
 settings:
   encryption_key: key
   usage:
@@ -795,7 +795,7 @@ server:
     port: 8080
 database:
   driver: sqlite
-  dsn: voidllm.db
+  dsn: tavo.db
 settings:
   encryption_key: key
   usage:
@@ -814,7 +814,7 @@ server:
     port: 8080
 database:
   driver: sqlite
-  dsn: voidllm.db
+  dsn: tavo.db
 settings:
   encryption_key: key
   usage:
@@ -833,7 +833,7 @@ server:
     port: 8080
 database:
   driver: sqlite
-  dsn: voidllm.db
+  dsn: tavo.db
 settings:
   encryption_key: key
   usage:
@@ -853,7 +853,7 @@ server:
     port: 8080
 database:
   driver: sqlite
-  dsn: voidllm.db
+  dsn: tavo.db
 settings:
   encryption_key: key
   usage:
@@ -873,7 +873,7 @@ server:
     port: 8080
 database:
   driver: sqlite
-  dsn: voidllm.db
+  dsn: tavo.db
 settings:
   encryption_key: key
   usage:
@@ -892,7 +892,7 @@ server:
     port: 8080
 database:
   driver: sqlite
-  dsn: voidllm.db
+  dsn: tavo.db
 settings:
   encryption_key: key
   usage:
@@ -910,7 +910,7 @@ settings:
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			path := writeTemp(t, "voidllm.yaml", tc.yaml)
+			path := writeTemp(t, "tavo.yaml", tc.yaml)
 			_, _, err := config.Load(path)
 
 			if tc.wantErr {
@@ -954,7 +954,7 @@ models:
     provider: bedrock
     base_url: ""
 `
-	path := writeTemp(t, "voidllm.yaml", yaml)
+	path := writeTemp(t, "tavo.yaml", yaml)
 	_, _, err := config.Load(path)
 	if err == nil {
 		t.Fatal("Load() expected error, got nil")
@@ -987,7 +987,7 @@ models:
 func TestLoad_ExplicitPath(t *testing.T) {
 	t.Parallel()
 
-	path := writeTemp(t, "voidllm.yaml", minimalValidYAML())
+	path := writeTemp(t, "tavo.yaml", minimalValidYAML())
 	cfg, _, err := config.Load(path)
 	if err != nil {
 		t.Fatalf("Load(%q) unexpected error: %v", path, err)
@@ -1000,7 +1000,7 @@ func TestLoad_ExplicitPath(t *testing.T) {
 func TestLoad_NonexistentExplicitPath(t *testing.T) {
 	t.Parallel()
 
-	_, _, err := config.Load("/nonexistent/path/voidllm.yaml")
+	_, _, err := config.Load("/nonexistent/path/tavo.yaml")
 	if err == nil {
 		t.Fatal("Load() expected error for nonexistent path, got nil")
 	}
@@ -1009,11 +1009,11 @@ func TestLoad_NonexistentExplicitPath(t *testing.T) {
 func TestLoad_VoidllmConfigEnvVar(t *testing.T) {
 	// t.Setenv requires sequential execution; no t.Parallel() here.
 	path := writeTemp(t, "custom.yaml", minimalValidYAML())
-	t.Setenv("VOIDLLM_CONFIG", path)
+	t.Setenv("TAVO_CONFIG", path)
 
 	cfg, _, err := config.Load("")
 	if err != nil {
-		t.Fatalf("Load(\"\") with VOIDLLM_CONFIG set: unexpected error: %v", err)
+		t.Fatalf("Load(\"\") with TAVO_CONFIG set: unexpected error: %v", err)
 	}
 	if cfg == nil {
 		t.Fatal("Load() returned nil config")
@@ -1021,7 +1021,7 @@ func TestLoad_VoidllmConfigEnvVar(t *testing.T) {
 }
 
 // isolateFromFilesystem changes into a fresh temp directory so that no
-// ./voidllm.yaml is present, clears VOIDLLM_CONFIG, and also clears the two
+// ./tavo.yaml is present, clears TAVO_CONFIG, and also clears the two
 // env-based secrets so each sub-test starts from a known baseline.
 // It restores everything via t.Cleanup.
 func isolateFromFilesystem(t *testing.T) {
@@ -1035,9 +1035,9 @@ func isolateFromFilesystem(t *testing.T) {
 		t.Fatalf("isolateFromFilesystem: Chdir: %v", err)
 	}
 	t.Cleanup(func() { _ = os.Chdir(original) })
-	t.Setenv("VOIDLLM_CONFIG", "")
-	t.Setenv("VOIDLLM_ENCRYPTION_KEY", "")
-	t.Setenv("VOIDLLM_ADMIN_KEY", "")
+	t.Setenv("TAVO_CONFIG", "")
+	t.Setenv("TAVO_ENCRYPTION_KEY", "")
+	t.Setenv("TAVO_ADMIN_KEY", "")
 }
 
 // TestLoad_NoPathNoEnvVarNoFile tests the new loadDefaults() fallback path.
@@ -1059,15 +1059,15 @@ func TestLoad_NoPathNoEnvVarNoFile(t *testing.T) {
 
 // TestLoad_FallbackToDefaultsWithEncryptionKey verifies that Load("") succeeds
 // and returns a fully-defaulted Config (proxy port 8080) when no config file
-// exists but VOIDLLM_ENCRYPTION_KEY is present in the environment.
+// exists but TAVO_ENCRYPTION_KEY is present in the environment.
 func TestLoad_FallbackToDefaultsWithEncryptionKey(t *testing.T) {
 	// t.Setenv and os.Chdir require sequential execution; no t.Parallel() here.
 	isolateFromFilesystem(t)
-	t.Setenv("VOIDLLM_ENCRYPTION_KEY", "test-encryption-key-32chars-long!")
+	t.Setenv("TAVO_ENCRYPTION_KEY", "test-encryption-key-32chars-long!")
 
 	cfg, _, err := config.Load("")
 	if err != nil {
-		t.Fatalf("Load(\"\") with VOIDLLM_ENCRYPTION_KEY set: unexpected error: %v", err)
+		t.Fatalf("Load(\"\") with TAVO_ENCRYPTION_KEY set: unexpected error: %v", err)
 	}
 	if cfg == nil {
 		t.Fatal("Load(\"\") returned nil config")
@@ -1086,8 +1086,8 @@ func TestLoad_FallbackToDefaultsWithEncryptionKey(t *testing.T) {
 func TestLoad_FallbackToDefaultsPicksUpAdminKey(t *testing.T) {
 	// t.Setenv and os.Chdir require sequential execution; no t.Parallel() here.
 	isolateFromFilesystem(t)
-	t.Setenv("VOIDLLM_ENCRYPTION_KEY", "test-encryption-key-32chars-long!")
-	t.Setenv("VOIDLLM_ADMIN_KEY", "vl_sa_testsecretadminkey")
+	t.Setenv("TAVO_ENCRYPTION_KEY", "test-encryption-key-32chars-long!")
+	t.Setenv("TAVO_ADMIN_KEY", "vl_sa_testsecretadminkey")
 
 	cfg, _, err := config.Load("")
 	if err != nil {
@@ -1124,7 +1124,7 @@ server:
     port: 9091
 database:
   driver: postgres
-  dsn: postgres://user:pass@localhost/voidllm
+  dsn: postgres://user:pass@localhost/tavo
 settings:
   encryption_key: supersecurekey123
   usage:
@@ -1151,7 +1151,7 @@ models:
     aliases:
       - fast
 `
-	path := writeTemp(t, "voidllm.yaml", yaml)
+	path := writeTemp(t, "tavo.yaml", yaml)
 	cfg, _, err := config.Load(path)
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)

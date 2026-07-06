@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/voidmind-io/voidllm/internal/config"
+	"github.com/jukaza/tavo/internal/config"
 )
 
 // SettingsStore reads and writes feature settings.

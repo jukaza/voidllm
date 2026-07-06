@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { StatCard } from '../../components/ui/StatCard'
-import { AreaChart, DonutChart, HorizontalBar } from '../../components/ui/charts'
+import { AreaChart, DonutChart, HorizontalBar, type DonutSegment } from '../../components/ui/charts'
 import { useMe } from '../../hooks/useMe'
 import { useMyUsage, type MyUsageFilters, type UsageDataPoint } from '../../hooks/useUsage'
 import { useAPIKeys } from '../../hooks/useAPIKeys'
@@ -8,6 +8,7 @@ import { formatCost, formatNumber, formatTokens } from '../../lib/utils'
 import { useTranslation } from '../../lib/i18n'
 import { useUsageLive } from '../../hooks/useUsageLive'
 import { PillGroup } from '../../components/ui/PillGroup'
+import { TOKEN_CHART_COLORS, TOKEN_METRIC_STYLES, tokenBarSegments } from '../../lib/tokenColors'
 
 type PeriodDays = 1 | 7 | 15 | 30
 type ChartMetric = 'requests' | 'payment' | 'tokens'
@@ -120,12 +121,23 @@ export default function AnalyticsOverviewPage() {
   const donutSegments = useMemo(() => {
     if (topModels.length === 0) return []
     const prompt = topModels.reduce((acc, m) => acc + m.prompt_tokens, 0)
+    const cached = topModels.reduce((acc, m) => acc + (m.cached_tokens ?? 0), 0)
     const completion = topModels.reduce((acc, m) => acc + m.completion_tokens, 0)
+    const freshInput = Math.max(0, prompt - cached)
     if (prompt + completion === 0) return []
-    return [
-      { label: t('analytics.tokens_input'), value: prompt, color: '#8b5cf6' },
-      { label: t('analytics.tokens_output'), value: completion, color: '#6366f1' },
+
+    const segments: DonutSegment[] = [
+      { label: t('analytics.tokens_input'), value: freshInput, color: TOKEN_CHART_COLORS.input },
+      { label: t('analytics.tokens_output'), value: completion, color: TOKEN_CHART_COLORS.output },
     ]
+    if (cached > 0) {
+      segments.splice(1, 0, {
+        label: t('analytics.cache_read'),
+        value: cached,
+        color: TOKEN_CHART_COLORS.cacheRead,
+      })
+    }
+    return segments.filter((s) => s.value > 0)
   }, [topModels, t])
 
   const periodLabel = useMemo(() => {
@@ -217,14 +229,17 @@ export default function AnalyticsOverviewPage() {
         <StatCard
           label={`${t('analytics.tokens_input')} (${periodLabel})`}
           value={loading ? '...' : formatTokens(summary.promptTokens)}
+          valueStyle={{ color: TOKEN_METRIC_STYLES.input.color }}
         />
         <StatCard
           label={`${t('analytics.tokens_output')} (${periodLabel})`}
           value={loading ? '...' : formatTokens(summary.completionTokens)}
+          valueStyle={{ color: TOKEN_METRIC_STYLES.output.color }}
         />
         <StatCard
           label={`${t('analytics.tokens_cached')} (${periodLabel})`}
           value={loading ? '...' : formatTokens(summary.cachedTokens)}
+          valueStyle={{ color: TOKEN_METRIC_STYLES.cacheRead.color }}
         />
         <StatCard
           label={`${t('analytics.payment')} (${periodLabel})`}
@@ -265,6 +280,7 @@ export default function AnalyticsOverviewPage() {
                 label: m.group_label || m.group_key,
                 value: m.total_tokens,
                 detail: formatTokens(m.total_tokens),
+                segments: tokenBarSegments(m.prompt_tokens, m.completion_tokens, m.cached_tokens ?? 0),
               }))}
             />
           ) : (

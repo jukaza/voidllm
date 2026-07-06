@@ -1,5 +1,5 @@
 # =============================================================================
-# VoidLLM Configuration
+# Tavo Configuration
 # =============================================================================
 #
 # Environment variable interpolation: use ${VAR} or ${VAR:-default}
@@ -7,9 +7,9 @@
 #
 # Config file location (in order of precedence):
 #   1. --config flag
-#   2. VOIDLLM_CONFIG env var
-#   3. ./voidllm.yaml
-#   4. /etc/voidllm/voidllm.yaml
+#   2. TAVO_CONFIG env var
+#   3. ./tavo.yaml
+#   4. /etc/tavo/tavo.yaml
 
 
 # =============================================================================
@@ -46,11 +46,11 @@ database:
 
   # SQLite: path to the database file
   # Use a persistent volume in Docker/Kubernetes
-  dsn: /data/voidllm.db
+  dsn: /data/tavo.db
 
   # PostgreSQL example:
   # driver: postgres
-  # dsn: postgres://voidllm:${DB_PASSWORD}@postgres:5432/voidllm?sslmode=require
+  # dsn: postgres://tavo:${DB_PASSWORD}@postgres:5432/tavo?sslmode=require
 
   # Connection pool (ignored for SQLite)
   max_open_conns: 25
@@ -82,8 +82,8 @@ redis:
   url: redis://:${REDIS_PASSWORD}@redis:6379/0
   # url: redis://redis:6379/0     # no password
 
-  # Prefix for all VoidLLM keys in Redis (useful if Redis is shared)
-  key_prefix: voidllm:
+  # Prefix for all Tavo keys in Redis (useful if Redis is shared)
+  key_prefix: tavo:
 
 
 # =============================================================================
@@ -205,13 +205,13 @@ settings:
   # Bootstrap admin key — used ONLY when the database is empty (first startup).
   # After first startup, create a proper user with system_admin role and remove this.
   # Must be at least 32 characters.
-  admin_key: ${VOIDLLM_ADMIN_KEY}
+  admin_key: ${TAVO_ADMIN_KEY}
 
   # Encryption key for upstream API keys stored in the database.
   # AES-256-GCM. Must be exactly 32 bytes (256 bits), base64-encoded.
   # Generate with: openssl rand -base64 32
   # Changing this key will invalidate all stored upstream API keys.
-  encryption_key: ${VOIDLLM_ENCRYPTION_KEY}
+  encryption_key: ${TAVO_ENCRYPTION_KEY}
 
   # Async usage logging
   usage:

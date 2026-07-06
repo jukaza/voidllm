@@ -7,9 +7,9 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/voidmind-io/voidllm/internal/config"
-	"github.com/voidmind-io/voidllm/internal/db"
-	"github.com/voidmind-io/voidllm/pkg/crypto"
+	"github.com/jukaza/tavo/internal/config"
+	"github.com/jukaza/tavo/internal/db"
+	"github.com/jukaza/tavo/pkg/crypto"
 )
 
 // runMigrateProviderData migrates legacy provider keys and model deployments into
@@ -17,7 +17,7 @@ import (
 func runMigrateProviderData(args []string) {
 	fs := flag.NewFlagSet("migrate-provider-data", flag.ExitOnError)
 	dsn := fs.String("dsn", "", "Database DSN (defaults to config file)")
-	configPath := fs.String("config", "", "path to voidllm.yaml")
+	configPath := fs.String("config", "", "path to tavo.yaml")
 	dryRun := fs.Bool("dry-run", false, "Report actions without writing")
 	fs.Parse(args) //nolint:errcheck
 

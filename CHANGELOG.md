@@ -1,6 +1,13 @@
 # Changelog
 
-All notable changes to VoidLLM are documented in this file.
+All notable changes to Tavo are documented in this file.
+
+## [Unreleased]
+
+### Breaking
+- **Renamed VoidLLM → Tavo.** Binary `tavo`, config `tavo.yaml`, env vars `TAVO_*`, default DB `tavo.db`, Docker image `ghcr.io/jukaza/tavo`, Go module `github.com/jukaza/tavo`. Prometheus metrics use `tavo_*` prefix. No legacy `VOIDLLM_*` or `voidllm.yaml` aliases.
+
+---
 
 ## [0.0.22] - 2026-06-21
 
@@ -166,7 +173,7 @@ All notable changes to VoidLLM are documented in this file.
 - Rate limit and token budget violations now logged
 - Migration execution logged at INFO
 - Failed login attempts audited
-- Default DB path: ./voidllm.db for standalone, /data/voidllm.db for Docker
+- Default DB path: ./tavo.db for standalone, /data/tavo.db for Docker
 - SSRF-safe dialer for MCP health probes
 - Heartbeat dedup via timestamp (replaces lock mechanism)
 - Bounded concurrency for MCP health probes
@@ -180,7 +187,7 @@ All notable changes to VoidLLM are documented in this file.
 - Usage dashboard: handle NULL team_id/key_id/user_id in aggregation queries (#51)
 - License set via UI now persists to database across restarts
 - License startup log shows source (database, config, or none)
-- Heartbeat User-Agent includes VoidLLM version
+- Heartbeat User-Agent includes Tavo version
 - Updated embedded license public key
 
 ### Documentation
@@ -195,7 +202,7 @@ All notable changes to VoidLLM are documented in this file.
 - Restructured docs into 24 files with subdirectories (deployment/, models/, mcp/, security/, enterprise/, api/)
 - Added getting-started guide, troubleshooting, and docs index
 - All doc files include Astro frontmatter for website rendering
-- Docs now live at [voidllm.ai/docs](https://voidllm.ai/docs)
+- Docs now live at [tavo.ai/docs](https://github.com/jukaza/tavo/tree/main/docs/docs)
 
 ### Helm Chart
 - Fixed Artifact Hub indexing (removed empty signKey annotation)
@@ -210,7 +217,7 @@ All notable changes to VoidLLM are documented in this file.
 ## [0.0.10] - 2026-04-01
 
 ### Helm Chart
-- Published to [Artifact Hub](https://artifacthub.io/packages/helm/voidllm/voidllm)
+- Published to [Artifact Hub](https://artifacthub.io/packages/helm/tavo/tavo)
 - Chart README with quick start and configuration examples
 - Added icon, keywords, license annotation, documentation links
 
@@ -228,7 +235,7 @@ All notable changes to VoidLLM are documented in this file.
 
 ### Docker, Helm & Configuration
 
-- **Fixed image registry** — Docker Compose now uses `ghcr.io/voidmind-io/voidllm`
+- **Fixed image registry** — Docker Compose now uses `ghcr.io/jukaza/tavo`
 - **Helm chart updated** — correct registry, MCP, Code Mode, and health check settings in values + configmap
 - **Istio support** — optional Gateway + VirtualService templates (`istio.enabled: true`)
 - **MCP servers in Helm** — static MCP server definitions via `config.mcpServers`
@@ -276,7 +283,7 @@ All notable changes to VoidLLM are documented in this file.
 - **Persistent tool cache** — tool schemas stored in DB, zero HTTP calls on startup, 24h background refresh
 - **Execution history** — UUIDv7 per execution groups tool calls for tracing
 - **SSE transport detection** — deprecated SSE servers auto-detected and deactivated
-- **MCP server split** — Code Mode at `/api/v1/mcp`, management tools at `/api/v1/mcp/voidllm`
+- **MCP server split** — Code Mode at `/api/v1/mcp`, management tools at `/api/v1/mcp/tavo`
 - **Tools list UI** — expanded row shows all tools per server with block/unblock buttons
 - **Code Mode toggle** — per-server enable/disable in UI and API
 - **Refresh tools endpoint** — force re-fetch tool schemas with 60s cooldown
@@ -292,7 +299,7 @@ All notable changes to VoidLLM are documented in this file.
 - **Scoped access control** — global, org, and team-level MCP server registration
 - **MCP access tables** — org/team/key allowlists (most-restrictive-wins)
 - **Session management** — auto-initialize, Mcp-Session-Id forwarding, session re-init on expiry
-- **YAML config sync** — MCP servers from `voidllm.yaml` synced to DB at startup
+- **YAML config sync** — MCP servers from `tavo.yaml` synced to DB at startup
 - **Async tool call logging** — fire-and-forget batch writes to `mcp_tool_calls`
 - **MCP Servers UI** — CRUD, scope selector, auth type tabs, test connection, source badges
 - **Prometheus metrics** — tool call counts, duration, transport errors
@@ -313,7 +320,7 @@ All notable changes to VoidLLM are documented in this file.
 - **ARM64 Docker images** — multi-arch builds (linux/amd64 + linux/arm64)
 - **Cross-compile Dockerfile** — builds in ~2.5 min instead of ~20 min
 - **Flexible encryption key** — accepts base64 or any string >= 16 characters (SHA-256 derived)
-- **Default config fallback** — start with just `VOIDLLM_ENCRYPTION_KEY` env var, no config file needed
+- **Default config fallback** — start with just `TAVO_ENCRYPTION_KEY` env var, no config file needed
 - **Bootstrap log ordering** — credentials shown after server start, cleared from memory after print
 - **Codecov integration** — coverage reporting in CI with badge
 - **Admin API tests** — models, invites, model aliases, model access (3700+ lines)

@@ -44,7 +44,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/voidmind-io/voidllm/internal/circuitbreaker"
+	"github.com/jukaza/tavo/internal/circuitbreaker"
 )
 
 // ── AZ-1: Azure passthrough returns ([][]byte{line}, nil) ─────────────────────

@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/voidmind-io/voidllm/internal/config"
+	"github.com/jukaza/tavo/internal/config"
 )
 
 // ── de-firstnames pack ───────────────────────────────────────────────────────

@@ -23,7 +23,7 @@ export default function LandingPage() {
 
   const isLoggedIn = Boolean(localStorage.getItem(LOCAL_STORAGE_KEY))
   const showRegister = site?.register_enabled !== false
-  const footerText = site?.footer?.trim() || `${site?.system_name ?? 'VoidLLM'} — OpenAI-compatible API marketplace`
+  const footerText = site?.footer?.trim() || `${site?.system_name ?? 'Tavo'} — OpenAI-compatible API marketplace`
   const heroSubtitle = site?.site_subtitle?.trim() || t('storefront.hero_subtitle')
   const zaloHref = contactHref(site?.support_zalo ?? '')
   const telegramHref = contactHref(site?.support_telegram ?? '')

@@ -8,7 +8,7 @@ order: 1
 
 ## Mục tiêu
 
-Chuyển VoidLLM từ **LLM gateway tự host cho nội bộ doanh nghiệp** thành **nền tảng bán lại API**:
+Chuyển Tavo từ **LLM gateway tự host cho nội bộ doanh nghiệp** thành **nền tảng bán lại API**:
 
 - Nhiều nhà cung cấp (provider) đưa API custom của họ vào hệ thống.
 - Admin đóng gói các endpoint đó thành **model công khai** với giá bán thống nhất.

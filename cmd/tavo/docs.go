@@ -1,6 +1,6 @@
 package main
 
-// @title           VoidLLM API
+// @title           Tavo API
 // @version         0.2.0
 // @description     Prepaid LLM API marketplace with OpenAI-compatible proxy, wallet billing, and model catalog.
 // @BasePath        /api/v1

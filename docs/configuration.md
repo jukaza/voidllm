@@ -1,19 +1,19 @@
 ---
 title: "Configuration Reference"
-description: "All VoidLLM YAML configuration options with examples"
+description: "All Tavo YAML configuration options with examples"
 section: root
 order: 2
 ---
 # Configuration Reference
 
-VoidLLM is configured via a YAML file. By default it looks for `voidllm.yaml` in the current directory, or pass `--config /path/to/config.yaml`.
+Tavo is configured via a YAML file. By default it looks for `tavo.yaml` in the current directory, or pass `--config /path/to/config.yaml`.
 
 Environment variables are interpolated with `${VAR}` syntax. Use this for secrets:
 
 ```yaml
 settings:
-  admin_key: ${VOIDLLM_ADMIN_KEY}
-  encryption_key: ${VOIDLLM_ENCRYPTION_KEY}
+  admin_key: ${TAVO_ADMIN_KEY}
+  encryption_key: ${TAVO_ENCRYPTION_KEY}
 ```
 
 ## Server
@@ -41,11 +41,11 @@ server:
 ```yaml
 database:
   driver: sqlite            # sqlite (default) or postgres
-  dsn: /data/voidllm.db    # SQLite file path or PostgreSQL DSN
+  dsn: /data/tavo.db    # SQLite file path or PostgreSQL DSN
 
   # PostgreSQL example:
   # driver: postgres
-  # dsn: postgres://user:${DB_PASSWORD}@host:5432/voidllm?sslmode=require
+  # dsn: postgres://user:${DB_PASSWORD}@host:5432/tavo?sslmode=require
 
   # Connection pool (PostgreSQL only)
   max_open_conns: 25
@@ -57,8 +57,8 @@ For config-less startup (no YAML file), these environment variables override the
 
 | Variable | Default | Description |
 |---|---|---|
-| `VOIDLLM_DATABASE_DSN` | `./voidllm.db` (standalone), `/data/voidllm.db` (Docker) | Database file path or PostgreSQL DSN |
-| `VOIDLLM_DATABASE_DRIVER` | `sqlite` | Database driver - `sqlite` or `postgres` |
+| `TAVO_DATABASE_DSN` | `./tavo.db` (standalone), `/data/tavo.db` (Docker) | Database file path or PostgreSQL DSN |
+| `TAVO_DATABASE_DRIVER` | `sqlite` | Database driver - `sqlite` or `postgres` |
 
 ## Models
 
@@ -91,7 +91,7 @@ DB models take precedence over YAML models on name collision.
 
 ## Load Balancing
 
-Models can have multiple deployments for redundancy and load distribution. VoidLLM routes requests across deployments and automatically falls back on failure.
+Models can have multiple deployments for redundancy and load distribution. Tavo routes requests across deployments and automatically falls back on failure.
 
 ```yaml
 models:
@@ -140,7 +140,7 @@ models:
 - 4xx → return error immediately (client error, retrying won't help)
 - Once streaming has started → no retry (committed to the deployment)
 
-**Health integration:** The health checker probes each deployment independently. Unhealthy deployments are skipped during routing. If all deployments are unhealthy, VoidLLM tries all of them as a last resort.
+**Health integration:** The health checker probes each deployment independently. Unhealthy deployments are skipped during routing. If all deployments are unhealthy, Tavo tries all of them as a last resort.
 
 **Circuit breakers:** Each deployment has its own circuit breaker. After repeated failures a deployment is temporarily removed from rotation and automatically recovers.
 
@@ -149,16 +149,16 @@ models:
 ```yaml
 settings:
   # Required: bootstrap admin key (≥32 chars)
-  admin_key: ${VOIDLLM_ADMIN_KEY}
+  admin_key: ${TAVO_ADMIN_KEY}
 
   # Required: AES-256-GCM encryption key (base64, 32 bytes)
   # Generate: openssl rand -base64 32
-  encryption_key: ${VOIDLLM_ENCRYPTION_KEY}
+  encryption_key: ${TAVO_ENCRYPTION_KEY}
 
   # Enterprise license key
-  license: ${VOIDLLM_LICENSE}
+  license: ${TAVO_LICENSE}
   # Or as a file path:
-  # license_file: /etc/voidllm/license.jwt
+  # license_file: /etc/tavo/license.jwt
 
   # First-run bootstrap
   bootstrap:
@@ -219,7 +219,7 @@ don't need Redis.
 redis:
   enabled: false
   url: redis://:${REDIS_PASSWORD}@redis:6379/0
-  key_prefix: voidllm:
+  key_prefix: tavo:
 ```
 
 ### Audit Logging (Enterprise)

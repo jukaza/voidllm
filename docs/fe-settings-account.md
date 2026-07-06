@@ -8,7 +8,7 @@ order: 0
 
 Tài liệu này ghi lại redesign UI đã triển khai (tháng 7/2026) để phiên code sau biết **đã xong gì**, **pattern nào**, và **backend còn thiếu gì**.
 
-> **Lưu ý:** VoidLLM **không có** groups/subscriptions như sub2api. Không copy toàn bộ admin settings từ sub2api — chỉ lấy UX pattern phù hợp marketplace (ví trả trước, member + system_admin).
+> **Lưu ý:** Tavo **không có** groups/subscriptions như sub2api. Không copy toàn bộ admin settings từ sub2api — chỉ lấy UX pattern phù hợp marketplace (ví trả trước, member + system_admin).
 
 ---
 
@@ -35,8 +35,8 @@ Cả hai trang dùng chung:
 | **Live** | Gọi API backend thật, có hiệu lực sau Save | Server / React Query |
 | **Preview** | UI + localStorage draft, chưa có API | `useSettingsDraft` hoặc `useAccountDraft` |
 
-**Admin draft:** `localStorage` key `voidllm.admin_settings.draft.v1`  
-**Account draft:** `localStorage` key `voidllm.account.draft.v1`
+**Admin draft:** `localStorage` key `tavo.admin_settings.draft.v1`  
+**Account draft:** `localStorage` key `tavo.account.draft.v1`
 
 Khi wire backend cho trường Preview: thêm API → bỏ draft field → đổi badge sang Live → xóa hint footer preview.
 
@@ -121,7 +121,7 @@ Link nhanh: Wallet, Analytics, Keys.
 
 ## Đã gỡ tính năng 2FA
 
-Quyết định: **gỡ hoàn toàn TOTP 2FA** khỏi VoidLLM core (login, account, admin policy, DB).
+Quyết định: **gỡ hoàn toàn TOTP 2FA** khỏi Tavo core (login, account, admin policy, DB).
 
 ### Backend đã xóa
 
@@ -247,7 +247,7 @@ ui/src/
 ## Tham chiếu UX (không copy 1:1)
 
 - **new-api** `web/default/src/features/profile/` — hero, stats, security tiles
-- **sub2api** admin settings — tham khảo độ phủ tab; voidllm đã **rút gọn** (không groups, không email SMTP, backup lite)
+- **sub2api** admin settings — tham khảo độ phủ tab; tavo đã **rút gọn** (không groups, không email SMTP, backup lite)
 
 ---
 

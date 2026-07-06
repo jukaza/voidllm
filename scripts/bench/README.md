@@ -1,4 +1,4 @@
-# VoidLLM Benchmark
+# Tavo Benchmark
 
 Measures proxy overhead for LLM paths using embedded mock servers and the [Vegeta](https://github.com/tsenart/vegeta) load testing library.
 
@@ -48,7 +48,7 @@ go run ./scripts/bench all
 ## How it works
 
 1. Starts an embedded mock LLM server on a random port
-2. Builds and starts a VoidLLM proxy instance with in-memory SQLite
+2. Builds and starts a Tavo proxy instance with in-memory SQLite
 3. Runs Vegeta load tests against direct (calibration) and proxied paths
 4. Reports overhead = proxied latency - direct latency
 

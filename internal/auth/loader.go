@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/voidmind-io/voidllm/internal/cache"
-	"github.com/voidmind-io/voidllm/internal/db"
+	"github.com/jukaza/tavo/internal/cache"
+	"github.com/jukaza/tavo/internal/db"
 )
 
 // LoadKeysIntoCache queries all active (non-deleted) API keys from the database

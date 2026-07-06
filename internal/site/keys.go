@@ -22,7 +22,7 @@ const (
 )
 
 // DefaultSystemName is the product name used until an operator customizes it.
-const DefaultSystemName = "VoidLLM"
+const DefaultSystemName = "Tavo"
 
 // DefaultLogo is the bundled logo path served by the embedded UI.
 const DefaultLogo = "/logo.svg"

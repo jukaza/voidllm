@@ -10,7 +10,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	uiPkg "github.com/voidmind-io/voidllm/ui"
+	uiPkg "github.com/jukaza/tavo/ui"
 )
 
 // registerSPAHandler mounts the embedded Vite SPA as a catch-all route on app.

@@ -12,6 +12,10 @@ func deviceLabelFromUserAgent(ua string) string {
 
 	browser := "Browser"
 	switch {
+	case strings.HasPrefix(lower, "curl/"):
+		return "curl CLI"
+	case strings.HasPrefix(lower, "wget/"):
+		return "wget CLI"
 	case strings.Contains(lower, "edg/"):
 		browser = "Edge"
 	case strings.Contains(lower, "chrome/") && !strings.Contains(lower, "chromium"):

@@ -1,6 +1,6 @@
-# Contributing to VoidLLM
+# Contributing to Tavo
 
-Thank you for your interest in contributing to VoidLLM! This guide will help you get started.
+Thank you for your interest in contributing to Tavo! This guide will help you get started.
 
 ## Getting Started
 
@@ -12,21 +12,27 @@ Thank you for your interest in contributing to VoidLLM! This guide will help you
 
 ### Setup
 
+See **[docs/deployment/local-dev.md](docs/deployment/local-dev.md)** for the full checklist (encryption key, database path, UI dev server).
+
+Quick start with the repo's dev config:
+
 ```bash
-git clone https://github.com/voidmind-io/voidllm
-cd voidllm
+git clone https://github.com/jukaza/tavo
+cd tavo
 
-# Copy and edit config
-cp voidllm.yaml.example voidllm.yaml
+go build -o tavo ./cmd/tavo
 
-# Generate required keys
-export VOIDLLM_ADMIN_KEY=$(openssl rand -base64 32)
-export VOIDLLM_ENCRYPTION_KEY=$(openssl rand -base64 32)
+# Pin secrets — do NOT regenerate TAVO_ENCRYPTION_KEY if voidllm.db already has providers
+export TAVO_ENCRYPTION_KEY='dev-encryption-key-32chars-long!!'
+export TAVO_ADMIN_KEY='my-admin-key-at-least-32-chars!!'   # first bootstrap only
 
-# Run
-go run ./cmd/voidllm --config voidllm.yaml
+./tavo -dev -config tavo.dev.yaml
 
-# Run tests
+# UI (separate terminal)
+cd ui && npm install && npm run dev
+# Open http://127.0.0.1:5173
+
+# Tests
 go test -race ./...
 ```
 
@@ -93,7 +99,7 @@ test: add concurrent CAS correctness test for rate limiter
 ## Project Structure
 
 ```
-cmd/voidllm/          — Binary entrypoint (wiring only, no business logic)
+cmd/tavo/          — Binary entrypoint (wiring only, no business logic)
 internal/
   config/             — YAML config loading, validation
   logger/             — Structured logging setup
@@ -122,4 +128,4 @@ ui/                   — Frontend SPA (coming in v0.2)
 
 ## Questions?
 
-Open an issue on [GitHub](https://github.com/voidmind-io/voidllm/issues).
+Open an issue on [GitHub](https://github.com/jukaza/tavo/issues).

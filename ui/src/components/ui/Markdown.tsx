@@ -3,7 +3,7 @@ import remarkGfm from 'remark-gfm'
 import type { Components } from 'react-markdown'
 
 /**
- * Renders a markdown string into styled HTML matching the VoidLLM dark UI.
+ * Renders a markdown string into styled HTML matching the Tavo dark UI.
  * Raw HTML passthrough is intentionally disabled (no rehype-raw) to keep
  * semi-trusted content (e.g. GitHub release notes) XSS-safe.
  */

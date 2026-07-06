@@ -10,7 +10,7 @@
 --   - Explicit-allow for model access (empty allowlist = no access)
 --   - Key prefixes: vl_uk_ (user), vl_tk_ (team), vl_sa_ (service account)
 --   - API key hashing: SHA-256 + Salt (not bcrypt -- hot path performance)
---   - Upstream API keys: AES-256-GCM encrypted via VOIDLLM_ENCRYPTION_KEY
+--   - Upstream API keys: AES-256-GCM encrypted via TAVO_ENCRYPTION_KEY
 --
 -- Entity Hierarchy:
 --
@@ -156,7 +156,7 @@ CREATE TABLE service_accounts (
 -- =============================================================================
 -- Upstream LLM providers. Can be loaded from YAML (source='yaml') or created
 -- via Admin API (source='api'). YAML-sourced models are refreshed on restart.
--- Upstream API keys are encrypted at rest via VOIDLLM_ENCRYPTION_KEY.
+-- Upstream API keys are encrypted at rest via TAVO_ENCRYPTION_KEY.
 -- aliases: space-separated list of extra names that route to this model.
 -- timeout: Go duration string (e.g. "30s", "2m"). Empty = global defaults.
 
@@ -188,7 +188,7 @@ CREATE TABLE models (
 -- 8. MODEL ALIASES
 -- =============================================================================
 -- Dynamic aliases per org or team. Resolution order: team → org → yaml → exact.
--- Global aliases are defined in voidllm.yaml, not in this table.
+-- Global aliases are defined in tavo.yaml, not in this table.
 
 CREATE TABLE model_aliases (
     id          TEXT PRIMARY KEY,
@@ -423,7 +423,7 @@ CREATE UNIQUE INDEX idx_invite_tokens_active_email
 -- 15. ORG SSO CONFIG
 -- =============================================================================
 -- Per-org OIDC SSO configuration. One row per org (enforced by UNIQUE constraint).
--- client_secret_enc is AES-256-GCM encrypted via VOIDLLM_ENCRYPTION_KEY.
+-- client_secret_enc is AES-256-GCM encrypted via TAVO_ENCRYPTION_KEY.
 -- scopes and allowed_domains are stored as JSON arrays.
 
 CREATE TABLE org_sso_config (

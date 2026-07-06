@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/voidmind-io/voidllm/internal/jsonx"
+	"github.com/jukaza/tavo/internal/jsonx"
 )
 
 // ── 1. Duplicate-key fail-closed (#3) ─────────────────────────────────────────

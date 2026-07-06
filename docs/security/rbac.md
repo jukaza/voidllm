@@ -6,7 +6,7 @@ order: 1
 ---
 # RBAC (Role-Based Access Control)
 
-VoidLLM uses a simple two-role model for the API key reseller marketplace.
+Tavo uses a simple two-role model for the API key reseller marketplace.
 
 ## Roles
 

@@ -1,12 +1,12 @@
 // Package apierror provides a unified JSON error response format for all
-// VoidLLM API surfaces (proxy, admin, and auth). Every error response
+// Tavo API surfaces (proxy, admin, and auth). Every error response
 // produced by the server uses the envelope {"error":{"code":"...","message":"..."}},
 // with an optional "request_id" field when a request ID middleware is active.
 package apierror
 
 import "github.com/gofiber/fiber/v3"
 
-// Response is the standard JSON error envelope for all VoidLLM API responses.
+// Response is the standard JSON error envelope for all Tavo API responses.
 type Response struct {
 	Error Detail `json:"error"`
 }

@@ -3,7 +3,7 @@ package app
 import (
 	"github.com/gofiber/fiber/v3"
 
-	"github.com/voidmind-io/voidllm/internal/docs"
+	"github.com/jukaza/tavo/internal/docs"
 )
 
 // swaggerUIHTML is the Swagger UI page served at /api/docs. It loads the
@@ -12,7 +12,7 @@ import (
 const swaggerUIHTML = `<!DOCTYPE html>
 <html>
 <head>
-    <title>VoidLLM API</title>
+    <title>Tavo API</title>
     <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
 </head>
 <body>

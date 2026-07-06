@@ -1,16 +1,16 @@
 services:
-  voidllm:
-    image: ghcr.io/voidmind-io/voidllm:latest
+  tavo:
+    image: ghcr.io/jukaza/tavo:latest
     ports:
       - "8080:8080"
     volumes:
-      - ./voidllm.yaml:/etc/voidllm/voidllm.yaml:ro
-      - ./voidllm.license.jwt:/etc/voidllm/voidllm.license.jwt:ro
-      - voidllm_data:/data
+      - ./tavo.yaml:/etc/tavo/tavo.yaml:ro
+      - ./tavo.license.jwt:/etc/tavo/tavo.license.jwt:ro
+      - tavo_data:/data
     environment:
-      - VOIDLLM_ADMIN_KEY=${VOIDLLM_ADMIN_KEY}
-      - VOIDLLM_ENCRYPTION_KEY=${VOIDLLM_ENCRYPTION_KEY}
+      - TAVO_ADMIN_KEY=${TAVO_ADMIN_KEY}
+      - TAVO_ENCRYPTION_KEY=${TAVO_ENCRYPTION_KEY}
     restart: unless-stopped
 
 volumes:
-  voidllm_data:
+  tavo_data:

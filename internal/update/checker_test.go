@@ -93,7 +93,7 @@ func TestGetInfo_UpdateAvailable(t *testing.T) {
 	ctx := context.Background()
 	_ = store.SetSetting(ctx, "update_available_version", "0.2.0")
 	_ = store.SetSetting(ctx, "update_available_notes", "## What's new\n- Feature A")
-	_ = store.SetSetting(ctx, "update_available_url", "https://github.com/voidmind-io/voidllm/releases/tag/v0.2.0")
+	_ = store.SetSetting(ctx, "update_available_url", "https://github.com/jukaza/tavo/releases/tag/v0.2.0")
 	_ = store.SetSetting(ctx, "update_checked_at", "2026-04-03T00:00:00Z")
 
 	c := NewChecker("0.1.0", store, discardLogger())
@@ -108,7 +108,7 @@ func TestGetInfo_UpdateAvailable(t *testing.T) {
 	if info.ReleaseNotes != "## What's new\n- Feature A" {
 		t.Errorf("unexpected release_notes: %s", info.ReleaseNotes)
 	}
-	if info.ReleaseURL != "https://github.com/voidmind-io/voidllm/releases/tag/v0.2.0" {
+	if info.ReleaseURL != "https://github.com/jukaza/tavo/releases/tag/v0.2.0" {
 		t.Errorf("unexpected release_url: %s", info.ReleaseURL)
 	}
 	if info.CheckedAt != "2026-04-03T00:00:00Z" {
@@ -153,7 +153,7 @@ type githubRelease struct {
 func newMockGitHub(t *testing.T, statusCode int, release githubRelease) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/repos/voidmind-io/voidllm/releases/latest" {
+		if r.URL.Path != "/repos/jukaza/tavo/releases/latest" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -193,7 +193,7 @@ func TestCheck_NewVersionWritesToSettings(t *testing.T) {
 	release := githubRelease{
 		TagName: "v0.2.0",
 		Body:    "release notes",
-		HTMLURL: "https://github.com/voidmind-io/voidllm/releases/tag/v0.2.0",
+		HTMLURL: "https://github.com/jukaza/tavo/releases/tag/v0.2.0",
 	}
 	srv := newMockGitHub(t, http.StatusOK, release)
 	defer srv.Close()
@@ -230,7 +230,7 @@ func TestCheck_UpToDateClearsStaleSettings(t *testing.T) {
 	release := githubRelease{
 		TagName: "v0.1.0",
 		Body:    "",
-		HTMLURL: "https://github.com/voidmind-io/voidllm/releases/tag/v0.1.0",
+		HTMLURL: "https://github.com/jukaza/tavo/releases/tag/v0.1.0",
 	}
 	srv := newMockGitHub(t, http.StatusOK, release)
 	defer srv.Close()

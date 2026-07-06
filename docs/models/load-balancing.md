@@ -6,7 +6,7 @@ order: 2
 ---
 # Load Balancing and Failover
 
-Put multiple deployments behind a single model name. VoidLLM handles routing, failover, and health-aware traffic management.
+Put multiple deployments behind a single model name. Tavo handles routing, failover, and health-aware traffic management.
 
 ## Multi-Deployment Models
 
@@ -33,7 +33,7 @@ models:
         api_key: ${OPENAI_KEY}
 ```
 
-Your app sends `model: "default"`. VoidLLM picks a deployment based on the strategy.
+Your app sends `model: "default"`. Tavo picks a deployment based on the strategy.
 
 ## Routing Strategies
 
@@ -66,7 +66,7 @@ deployments:
 
 ## Automatic Failover
 
-When a deployment returns 5xx, times out, or can't connect, VoidLLM retries on the next available deployment. The `max_retries` setting controls how many deployments to try before giving up.
+When a deployment returns 5xx, times out, or can't connect, Tavo retries on the next available deployment. The `max_retries` setting controls how many deployments to try before giving up.
 
 This happens transparently - the client sees a normal response. Usage tracking records which deployment actually handled the request.
 
@@ -85,7 +85,7 @@ settings:
 
 ## Health-Aware Routing
 
-VoidLLM continuously probes each deployment's health. Unhealthy deployments are excluded from routing automatically. If all deployments are unhealthy, VoidLLM falls back to trying them anyway (better than returning nothing).
+Tavo continuously probes each deployment's health. Unhealthy deployments are excluded from routing automatically. If all deployments are unhealthy, Tavo falls back to trying them anyway (better than returning nothing).
 
 ```yaml
 settings:
@@ -102,7 +102,7 @@ The functional probe sends a minimal request to each deployment (e.g., a 1-token
 
 ## Important: Same Model Across Deployments
 
-All deployments within a model should serve the same (or equivalent) LLM. VoidLLM sends the model name from the request to every upstream, so each deployment must recognize it.
+All deployments within a model should serve the same (or equivalent) LLM. Tavo sends the model name from the request to every upstream, so each deployment must recognize it.
 
 This works for:
 - Same model across regions (Azure East + West)

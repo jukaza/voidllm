@@ -10,6 +10,7 @@ import { useMyUsage, useSystemUsage } from '../../hooks/useUsage'
 import type { UsageDataPoint } from '../../hooks/useUsage'
 import { formatNumber, formatTokens, formatCost, shortenId } from '../../lib/utils'
 import { exportData } from '../../lib/export'
+import { TOKEN_CHART_COLORS, TOKEN_METRIC_STYLES, tokenBarSegments } from '../../lib/tokenColors'
 
 const TIME_RANGES = ['24h', '7d', '30d', '90d'] as const
 type TimeRange = (typeof TIME_RANGES)[number]
@@ -73,7 +74,9 @@ function buildColumns(groupBy: string): Column<UsageDataPoint>[] {
       header: 'Cached',
       align: 'right',
       render: (row) => (
-        <span className="text-text-secondary">{formatTokens(row.cached_tokens ?? 0)}</span>
+        <span className="font-medium" style={{ color: TOKEN_METRIC_STYLES.cacheRead.color }}>
+          {formatTokens(row.cached_tokens ?? 0)}
+        </span>
       ),
     },
     {
@@ -82,7 +85,11 @@ function buildColumns(groupBy: string): Column<UsageDataPoint>[] {
       align: 'right',
       render: (row) => {
         const fresh = Math.max(0, row.prompt_tokens - (row.cached_tokens ?? 0))
-        return <span className="text-text-secondary">{formatTokens(fresh)}</span>
+        return (
+          <span className="font-medium" style={{ color: TOKEN_METRIC_STYLES.input.color }}>
+            {formatTokens(fresh)}
+          </span>
+        )
       },
     },
     {
@@ -90,7 +97,9 @@ function buildColumns(groupBy: string): Column<UsageDataPoint>[] {
       header: 'Prompt Tokens',
       align: 'right',
       render: (row) => (
-        <span className="text-text-secondary">{formatTokens(row.prompt_tokens)}</span>
+        <span className="font-medium" style={{ color: TOKEN_METRIC_STYLES.input.color }}>
+          {formatTokens(row.prompt_tokens)}
+        </span>
       ),
     },
     {
@@ -98,7 +107,9 @@ function buildColumns(groupBy: string): Column<UsageDataPoint>[] {
       header: 'Completion Tokens',
       align: 'right',
       render: (row) => (
-        <span className="text-text-secondary">{formatTokens(row.completion_tokens)}</span>
+        <span className="font-medium" style={{ color: TOKEN_METRIC_STYLES.output.color }}>
+          {formatTokens(row.completion_tokens)}
+        </span>
       ),
     },
     {
@@ -347,7 +358,7 @@ export default function LLMUsagePage() {
               exportData(
                 sortedData as unknown as Record<string, unknown>[],
                 USAGE_EXPORT_HEADERS,
-                `voidllm-usage-${groupBy}`,
+                `tavo-usage-${groupBy}`,
                 'csv',
               )
             }
@@ -365,7 +376,7 @@ export default function LLMUsagePage() {
               exportData(
                 sortedData as unknown as Record<string, unknown>[],
                 USAGE_EXPORT_HEADERS,
-                `voidllm-usage-${groupBy}`,
+                `tavo-usage-${groupBy}`,
                 'json',
               )
             }
@@ -397,6 +408,7 @@ export default function LLMUsagePage() {
               label: d.group_label || d.group_key,
               value: d.total_tokens,
               detail: formatTokens(d.total_tokens),
+              segments: tokenBarSegments(d.prompt_tokens, d.completion_tokens, d.cached_tokens ?? 0),
             }))}
           />
         </div>
@@ -405,10 +417,10 @@ export default function LLMUsagePage() {
           <h3 className="text-sm font-semibold text-text-primary mb-4">Token Distribution</h3>
           <DonutChart
             segments={[
-              { label: 'Fresh prompt', value: totalFresh, color: '#8b5cf6' },
-              { label: 'Cached', value: totalCached, color: '#22c55e' },
-              { label: 'Completion', value: totalCompletion, color: '#25252d' },
-            ]}
+              { label: 'Fresh prompt', value: totalFresh, color: TOKEN_CHART_COLORS.input },
+              { label: 'Cached', value: totalCached, color: TOKEN_CHART_COLORS.cacheRead },
+              { label: 'Completion', value: totalCompletion, color: TOKEN_CHART_COLORS.output },
+            ].filter((s) => s.value > 0)}
             centerLabel="Total"
             centerValue={formatTokens(totalPrompt + totalCompletion)}
           />

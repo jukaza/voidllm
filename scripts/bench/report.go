@@ -20,7 +20,7 @@ const (
 
 // printTextReport prints a human-readable benchmark report.
 func printTextReport(result *benchResult) {
-	fmt.Printf("\n%s%s━━━ VoidLLM Benchmark: %s ━━━%s\n\n", yellow, bold, result.Scenario, reset)
+	fmt.Printf("\n%s%s━━━ Tavo Benchmark: %s ━━━%s\n\n", yellow, bold, result.Scenario, reset)
 
 	// Phase details
 	for _, pr := range result.PhaseResults {

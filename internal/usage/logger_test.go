@@ -11,9 +11,9 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/voidmind-io/voidllm/internal/config"
-	"github.com/voidmind-io/voidllm/internal/db"
-	"github.com/voidmind-io/voidllm/internal/ratelimit"
+	"github.com/jukaza/tavo/internal/config"
+	"github.com/jukaza/tavo/internal/db"
+	"github.com/jukaza/tavo/internal/ratelimit"
 )
 
 // openTestDB opens an in-memory SQLite database using the given unique URI,
@@ -464,7 +464,7 @@ func TestStop_FlushesRemaining(t *testing.T) {
 
 // TestLog_NoContentColumns asserts that the usage_events table contains no
 // columns that could store prompt or response body text. This is a privacy
-// invariant: VoidLLM must never persist request/response content.
+// invariant: Tavo must never persist request/response content.
 func TestLog_NoContentColumns(t *testing.T) {
 	t.Parallel()
 

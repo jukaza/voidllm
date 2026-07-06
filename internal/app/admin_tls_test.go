@@ -22,8 +22,8 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	"github.com/voidmind-io/voidllm/internal/api/health"
-	"github.com/voidmind-io/voidllm/internal/config"
+	"github.com/jukaza/tavo/internal/api/health"
+	"github.com/jukaza/tavo/internal/config"
 )
 
 // freePort opens 127.0.0.1:0, captures the port, closes the listener, returns
@@ -50,7 +50,7 @@ func genSelfSignedCert(t *testing.T) (string, string) {
 	serial, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
 	tmpl := &x509.Certificate{
 		SerialNumber: serial,
-		Subject:      pkix.Name{CommonName: "voidllm-test"},
+		Subject:      pkix.Name{CommonName: "tavo-test"},
 		NotBefore:    time.Now().Add(-time.Minute),
 		NotAfter:     time.Now().Add(time.Hour),
 		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,

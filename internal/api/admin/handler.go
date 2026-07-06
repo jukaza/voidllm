@@ -1,4 +1,4 @@
-// Package admin provides HTTP handlers for the VoidLLM Admin API.
+// Package admin provides HTTP handlers for the Tavo Admin API.
 package admin
 
 import (
@@ -9,19 +9,19 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
-	"github.com/voidmind-io/voidllm/internal/apierror"
-	"github.com/voidmind-io/voidllm/internal/audit"
-	"github.com/voidmind-io/voidllm/internal/auth"
-	"github.com/voidmind-io/voidllm/internal/backup"
-	"github.com/voidmind-io/voidllm/internal/cache"
-	"github.com/voidmind-io/voidllm/internal/db"
-	"github.com/voidmind-io/voidllm/internal/health"
-	"github.com/voidmind-io/voidllm/internal/proxy"
-	voidredis "github.com/voidmind-io/voidllm/internal/redis"
-	"github.com/voidmind-io/voidllm/internal/update"
-	"github.com/voidmind-io/voidllm/internal/usage"
-	"github.com/voidmind-io/voidllm/internal/features"
-	"github.com/voidmind-io/voidllm/internal/wallet"
+	"github.com/jukaza/tavo/internal/apierror"
+	"github.com/jukaza/tavo/internal/audit"
+	"github.com/jukaza/tavo/internal/auth"
+	"github.com/jukaza/tavo/internal/backup"
+	"github.com/jukaza/tavo/internal/cache"
+	"github.com/jukaza/tavo/internal/db"
+	"github.com/jukaza/tavo/internal/health"
+	"github.com/jukaza/tavo/internal/proxy"
+	voidredis "github.com/jukaza/tavo/internal/redis"
+	"github.com/jukaza/tavo/internal/update"
+	"github.com/jukaza/tavo/internal/usage"
+	"github.com/jukaza/tavo/internal/features"
+	"github.com/jukaza/tavo/internal/wallet"
 )
 
 // ModelHealthProvider provides upstream model health status for the admin API.

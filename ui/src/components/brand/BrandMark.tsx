@@ -14,7 +14,7 @@ export function BrandMark({
   showName = true,
 }: BrandMarkProps) {
   const { data } = useSiteConfig()
-  const name = data?.system_name ?? 'VoidLLM'
+  const name = data?.system_name ?? 'Tavo'
   const logo = data?.logo || '/logo.svg'
 
   return (

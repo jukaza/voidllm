@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/voidmind-io/voidllm/internal/auth"
-	"github.com/voidmind-io/voidllm/internal/site"
+	"github.com/jukaza/tavo/internal/auth"
+	"github.com/jukaza/tavo/internal/site"
 )
 
 func TestPublicSiteSeedsDefaults(t *testing.T) {

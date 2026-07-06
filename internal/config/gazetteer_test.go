@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/voidmind-io/voidllm/internal/config"
+	"github.com/jukaza/tavo/internal/config"
 )
 
 // minimalValidYAMLWithGazetteer inlines the provided gazetteer YAML block
@@ -22,7 +22,7 @@ server:
     port: 8080
 database:
   driver: sqlite
-  dsn: voidllm.db
+  dsn: tavo.db
 settings:
   encryption_key: aaaaaaaaaaaaaaaa
   usage:
@@ -58,7 +58,7 @@ func TestGazetteerConfig_Parse(t *testing.T) {
         case_insensitive: true
 `)
 
-	path := writeTemp(t, "voidllm.yaml", yaml)
+	path := writeTemp(t, "tavo.yaml", yaml)
 	cfg, _, err := config.Load(path)
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -104,7 +104,7 @@ func TestGazetteerConfig_Parse(t *testing.T) {
 func TestGazetteerConfig_Defaults(t *testing.T) {
 	t.Parallel()
 
-	path := writeTemp(t, "voidllm.yaml", minimalValidYAML())
+	path := writeTemp(t, "tavo.yaml", minimalValidYAML())
 	cfg, _, err := config.Load(path)
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -146,7 +146,7 @@ func TestGazetteerConfig_CaseInsensitiveFalse(t *testing.T) {
         case_insensitive: false
 `)
 
-	path := writeTemp(t, "voidllm.yaml", yaml)
+	path := writeTemp(t, "tavo.yaml", yaml)
 	cfg, _, err := config.Load(path)
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -311,7 +311,7 @@ func TestGazetteerValidation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			path := writeTemp(t, "voidllm.yaml", tc.yaml)
+			path := writeTemp(t, "tavo.yaml", tc.yaml)
 			_, _, err := config.Load(path)
 
 			if tc.wantErr {
@@ -344,7 +344,7 @@ func TestGazetteerValidation(t *testing.T) {
       dirs:
         - ` + fileAsDir + `
 `)
-		path := writeTemp(t, "voidllm.yaml", yaml)
+		path := writeTemp(t, "tavo.yaml", yaml)
 		_, _, err := config.Load(path)
 		if err == nil {
 			t.Error("expected error when dir path is a file, got nil")
@@ -372,7 +372,7 @@ func TestGazetteerConfig_MultipleInlineTermGroups(t *testing.T) {
             - Alice Smith
 `)
 
-	path := writeTemp(t, "voidllm.yaml", yaml)
+	path := writeTemp(t, "tavo.yaml", yaml)
 	cfg, _, err := config.Load(path)
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -413,7 +413,7 @@ func TestGazetteerConfig_DisabledPackValidationSkipped(t *testing.T) {
             - ignored
 `)
 	// Even though type is empty and pack name is invalid, no error because disabled.
-	path := writeTemp(t, "voidllm.yaml", yaml)
+	path := writeTemp(t, "tavo.yaml", yaml)
 	_, _, err := config.Load(path)
 	if err != nil {
 		t.Errorf("Load() unexpected error when gazetteer disabled: %v", err)

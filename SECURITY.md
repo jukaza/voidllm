@@ -2,12 +2,12 @@
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in VoidLLM, **please do not open a public issue.**
+If you discover a security vulnerability in Tavo, **please do not open a public issue.**
 
 Instead, report it privately:
 
-- **Email:** security@voidmind.io
-- **Subject:** `[VoidLLM Security] <brief description>`
+- **Email:** security@tavo.io.vn
+- **Subject:** `[Tavo Security] <brief description>`
 
 Include:
 - Description of the vulnerability
@@ -40,7 +40,7 @@ The following are out of scope:
 
 ## Security Design Principles
 
-VoidLLM follows these security principles by design:
+Tavo follows these security principles by design:
 
 - **Zero-knowledge proxy** — no prompt or response content is ever stored or logged
 - **Defense in depth** — RBAC enforced at both route middleware and handler level

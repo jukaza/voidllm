@@ -1,4 +1,4 @@
-VoidLLM has been deployed!
+Tavo has been deployed!
 
 1. Get the application URL:
 {{- if .Values.ingress.enabled }}
@@ -6,16 +6,16 @@ VoidLLM has been deployed!
   http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}
   {{- end }}
 {{- else if contains "NodePort" .Values.service.type }}
-  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "voidllm.fullname" . }})
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "tavo.fullname" . }})
   export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
   echo http://$NODE_IP:$NODE_PORT
 {{- else if contains "ClusterIP" .Values.service.type }}
-  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "voidllm.fullname" . }} 8080:{{ .Values.service.port }}
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "tavo.fullname" . }} 8080:{{ .Values.service.port }}
   echo "Visit http://localhost:8080"
 {{- end }}
 
 2. Check the bootstrap credentials:
-  kubectl --namespace {{ .Release.Namespace }} logs deploy/{{ include "voidllm.fullname" . }} | grep "BOOTSTRAP"
+  kubectl --namespace {{ .Release.Namespace }} logs deploy/{{ include "tavo.fullname" . }} | grep "BOOTSTRAP"
 
 3. API documentation:
   http://localhost:8080/api/docs

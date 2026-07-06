@@ -13,15 +13,15 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/voidmind-io/voidllm/internal/apierror"
-	"github.com/voidmind-io/voidllm/internal/auth"
-	"github.com/voidmind-io/voidllm/internal/config"
-	"github.com/voidmind-io/voidllm/internal/db"
-	"github.com/voidmind-io/voidllm/internal/jsonx"
-	"github.com/voidmind-io/voidllm/internal/provider"
-	"github.com/voidmind-io/voidllm/internal/proxy"
-	voidredis "github.com/voidmind-io/voidllm/internal/redis"
-	"github.com/voidmind-io/voidllm/pkg/crypto"
+	"github.com/jukaza/tavo/internal/apierror"
+	"github.com/jukaza/tavo/internal/auth"
+	"github.com/jukaza/tavo/internal/config"
+	"github.com/jukaza/tavo/internal/db"
+	"github.com/jukaza/tavo/internal/jsonx"
+	"github.com/jukaza/tavo/internal/provider"
+	"github.com/jukaza/tavo/internal/proxy"
+	voidredis "github.com/jukaza/tavo/internal/redis"
+	"github.com/jukaza/tavo/pkg/crypto"
 )
 
 // createModelRequest is the JSON body accepted by CreateModel.

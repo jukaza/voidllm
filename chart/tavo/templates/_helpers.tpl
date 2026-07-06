@@ -1,14 +1,14 @@
 {{/*
 Expand the name of the chart.
 */}}
-{{- define "voidllm.name" -}}
+{{- define "tavo.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Create a default fully qualified app name.
 */}}
-{{- define "voidllm.fullname" -}}
+{{- define "tavo.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -24,16 +24,16 @@ Create a default fully qualified app name.
 {{/*
 Create chart name and version as used by the chart label.
 */}}
-{{- define "voidllm.chart" -}}
+{{- define "tavo.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Common labels.
 */}}
-{{- define "voidllm.labels" -}}
-helm.sh/chart: {{ include "voidllm.chart" . }}
-{{ include "voidllm.selectorLabels" . }}
+{{- define "tavo.labels" -}}
+helm.sh/chart: {{ include "tavo.chart" . }}
+{{ include "tavo.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
@@ -43,17 +43,17 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{/*
 Selector labels.
 */}}
-{{- define "voidllm.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "voidllm.name" . }}
+{{- define "tavo.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "tavo.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
 ServiceAccount name.
 */}}
-{{- define "voidllm.serviceAccountName" -}}
+{{- define "tavo.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create }}
-{{- default (include "voidllm.fullname" .) .Values.serviceAccount.name }}
+{{- default (include "tavo.fullname" .) .Values.serviceAccount.name }}
 {{- else }}
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}

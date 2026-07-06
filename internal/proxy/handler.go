@@ -22,16 +22,16 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/voidmind-io/voidllm/internal/apierror"
-	"github.com/voidmind-io/voidllm/internal/auth"
-	"github.com/voidmind-io/voidllm/internal/circuitbreaker"
-	"github.com/voidmind-io/voidllm/internal/jsonx"
-	"github.com/voidmind-io/voidllm/internal/metrics"
-	"github.com/voidmind-io/voidllm/internal/pii"
-	"github.com/voidmind-io/voidllm/internal/ratelimit"
-	"github.com/voidmind-io/voidllm/internal/shutdown"
-	"github.com/voidmind-io/voidllm/internal/upstream"
-	"github.com/voidmind-io/voidllm/internal/usage"
+	"github.com/jukaza/tavo/internal/apierror"
+	"github.com/jukaza/tavo/internal/auth"
+	"github.com/jukaza/tavo/internal/circuitbreaker"
+	"github.com/jukaza/tavo/internal/jsonx"
+	"github.com/jukaza/tavo/internal/metrics"
+	"github.com/jukaza/tavo/internal/pii"
+	"github.com/jukaza/tavo/internal/ratelimit"
+	"github.com/jukaza/tavo/internal/shutdown"
+	"github.com/jukaza/tavo/internal/upstream"
+	"github.com/jukaza/tavo/internal/usage"
 )
 
 // WalletChecker performs prepaid-balance checks for the marketplace billing

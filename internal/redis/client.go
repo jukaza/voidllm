@@ -1,4 +1,4 @@
-// Package redis provides a Redis client wrapper for VoidLLM with key prefixing,
+// Package redis provides a Redis client wrapper for Tavo with key prefixing,
 // distributed rate limiting, token budget tracking, and cache invalidation
 // pub/sub. All operations accept a context.Context as the first parameter.
 package redis
@@ -12,7 +12,7 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 )
 
-// Client wraps go-redis with VoidLLM key prefixing.
+// Client wraps go-redis with Tavo key prefixing.
 type Client struct {
 	rdb       *goredis.Client
 	keyPrefix string
@@ -20,7 +20,7 @@ type Client struct {
 
 // New creates a Redis client from url, verifies connectivity with PING, and
 // returns a ready-to-use Client. keyPrefix is prepended to every Redis key and
-// channel name. If keyPrefix is empty it defaults to "voidllm:"; a trailing
+// channel name. If keyPrefix is empty it defaults to "tavo:"; a trailing
 // colon is appended if absent.
 func New(url, keyPrefix string) (*Client, error) {
 	opts, err := goredis.ParseURL(url)
@@ -37,7 +37,7 @@ func New(url, keyPrefix string) (*Client, error) {
 	}
 
 	if keyPrefix == "" {
-		keyPrefix = "voidllm:"
+		keyPrefix = "tavo:"
 	}
 	if !strings.HasSuffix(keyPrefix, ":") {
 		keyPrefix += ":"

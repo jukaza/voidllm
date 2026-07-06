@@ -1,5 +1,6 @@
 import { formatNumber } from '../../lib/utils'
 import { useTranslation } from '../../lib/i18n'
+import { TOKEN_METRIC_STYLES, type TokenMetricKey } from '../../lib/tokenColors'
 
 interface TokenBreakdownProps {
   promptTokens: number
@@ -7,6 +8,31 @@ interface TokenBreakdownProps {
   cachedTokens?: number
   cacheWriteTokens?: number
   compact?: boolean
+}
+
+function TokenPill({
+  label,
+  value,
+  metric,
+}: {
+  label: string
+  value: number
+  metric: TokenMetricKey
+}) {
+  const style = TOKEN_METRIC_STYLES[metric]
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums"
+      style={{
+        color: style.color,
+        backgroundColor: style.backgroundColor,
+        borderColor: `${style.color}55`,
+      }}
+    >
+      <span className="font-sans font-medium opacity-90">{label}</span>
+      {formatNumber(value)}
+    </span>
+  )
 }
 
 export function TokenBreakdown({
@@ -24,21 +50,18 @@ export function TokenBreakdown({
   }
 
   return (
-    <div className={compact ? 'flex flex-col gap-0.5' : 'space-y-1'}>
-      <span className="font-mono text-xs tabular-nums text-text-secondary">
-        {formatNumber(promptTokens)} / {formatNumber(completionTokens)}
-      </span>
+    <div className={compact ? 'flex flex-col gap-1' : 'flex flex-col gap-1.5'}>
+      <div className="flex flex-wrap items-center gap-1">
+        <TokenPill label={t('analytics.tokens_input')} value={promptTokens} metric="input" />
+        <TokenPill label={t('analytics.tokens_output')} value={completionTokens} metric="output" />
+      </div>
       {hasCache && (
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-text-tertiary">
+        <div className="flex flex-wrap items-center gap-1">
           {cachedTokens > 0 && (
-            <span>
-              {t('analytics.cache_read')} ↓ {formatNumber(cachedTokens)}
-            </span>
+            <TokenPill label={t('analytics.cache_read')} value={cachedTokens} metric="cacheRead" />
           )}
           {cacheWriteTokens > 0 && (
-            <span>
-              {t('analytics.cache_write')} ↑ {formatNumber(cacheWriteTokens)}
-            </span>
+            <TokenPill label={t('analytics.cache_write')} value={cacheWriteTokens} metric="cacheWrite" />
           )}
         </div>
       )}

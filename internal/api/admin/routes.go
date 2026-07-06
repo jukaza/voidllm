@@ -2,9 +2,9 @@ package admin
 
 import (
 	"github.com/gofiber/fiber/v3"
-	"github.com/voidmind-io/voidllm/internal/audit"
-	"github.com/voidmind-io/voidllm/internal/auth"
-	"github.com/voidmind-io/voidllm/internal/cache"
+	"github.com/jukaza/tavo/internal/audit"
+	"github.com/jukaza/tavo/internal/auth"
+	"github.com/jukaza/tavo/internal/cache"
 )
 
 // RegisterRoutes mounts all admin API routes under /api/v1 on the given Fiber app.

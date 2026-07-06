@@ -7,7 +7,7 @@ async function parseJSON<T>(res: Response): Promise<T> {
   } catch {
     if (text.trimStart().toLowerCase().startsWith('<!doctype') || text.trimStart().startsWith('<')) {
       throw new Error(
-        'Server returned HTML instead of JSON. Rebuild and restart voidllm-server (go build -o voidllm-server ./cmd/voidllm).',
+        'Server returned HTML instead of JSON. Rebuild and restart tavo-server (go build -o tavo-server ./cmd/tavo).',
       )
     }
     throw new Error('Invalid JSON response from server')

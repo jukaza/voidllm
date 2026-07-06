@@ -2,9 +2,9 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ include "voidllm.fullname" . }}-data
+  name: {{ include "tavo.fullname" . }}-data
   labels:
-    {{- include "voidllm.labels" . | nindent 4 }}
+    {{- include "tavo.labels" . | nindent 4 }}
   {{- with .Values.persistence.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}

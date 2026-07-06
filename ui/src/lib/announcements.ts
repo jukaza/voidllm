@@ -9,8 +9,8 @@ export interface SiteAnnouncement {
 }
 
 /** Sample opening announcement with Zalo support link + QR (for preview / demo). */
-export function createSampleOpeningAnnouncement(systemName = 'VoidLLM'): SiteAnnouncement {
-  const zaloUrl = 'https://zalo.me/g/voidllm-hotro'
+export function createSampleOpeningAnnouncement(systemName = 'Tavo'): SiteAnnouncement {
+  const zaloUrl = 'https://zalo.me/g/tavo-hotro'
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(zaloUrl)}`
 
   return createAnnouncement({

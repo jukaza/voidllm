@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// metricSample holds a single point-in-time snapshot of VoidLLM process metrics.
+// metricSample holds a single point-in-time snapshot of Tavo process metrics.
 type metricSample struct {
 	T             int     `json:"t"`              // seconds since sampler start
 	RSSMB         float64 `json:"rss_mb"`         // resident set size in MB
@@ -89,8 +89,8 @@ func (s *sampler) run(ctx context.Context, metricsURL string, interval time.Dura
 			rss := parsed["process_resident_memory_bytes"] / (1024 * 1024)
 			heap := parsed["go_memstats_heap_alloc_bytes"] / (1024 * 1024)
 			goroutines := int(parsed["go_goroutines"])
-			activeStreams := int(parsed["voidllm_active_streams"])
-			totalRequests := parsed["voidllm_upstream_requests_total"]
+			activeStreams := int(parsed["tavo_active_streams"])
+			totalRequests := parsed["tavo_upstream_requests_total"]
 
 			var rps float64
 			if !prevAt.IsZero() {
@@ -142,7 +142,7 @@ func fetchMetrics(ctx context.Context, client *http.Client, url string) (string,
 
 // parsePrometheusText parses the Prometheus text exposition format and
 // returns a map of metric name to value. Counter metrics with labels (e.g.
-// voidllm_upstream_requests_total{...}) are accumulated: all label variants
+// tavo_upstream_requests_total{...}) are accumulated: all label variants
 // for the same base name are summed into a single entry.
 //
 // Lines beginning with '#' are skipped. Each non-comment line is expected to

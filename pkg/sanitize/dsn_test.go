@@ -3,7 +3,7 @@ package sanitize_test
 import (
 	"testing"
 
-	"github.com/voidmind-io/voidllm/pkg/sanitize"
+	"github.com/jukaza/tavo/pkg/sanitize"
 )
 
 func TestDSN(t *testing.T) {
@@ -46,8 +46,8 @@ func TestDSN(t *testing.T) {
 		},
 		{
 			name: "SQLite file path unchanged",
-			in:   "/var/lib/voidllm/voidllm.db",
-			want: "/var/lib/voidllm/voidllm.db",
+			in:   "/var/lib/tavo/tavo.db",
+			want: "/var/lib/tavo/tavo.db",
 		},
 		{
 			name: "empty string",

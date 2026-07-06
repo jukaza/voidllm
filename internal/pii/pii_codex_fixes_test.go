@@ -20,7 +20,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/voidmind-io/voidllm/internal/config"
+	"github.com/jukaza/tavo/internal/config"
 )
 
 // ── FIX 1: union overlap-resolution ──────────────────────────────────────────

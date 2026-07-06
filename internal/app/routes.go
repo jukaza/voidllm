@@ -8,11 +8,11 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	"github.com/voidmind-io/voidllm/internal/api/admin"
-	"github.com/voidmind-io/voidllm/internal/api/health"
-	"github.com/voidmind-io/voidllm/internal/apierror"
-	"github.com/voidmind-io/voidllm/internal/auth"
-	"github.com/voidmind-io/voidllm/internal/jsonx"
+	"github.com/jukaza/tavo/internal/api/admin"
+	"github.com/jukaza/tavo/internal/api/health"
+	"github.com/jukaza/tavo/internal/apierror"
+	"github.com/jukaza/tavo/internal/auth"
+	"github.com/jukaza/tavo/internal/jsonx"
 )
 
 // warnIfSinglePortTLS emits one WARN when admin TLS is configured but the
@@ -93,7 +93,7 @@ func (a *Application) setupRoutes() {
 	a.proxyApp.Get("/metrics", health.Metrics())
 
 	// Proxy hot path: all /v1/* routes require a valid Bearer key.
-	// GET /v1/models is handled by VoidLLM directly (not proxied to upstream).
+	// GET /v1/models is handled by Tavo directly (not proxied to upstream).
 	// It must be registered BEFORE the catch-all to take precedence.
 	a.proxyApp.Get("/v1/models", auth.Middleware(a.keyCache, a.hmacSecret), a.proxyHandler.ModelsHandler)
 	a.proxyApp.All("/v1/*", auth.Middleware(a.keyCache, a.hmacSecret), a.proxyHandler.Handle)

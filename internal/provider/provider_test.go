@@ -3,7 +3,7 @@ package provider_test
 import (
 	"testing"
 
-	"github.com/voidmind-io/voidllm/internal/provider"
+	"github.com/jukaza/tavo/internal/provider"
 )
 
 func TestNames_ReturnsSortedSlice(t *testing.T) {

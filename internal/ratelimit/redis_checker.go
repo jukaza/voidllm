@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"time"
 
-	voidredis "github.com/voidmind-io/voidllm/internal/redis"
+	voidredis "github.com/jukaza/tavo/internal/redis"
 )
 
 var _ Checker = (*RedisChecker)(nil)

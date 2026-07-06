@@ -1,4 +1,4 @@
-// Package app manages the top-level VoidLLM server lifecycle: construction,
+// Package app manages the top-level Tavo server lifecycle: construction,
 // startup, signal handling, and phased graceful shutdown.
 package app
 
@@ -24,35 +24,35 @@ import (
 	otelapi "go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/voidmind-io/voidllm/internal/api/admin"
-	apihealth "github.com/voidmind-io/voidllm/internal/api/health"
-	"github.com/voidmind-io/voidllm/internal/audit"
-	"github.com/voidmind-io/voidllm/internal/auth"
-	"github.com/voidmind-io/voidllm/internal/backup"
-	"github.com/voidmind-io/voidllm/internal/cache"
-	"github.com/voidmind-io/voidllm/internal/circuitbreaker"
-	"github.com/voidmind-io/voidllm/internal/config"
-	"github.com/voidmind-io/voidllm/internal/db"
-	"github.com/voidmind-io/voidllm/internal/docs"
-	"github.com/voidmind-io/voidllm/internal/features"
-	"github.com/voidmind-io/voidllm/internal/health"
-	"github.com/voidmind-io/voidllm/internal/metrics"
-	voidotel "github.com/voidmind-io/voidllm/internal/otel"
-	"github.com/voidmind-io/voidllm/internal/pii"
-	"github.com/voidmind-io/voidllm/internal/proxy"
-	"github.com/voidmind-io/voidllm/internal/ratelimit"
-	voidredis "github.com/voidmind-io/voidllm/internal/redis"
-	"github.com/voidmind-io/voidllm/internal/retention"
-	"github.com/voidmind-io/voidllm/internal/router"
-	"github.com/voidmind-io/voidllm/internal/shutdown"
-	"github.com/voidmind-io/voidllm/internal/upstream"
-	"github.com/voidmind-io/voidllm/internal/update"
-	"github.com/voidmind-io/voidllm/internal/usage"
-	"github.com/voidmind-io/voidllm/internal/wallet"
-	"github.com/voidmind-io/voidllm/pkg/crypto"
+	"github.com/jukaza/tavo/internal/api/admin"
+	apihealth "github.com/jukaza/tavo/internal/api/health"
+	"github.com/jukaza/tavo/internal/audit"
+	"github.com/jukaza/tavo/internal/auth"
+	"github.com/jukaza/tavo/internal/backup"
+	"github.com/jukaza/tavo/internal/cache"
+	"github.com/jukaza/tavo/internal/circuitbreaker"
+	"github.com/jukaza/tavo/internal/config"
+	"github.com/jukaza/tavo/internal/db"
+	"github.com/jukaza/tavo/internal/docs"
+	"github.com/jukaza/tavo/internal/features"
+	"github.com/jukaza/tavo/internal/health"
+	"github.com/jukaza/tavo/internal/metrics"
+	voidotel "github.com/jukaza/tavo/internal/otel"
+	"github.com/jukaza/tavo/internal/pii"
+	"github.com/jukaza/tavo/internal/proxy"
+	"github.com/jukaza/tavo/internal/ratelimit"
+	voidredis "github.com/jukaza/tavo/internal/redis"
+	"github.com/jukaza/tavo/internal/retention"
+	"github.com/jukaza/tavo/internal/router"
+	"github.com/jukaza/tavo/internal/shutdown"
+	"github.com/jukaza/tavo/internal/upstream"
+	"github.com/jukaza/tavo/internal/update"
+	"github.com/jukaza/tavo/internal/usage"
+	"github.com/jukaza/tavo/internal/wallet"
+	"github.com/jukaza/tavo/pkg/crypto"
 )
 
-// Application is the top-level VoidLLM server lifecycle coordinator. It owns
+// Application is the top-level Tavo server lifecycle coordinator. It owns
 // every long-lived dependency and orchestrates startup, signal handling, and
 // phased graceful shutdown. All fields are unexported; callers interact only
 // through New, Start, PrintBootstrapCredentials, and WaitForShutdown.
@@ -482,8 +482,8 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 	}
 
 	// Step 5: derive HMAC secret from the encryption key using HKDF (RFC 5869).
-	// Hash: SHA-256, IKM: encKey, salt: nil, info: "voidllm-hmac-key".
-	hkdfReader := hkdf.New(sha256.New, encKey, nil, []byte("voidllm-hmac-key"))
+	// Hash: SHA-256, IKM: encKey, salt: nil, info: "tavo-hmac-key".
+	hkdfReader := hkdf.New(sha256.New, encKey, nil, []byte("tavo-hmac-key"))
 	hmacSecret = make([]byte, 32)
 	if _, err := io.ReadFull(hkdfReader, hmacSecret); err != nil {
 		return nil, fmt.Errorf("derive HMAC secret: %w", err)
@@ -570,7 +570,7 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 
 			// Start the pub/sub subscriber goroutine. It blocks until redisCtx
 			// is canceled (on shutdown) and handles cache invalidation messages
-			// published by other VoidLLM instances.
+			// published by other Tavo instances.
 			go redisClient.SubscribeInvalidations(redisCtx, log, func(channel, payload string) {
 				switch channel {
 				case voidredis.ChannelKeys:
@@ -642,14 +642,14 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 			cfg.Settings.OTel.Endpoint,
 			cfg.Settings.OTel.Insecure,
 			*cfg.Settings.OTel.SampleRate,
-			"voidllm", apihealth.Version,
+			"tavo", apihealth.Version,
 		)
 		if setupErr != nil {
 			log.LogAttrs(ctx, slog.LevelWarn, "otel setup failed, tracing disabled",
 				slog.String("error", setupErr.Error()),
 			)
 		} else {
-			tracer = otelapi.Tracer("voidllm.proxy")
+			tracer = otelapi.Tracer("tavo.proxy")
 			log.LogAttrs(ctx, slog.LevelInfo, "opentelemetry tracing enabled",
 				slog.String("endpoint", cfg.Settings.OTel.Endpoint),
 				slog.Float64("sample_rate", *cfg.Settings.OTel.SampleRate),
@@ -711,7 +711,7 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 	loginThrottle := auth.NewLoginThrottle()
 
 	dataDir := resolveDataDir()
-	publicUIOrigin := strings.TrimSpace(os.Getenv("VOIDLLM_UI_ORIGIN"))
+	publicUIOrigin := strings.TrimSpace(os.Getenv("TAVO_UI_ORIGIN"))
 	if devMode && publicUIOrigin == "" {
 		publicUIOrigin = "http://localhost:5173"
 	}
@@ -896,7 +896,7 @@ func (a *Application) Start() error {
 
 	// Populate Swagger spec metadata. Host is intentionally empty so that the
 	// Swagger UI uses the current origin — no hard-coded address required.
-	docs.SwaggerInfo.Title = "VoidLLM API"
+	docs.SwaggerInfo.Title = "Tavo API"
 	docs.SwaggerInfo.Description = "API key reseller marketplace with prepaid wallet and LLM proxy"
 	docs.SwaggerInfo.Version = "0.2.0"
 	docs.SwaggerInfo.BasePath = "/api/v1"
@@ -1086,8 +1086,8 @@ func (a *Application) cleanup(ctx context.Context) {
 
 // buildPIIEngine constructs a pii.Engine from the installation encryption key
 // and the PII configuration. The pseudonym secret is derived from encKey using
-// HKDF with the info string "voidllm-pii-pseudonym-v1", keeping it independent
-// from the key-hashing HMAC secret ("voidllm-hmac-key") and preventing cross-
+// HKDF with the info string "tavo-pii-pseudonym-v1", keeping it independent
+// from the key-hashing HMAC secret ("tavo-hmac-key") and preventing cross-
 // subsystem secret reuse.
 //
 // Returns an error on any failure (HKDF error, bad custom regexp). The caller
@@ -1097,7 +1097,7 @@ func (a *Application) cleanup(ctx context.Context) {
 // the derived secret does not linger in the Go heap beyond its required lifetime.
 func buildPIIEngine(encKey []byte, cfg config.PIIConfig, log *slog.Logger) (*pii.Engine, error) {
 	// Derive a 32-byte pseudonym secret via HKDF-SHA256.
-	hkdfReader := hkdf.New(sha256.New, encKey, nil, []byte("voidllm-pii-pseudonym-v1"))
+	hkdfReader := hkdf.New(sha256.New, encKey, nil, []byte("tavo-pii-pseudonym-v1"))
 	piiSecret := make([]byte, 32)
 	if _, err := io.ReadFull(hkdfReader, piiSecret); err != nil {
 		return nil, fmt.Errorf("derive pseudonym secret: %w", err)
@@ -1146,7 +1146,7 @@ func buildPIIEngine(encKey []byte, cfg config.PIIConfig, log *slog.Logger) (*pii
 }
 
 func resolveDataDir() string {
-	if dir := strings.TrimSpace(os.Getenv("VOIDLLM_DATA_DIR")); dir != "" {
+	if dir := strings.TrimSpace(os.Getenv("TAVO_DATA_DIR")); dir != "" {
 		return dir
 	}
 	return "data"

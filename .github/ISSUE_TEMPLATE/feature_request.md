@@ -1,6 +1,6 @@
 ---
 name: Feature Request
-about: Suggest a new feature for VoidLLM
+about: Suggest a new feature for Tavo
 title: "[Feature] "
 labels: enhancement
 ---

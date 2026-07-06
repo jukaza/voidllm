@@ -19,7 +19,7 @@ models:
     aliases: [default, smart]
 ```
 
-A client sends `model: "default"` — VoidLLM resolves it to `gpt-4o` and routes accordingly. Later, if you switch to Claude, update the config and `default` now points to a different model. Zero client changes.
+A client sends `model: "default"` — Tavo resolves it to `gpt-4o` and routes accordingly. Later, if you switch to Claude, update the config and `default` now points to a different model. Zero client changes.
 
 ## Global Aliases
 
@@ -29,12 +29,12 @@ Aliases are **global** in the marketplace model. They can be set in:
 - Admin UI (Create/Edit Model)
 - Admin API (`POST /api/v1/model-aliases`)
 
-When a client sends `model: "default"`, VoidLLM looks up the global alias table first, then falls back to a model name match.
+When a client sends `model: "default"`, Tavo looks up the global alias table first, then falls back to a model name match.
 
 ## API
 
 ```bash
-curl -X POST https://voidllm.example.com/api/v1/model-aliases \
+curl -X POST https://tavo.example.com/api/v1/model-aliases \
   -H "Authorization: Bearer vl_uk_..." \
   -H "Content-Type: application/json" \
   -d '{"alias": "default", "model_name": "claude-sonnet"}'

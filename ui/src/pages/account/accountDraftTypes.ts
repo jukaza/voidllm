@@ -27,4 +27,4 @@ export const DEFAULT_ACCOUNT_DRAFT: AccountDraft = {
   sessions: [],
 }
 
-export const ACCOUNT_DRAFT_STORAGE_KEY = 'voidllm.account.draft.v1'
+export const ACCOUNT_DRAFT_STORAGE_KEY = 'tavo.account.draft.v1'
