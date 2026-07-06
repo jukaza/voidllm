@@ -5,6 +5,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ToastProvider } from '../hooks/useToast'
 import { TranslationProvider } from '../lib/i18n'
+
+vi.mock('../lib/lobe-icon', () => ({
+  getLobeIcon: () => null,
+}))
+
 import ModelsPage from './ModelsPage'
 
 interface MockModelResponse {
@@ -147,8 +152,9 @@ describe('ModelsPage — product catalog', () => {
     renderModelsPage()
 
     await userEvent.click(await screen.findByRole('button', { name: /create product/i }))
-    expect(screen.getByRole('heading', { name: /create product/i })).toBeInTheDocument()
-    expect(screen.getByText(/sellable product with upstream combo routes/i)).toBeInTheDocument()
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByRole('heading', { name: /create product/i })).toBeInTheDocument()
+    expect(within(dialog).getByLabelText(/product name/i)).toBeInTheDocument()
   })
 
   it('requires name and route steps on create', async () => {
@@ -156,11 +162,12 @@ describe('ModelsPage — product catalog', () => {
     renderModelsPage()
 
     await userEvent.click(await screen.findByRole('button', { name: /create product/i }))
-    await userEvent.click(screen.getByRole('button', { name: /^create product$/i }))
+    const dialog = await screen.findByRole('dialog')
+    await userEvent.click(within(dialog).getByRole('button', { name: /^create product$/i }))
 
     await waitFor(() => {
-      expect(screen.getByText(/product name is required/i)).toBeInTheDocument()
-      expect(screen.getByText(/at least one combo route step/i)).toBeInTheDocument()
+      expect(within(dialog).getByText(/product name is required/i)).toBeInTheDocument()
+      expect(within(dialog).getByText(/at least one combo route step/i)).toBeInTheDocument()
     })
   })
 

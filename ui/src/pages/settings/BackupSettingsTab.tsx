@@ -3,6 +3,7 @@ import { Button } from '../../components/ui/Button'
 import { Banner } from '../../components/ui/Banner'
 import { Toggle } from '../../components/ui/Toggle'
 import apiClient from '../../api/client'
+import { useAdminFeaturesSettings } from '../../hooks/useFeaturesSettings'
 import { useAdminPaymentSettings } from '../../hooks/usePaymentSettings'
 import { useAdminSiteSettings } from '../../hooks/useSiteConfig'
 import { useToast } from '../../hooks/useToast'
@@ -40,18 +41,21 @@ export function BackupSettingsTab() {
 
   const { data: site } = useAdminSiteSettings()
   const { data: payment } = useAdminPaymentSettings()
+  const { data: features } = useAdminFeaturesSettings()
 
   async function exportConfig() {
     try {
-      const [siteData, paymentData] = await Promise.all([
+      const [siteData, paymentData, featuresData] = await Promise.all([
         site ?? apiClient('/admin/settings/site'),
         payment ?? apiClient('/admin/settings/payment'),
+        features ?? apiClient('/admin/settings/features'),
       ])
       const payload = {
         exported_at: new Date().toISOString(),
         version: 1,
         site: siteData,
         payment: redactSecrets(paymentData as Record<string, unknown>),
+        features: featuresData,
       }
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
       const url = URL.createObjectURL(blob)

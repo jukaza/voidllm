@@ -478,6 +478,9 @@ func (h *Handler) oauthLoginOrSignup(c fiber.Ctx, profile oauthProfile, isSignup
 	if h.Wallet != nil {
 		h.Wallet.Register(newUser.ID)
 	}
+	if err := h.creditSignupWallet(ctx, newUser.ID); err != nil {
+		return loginResponse{}, fmt.Errorf("signup failed")
+	}
 	if _, err := h.DB.UpsertOAuthConnection(ctx, newUser.ID, profile.Provider, profile.ExternalID, profile.Label); err != nil {
 		return loginResponse{}, fmt.Errorf("signup failed")
 	}

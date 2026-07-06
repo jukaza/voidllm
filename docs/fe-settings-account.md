@@ -51,8 +51,8 @@ Khi wire backend cho trường Preview: thêm API → bỏ draft field → đổ
 | Tab | File | Live API | Preview (draft) |
 |-----|------|----------|-----------------|
 | General | `GeneralSettingsTab.tsx` | `GET/PUT /admin/settings/site` + `POST/DELETE /admin/settings/site/logo` (upload logo, tên, phụ đề, footer, homepage, Zalo/Telegram, docs, API base) | — (tab Live hoàn toàn) |
-| Security | `SecuritySettingsTab.tsx` | `register_enabled`, Turnstile, OAuth, policy 2FA/session/password | — |
-| Features | `FeaturesSettingsTab.tsx` | — | `enforce_balance`, `initial_wallet_balance`, catalog/playground toggles |
+| Security | `SecuritySettingsTab.tsx` | `register_enabled`, Turnstile, OAuth, policy session/password | — |
+| Features | `FeaturesSettingsTab.tsx` | `GET/PUT /admin/settings/features` | — (Live; `require_terms_on_login` vẫn preview ở Legal) |
 | Payment | `PaymentSettingsTab.tsx` | `GET/PUT /admin/settings/payment` | — |
 | Legal & Notice | `LegalNoticeSettingsTab.tsx` | Site legal + notice list API | — |
 | Backup | `BackupSettingsTab.tsx` | Export gọi site + payment API | Import preview, schedule S3 (disabled) |
@@ -89,7 +89,7 @@ Khi wire backend cho trường Preview: thêm API → bỏ draft field → đổ
 | Tab | File | Live | Preview |
 |-----|------|------|---------|
 | Profile | `ProfileTab.tsx` | Email read-only (`GET /me`) | Display name (`PATCH /me` chưa có) |
-| Security | `SecurityTab.tsx` | Mật khẩu, 2FA TOTP, phiên đăng nhập (API Live) | — |
+| Security | `SecurityTab.tsx` | Mật khẩu, phiên đăng nhập (API Live) | — |
 | Connections | `ConnectionsTab.tsx` | OAuth bind Google/GitHub | — |
 | Preferences | `PreferencesTab.tsx` | Ngôn ngữ `setLanguage` | `record_ip` |
 
@@ -108,9 +108,7 @@ Link nhanh: Wallet, Analytics, Keys.
 
 - `ChangePasswordDialog.tsx` — **Live** (`POST /me/password`)
 - `SetPasswordDialog.tsx` — **Live** (`POST /me/password/set`, OAuth-only)
-- `TwoFactorDialog.tsx` — **Live** (`POST /me/2fa/*`, khi admin bật `allow_user_enable`)
 - `SessionsDialog.tsx` — **Live** (`GET/DELETE /me/sessions`)
-- `SecurityActionTiles.tsx` — tiles mở dialog
 
 ### Đã bỏ so với bản demo cũ
 
@@ -118,6 +116,34 @@ Link nhanh: Wallet, Analytics, Keys.
 - Sessions trùng lặp
 - Footer text “frontend demo”
 - Thông báo email (high usage / new login)
+
+---
+
+## Đã gỡ tính năng 2FA
+
+Quyết định: **gỡ hoàn toàn TOTP 2FA** khỏi VoidLLM core (login, account, admin policy, DB).
+
+### Backend đã xóa
+
+- Package `internal/totp/`
+- `internal/api/admin/two_fa.go`, `login_2fa.go`
+- Redis helpers `login_challenge`, `totp_pending`
+- Routes `POST /auth/login/2fa`, `POST /me/2fa/*`
+- Cột `users.totp_*`, bảng `user_totp_backup_codes`, settings `security.two_fa.*`
+- Migration `0036_remove_totp`
+
+### Frontend đã xóa
+
+- `TwoFactorLoginStep`, `TwoFactorDialog`, `TwoFactorQR`, `SecurityActionTiles`
+- Policy 2FA trong `/settings` Security
+- UI 2FA trong `/account` Security và login flow
+- i18n keys `account.twofa_*`, `login.twofa_*`, `settings.policy_2fa_*`
+
+### Vẫn giữ
+
+- **Đăng nhập email/password** — `POST /auth/login` trả session trực tiếp
+- **Đổi/đặt mật khẩu**, **OAuth**, **Turnstile**
+- **Quản lý phiên** — `GET/DELETE /me/sessions`, `api_keys.login_ip` / `user_agent`
 
 ---
 
@@ -153,9 +179,7 @@ Quyết định: **không triển khai SMTP / gửi mail / thông báo email** t
 | Tính năng | API đề xuất | Ghi chú |
 |-----------|-------------|---------|
 | Sửa tên hiển thị | `PATCH /me` `{ display_name }` | Hiện chỉ draft localStorage |
-| ~~2FA~~ | `POST /me/2fa/setup`, `POST /me/2fa/verify`, `DELETE /me/2fa` | **Đã Live** |
 | ~~Sessions~~ | `GET /me/sessions`, `DELETE /me/sessions/:id` | **Đã Live** |
-| Login 2FA | `POST /auth/login` → `requires_2fa`, `POST /auth/login/2fa` | **Đã Live** |
 | Đặt mật khẩu OAuth | `POST /me/password/set` | **Đã Live** |
 | OAuth bind | Flow redirect + callback per provider | Admin bật OAuth ở Security trước |
 | `record_ip` preference | `PATCH /me/preferences` hoặc user settings table | Preview |
@@ -166,7 +190,7 @@ Quyết định: **không triển khai SMTP / gửi mail / thông báo email** t
 |--------------|-------|
 | ~~`site_subtitle`, contact fields~~ | **Đã Live** — `site_subtitle`, `support_zalo`, `support_telegram`, `doc_url` |
 | Turnstile / OAuth | Endpoint security settings riêng |
-| `enforce_balance`, `initial_wallet_balance` | Config server / wallet bootstrap |
+| ~~`enforce_balance`, `initial_wallet_balance`~~ | **Đã Live** — `GET/PUT /admin/settings/features` |
 | Backup import | `POST /admin/settings/import` |
 | Backup schedule | Service cron + S3 — phase sau |
 

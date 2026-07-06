@@ -19,12 +19,8 @@ const (
 	KeyOAuthGitHubClientID     = prefixOAuth + "github.client_id"
 	KeyOAuthGitHubClientSecret = prefixOAuth + "github.client_secret"
 
-	prefixTwoFA    = "security.two_fa."
 	prefixSession  = "security.session."
 	prefixPassword = "security.password."
-
-	KeyTwoFAAllowUserEnable    = prefixTwoFA + "allow_user_enable"
-	KeyTwoFARequireSystemAdmin = prefixTwoFA + "require_system_admin"
 
 	KeySessionTTLHours      = prefixSession + "ttl_hours"
 	KeySessionAllowMultiple = prefixSession + "allow_multiple"

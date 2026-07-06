@@ -17,7 +17,6 @@ import (
 func RegisterRoutes(app *fiber.App, handler *Handler, keyCache *cache.Cache[string, auth.KeyInfo], hmacSecret []byte, auditLogger *audit.Logger) {
 	// Public routes — no auth required.
 	app.Post("/api/v1/auth/login", handler.Login)
-	app.Post("/api/v1/auth/login/2fa", handler.Login2FA)
 	app.Post("/api/v1/auth/register", handler.Register)
 	app.Get("/api/v1/auth/oauth/:provider", handler.StartOAuth)
 	app.Get("/api/v1/auth/oauth/:provider/callback", handler.OAuthCallback)
@@ -27,6 +26,7 @@ func RegisterRoutes(app *fiber.App, handler *Handler, keyCache *cache.Cache[stri
 	app.Get("/api/v1/public/catalog", handler.PublicCatalog)
 	app.Get("/api/v1/public/models", handler.PublicModels)
 	app.Get("/api/v1/public/site", handler.GetPublicSite)
+	app.Get("/api/v1/public/features", handler.GetPublicFeatures)
 	app.Get("/api/v1/public/topup-config", handler.GetPublicTopupConfig)
 	app.Post("/api/v1/webhooks/sepay", handler.SepayWebhook)
 
@@ -45,9 +45,6 @@ func RegisterRoutes(app *fiber.App, handler *Handler, keyCache *cache.Cache[stri
 	api.Get("/me/sessions", handler.MeSessions)
 	api.Delete("/me/sessions", handler.RevokeOtherMeSessions)
 	api.Delete("/me/sessions/:id", handler.RevokeMeSession)
-	api.Post("/me/2fa/setup", handler.SetupTwoFA)
-	api.Post("/me/2fa/verify", handler.VerifyTwoFA)
-	api.Delete("/me/2fa", handler.DisableTwoFA)
 	api.Get("/me/available-models", handler.AvailableModels)
 	api.Get("/me/connections", handler.MeConnections)
 	api.Post("/me/connections/:provider/link", handler.LinkMeConnection)
@@ -170,5 +167,7 @@ func RegisterRoutes(app *fiber.App, handler *Handler, keyCache *cache.Cache[stri
 	api.Put("/admin/settings/security", auth.RequireRole(auth.RoleSystemAdmin), handler.UpdateAdminSecuritySettings)
 	api.Get("/admin/settings/payment", auth.RequireRole(auth.RoleSystemAdmin), handler.GetAdminPaymentSettings)
 	api.Put("/admin/settings/payment", auth.RequireRole(auth.RoleSystemAdmin), handler.UpdateAdminPaymentSettings)
+	api.Get("/admin/settings/features", auth.RequireRole(auth.RoleSystemAdmin), handler.GetAdminFeaturesSettings)
+	api.Put("/admin/settings/features", auth.RequireRole(auth.RoleSystemAdmin), handler.UpdateAdminFeaturesSettings)
 
 }

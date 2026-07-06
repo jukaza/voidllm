@@ -1,66 +1,82 @@
-import { Link } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import { Input } from '../../components/ui/Input'
 import { Toggle } from '../../components/ui/Toggle'
-import { useAdminPaymentSettings } from '../../hooks/usePaymentSettings'
+import {
+  useAdminFeaturesSettings,
+  useUpdateFeaturesSettings,
+  type FeaturesSettings,
+} from '../../hooks/useFeaturesSettings'
 import { useToast } from '../../hooks/useToast'
 import { useTranslation } from '../../lib/i18n'
-import { PreviewBadge } from './components/PreviewBadge'
+import { LiveBadge } from './components/PreviewBadge'
 import { SettingsSectionCard } from './components/SettingsSectionCard'
 import { SettingsTabFooter } from './components/SettingsTabFooter'
-import { useSettingsDraft } from './useSettingsDraft'
-
-function DeepLinkRow({ label, hint, to }: { label: string; hint: string; to: string }) {
-  return (
-    <div className="flex items-center justify-between gap-3 rounded-md border border-border px-4 py-3">
-      <div>
-        <div className="text-sm font-medium text-text-primary">{label}</div>
-        <div className="text-xs text-text-tertiary">{hint}</div>
-      </div>
-      <Link to={to} className="text-xs text-accent hover:underline shrink-0">
-        → {to}
-      </Link>
-    </div>
-  )
-}
 
 export function FeaturesSettingsTab() {
   const { t } = useTranslation()
   const { toast } = useToast()
-  const { draft, setDraft } = useSettingsDraft()
-  const { data: payment } = useAdminPaymentSettings()
+  const { data, isLoading, isError, error, refetch } = useAdminFeaturesSettings()
+  const update = useUpdateFeaturesSettings()
+
+  const [form, setForm] = useState<FeaturesSettings | null>(null)
+
+  useEffect(() => {
+    if (data) setForm(data)
+  }, [data])
+
+  function save() {
+    if (!form) return
+    update.mutate(
+      {
+        wallet: form.wallet,
+        modules: form.modules,
+      },
+      {
+        onSuccess: () => toast({ variant: 'success', message: t('common.saved') }),
+        onError: (err) => toast({ variant: 'error', message: err.message }),
+      },
+    )
+  }
+
+  if (isLoading) {
+    return <p className="text-sm text-text-tertiary">{t('common.loading')}</p>
+  }
+
+  if (isError || !form) {
+    return (
+      <div className="space-y-3">
+        <p className="text-sm text-error">{error?.message ?? t('settings.load_error')}</p>
+        <button type="button" className="text-sm text-accent" onClick={() => void refetch()}>
+          {t('common.refresh')}
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
       <SettingsSectionCard
         title={t('settings.features_wallet_title')}
         description={t('settings.features_wallet_desc')}
-        badge={<PreviewBadge />}
+        badge={<LiveBadge />}
       >
-        <div className="flex items-center justify-between gap-4 rounded-md border border-border px-4 py-3">
-          <div>
-            <div className="text-sm font-medium">{t('settings.payment_enabled')}</div>
-            <div className="text-xs text-text-tertiary">{t('settings.features_payment_hint')}</div>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-text-tertiary">
-              {payment?.sepay?.enabled ? t('settings.status_on') : t('settings.status_off')}
-            </span>
-            <Link to="/settings?tab=payment" className="text-xs text-accent hover:underline">
-              {t('settings.configure')}
-            </Link>
-          </div>
-        </div>
         <Toggle
-          checked={draft.enforce_balance}
-          onChange={(v) => setDraft({ enforce_balance: v })}
+          checked={form.wallet.enforce_balance}
+          onChange={(v) => setForm({ ...form, wallet: { ...form.wallet, enforce_balance: v } })}
           label={t('settings.enforce_balance')}
         />
         <p className="text-xs text-text-tertiary -mt-2">{t('settings.enforce_balance_hint')}</p>
         <Input
           label={t('settings.initial_wallet_balance')}
           type="number"
-          value={String(draft.initial_wallet_balance)}
-          onChange={(e) => setDraft({ initial_wallet_balance: Number(e.target.value) || 0 })}
+          min={0}
+          value={String(form.wallet.initial_balance_vnd)}
+          onChange={(e) =>
+            setForm({
+              ...form,
+              wallet: { ...form.wallet, initial_balance_vnd: Number(e.target.value) || 0 },
+            })
+          }
           description={t('settings.initial_wallet_balance_hint')}
         />
       </SettingsSectionCard>
@@ -68,43 +84,21 @@ export function FeaturesSettingsTab() {
       <SettingsSectionCard
         title={t('settings.features_ux_title')}
         description={t('settings.features_ux_desc')}
-        badge={<PreviewBadge />}
+        badge={<LiveBadge />}
       >
         <Toggle
-          checked={draft.public_catalog_enabled}
-          onChange={(v) => setDraft({ public_catalog_enabled: v })}
+          checked={form.modules.public_catalog}
+          onChange={(v) => setForm({ ...form, modules: { ...form.modules, public_catalog: v } })}
           label={t('settings.public_catalog_enabled')}
         />
         <Toggle
-          checked={draft.playground_enabled}
-          onChange={(v) => setDraft({ playground_enabled: v })}
+          checked={form.modules.playground}
+          onChange={(v) => setForm({ ...form, modules: { ...form.modules, playground: v } })}
           label={t('settings.playground_enabled')}
         />
       </SettingsSectionCard>
 
-      <SettingsSectionCard title={t('settings.features_limits_title')} description={t('settings.features_limits_desc')}>
-        <DeepLinkRow
-          label={t('settings.limits_models')}
-          hint={t('settings.limits_models_hint')}
-          to="/models"
-        />
-        <DeepLinkRow
-          label={t('settings.limits_providers')}
-          hint={t('settings.limits_providers_hint')}
-          to="/providers"
-        />
-        <DeepLinkRow label={t('settings.limits_keys')} hint={t('settings.limits_keys_hint')} to="/keys" />
-        <DeepLinkRow
-          label={t('settings.limits_finance')}
-          hint={t('settings.limits_finance_hint')}
-          to="/finance"
-        />
-      </SettingsSectionCard>
-
-      <SettingsTabFooter
-        mode="preview"
-        onSave={() => toast({ variant: 'success', message: t('settings.saved_preview') })}
-      />
+      <SettingsTabFooter mode="live" loading={update.isPending} onSave={save} />
     </div>
   )
 }

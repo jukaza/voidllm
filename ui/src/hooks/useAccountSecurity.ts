@@ -47,41 +47,6 @@ export function useRevokeOtherSessions() {
   })
 }
 
-export function useTwoFASetup() {
-  return useMutation({
-    mutationFn: () =>
-      apiClient<{ secret: string; otpauth_url: string }>('/me/2fa/setup', { method: 'POST' }),
-  })
-}
-
-export function useTwoFAVerify() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (code: string) =>
-      apiClient<{ backup_codes: string[] }>('/me/2fa/verify', {
-        method: 'POST',
-        body: JSON.stringify({ code }),
-      }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['me'] })
-    },
-  })
-}
-
-export function useTwoFADisable() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (payload: { password?: string; code?: string }) =>
-      apiClient<void>('/me/2fa', {
-        method: 'DELETE',
-        body: JSON.stringify(payload),
-      }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['me'] })
-    },
-  })
-}
-
 export function useSetPassword() {
   const queryClient = useQueryClient()
   return useMutation({

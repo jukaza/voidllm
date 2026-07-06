@@ -14,10 +14,6 @@ export function AccountStatusStrip() {
 
   const chips = [
     {
-      label: t('account.status_2fa'),
-      on: me.two_fa_enabled,
-    },
-    {
       label: t('account.status_oauth'),
       on: oauthCount > 0,
       detail: oauthCount > 0 ? String(oauthCount) : undefined,

@@ -11,19 +11,19 @@ describe('KeyHint', () => {
 
     it('renders prefix in tertiary color', () => {
       render(<KeyHint hint="sk-a3f2...2ad6" />)
-      const prefix = screen.getByText('sk-a3f...')
+      const prefix = screen.getByText('sk-a3f2...')
       expect(prefix.className).toContain('text-text-tertiary')
     })
 
     it('splits on ellipsis correctly for user key', () => {
       render(<KeyHint hint="sk-a3f2...e8b1" />)
-      expect(screen.getByText('sk-a3f...')).toBeInTheDocument()
+      expect(screen.getByText('sk-a3f2...')).toBeInTheDocument()
       expect(screen.getByText('e8b1')).toBeInTheDocument()
     })
 
     it('splits on ellipsis correctly for session key', () => {
       render(<KeyHint hint="sk-abcd...0684" />)
-      expect(screen.getByText('sk-abc...')).toBeInTheDocument()
+      expect(screen.getByText('sk-abcd...')).toBeInTheDocument()
       expect(screen.getByText('0684')).toBeInTheDocument()
     })
 

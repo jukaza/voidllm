@@ -119,7 +119,6 @@ export function SecuritySettingsTab() {
   const [turnstileSecretKey, setTurnstileSecretKey] = useState('')
   const [google, setGoogle] = useState<OAuthDraft>(emptyOAuth())
   const [github, setGithub] = useState<OAuthDraft>(emptyOAuth())
-  const [twoFAAllowUser, setTwoFAAllowUser] = useState(false)
   const [sessionTTL, setSessionTTL] = useState(24)
   const [sessionAllowMultiple, setSessionAllowMultiple] = useState(false)
   const [sessionMaxConcurrent, setSessionMaxConcurrent] = useState(5)
@@ -152,7 +151,6 @@ export function SecuritySettingsTab() {
       client_id: githubCfg.client_id ?? '',
       client_secret: '',
     })
-    setTwoFAAllowUser(security.two_fa?.allow_user_enable ?? false)
     setSessionTTL(security.session?.ttl_hours ?? 24)
     setSessionAllowMultiple(security.session?.allow_multiple ?? false)
     setSessionMaxConcurrent(security.session?.max_concurrent ?? 5)
@@ -183,7 +181,6 @@ export function SecuritySettingsTab() {
         google: oauthPayload(google),
         github: oauthPayload(github),
       },
-      two_fa: { allow_user_enable: twoFAAllowUser },
       session: {
         ttl_hours: sessionTTL,
         allow_multiple: sessionAllowMultiple,
@@ -328,18 +325,6 @@ export function SecuritySettingsTab() {
             /account
           </Link>
         </p>
-      </SettingsSectionCard>
-
-      <SettingsSectionCard
-        title={t('settings.policy_2fa_title')}
-        description={t('settings.policy_2fa_desc')}
-        badge={<LiveBadge />}
-      >
-        <Toggle
-          checked={twoFAAllowUser}
-          onChange={setTwoFAAllowUser}
-          label={t('settings.policy_2fa_allow')}
-        />
       </SettingsSectionCard>
 
       <SettingsSectionCard

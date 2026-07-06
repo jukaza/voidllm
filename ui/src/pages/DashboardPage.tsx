@@ -14,6 +14,7 @@ import { financeRangeISO, useFinanceSummary } from '../hooks/useFinance'
 import { useUsageLive } from '../hooks/useUsageLive'
 import { formatNumber, formatCost, formatTokens } from '../lib/utils'
 import { useTranslation } from '../lib/i18n'
+import { usePublicFeatures } from '../hooks/useFeaturesSettings'
 import { useSiteConfig } from '../hooks/useSiteConfig'
 
 // ---------------------------------------------------------------------------
@@ -137,8 +138,10 @@ export default function DashboardPage() {
   const { data: wallet, isLoading: walletLoading } = useMyWallet()
   const { data: updateInfo } = useUpdateCheck()
   const { data: site } = useSiteConfig()
+  const { data: features } = usePublicFeatures()
   const { t } = useTranslation()
   const systemName = site?.system_name ?? 'VoidLLM'
+  const playgroundEnabled = features?.modules.playground !== false
   const [showUpdateDialog, setShowUpdateDialog] = useState(false)
 
   const isAdmin = me?.is_system_admin ?? false
@@ -228,9 +231,11 @@ export default function DashboardPage() {
               </div>
 
               <div className="flex flex-wrap gap-2 lg:justify-end">
-                <HeroLinkButton to="/playground" primary>
-                  {t('dashboard.action_playground')}
-                </HeroLinkButton>
+                {playgroundEnabled && (
+                  <HeroLinkButton to="/playground" primary>
+                    {t('dashboard.action_playground')}
+                  </HeroLinkButton>
+                )}
                 <HeroLinkButton to="/keys">
                   {t('dashboard.action_keys')}
                 </HeroLinkButton>
@@ -286,8 +291,14 @@ export default function DashboardPage() {
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
               {[
                 { step: 1, label: t('dashboard.step_create_key'), path: '/keys' },
-                { step: 2, label: t('dashboard.step_test_playground'), path: '/playground' },
-                { step: 3, label: t('dashboard.step_view_analytics'), path: '/analytics' },
+                ...(playgroundEnabled
+                  ? [{ step: 2, label: t('dashboard.step_test_playground'), path: '/playground' }]
+                  : []),
+                {
+                  step: playgroundEnabled ? 3 : 2,
+                  label: t('dashboard.step_view_analytics'),
+                  path: '/analytics',
+                },
               ].map((item) => (
                 <Link
                   key={item.step}

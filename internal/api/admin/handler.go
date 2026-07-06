@@ -19,6 +19,7 @@ import (
 	voidredis "github.com/voidmind-io/voidllm/internal/redis"
 	"github.com/voidmind-io/voidllm/internal/update"
 	"github.com/voidmind-io/voidllm/internal/usage"
+	"github.com/voidmind-io/voidllm/internal/features"
 	"github.com/voidmind-io/voidllm/internal/wallet"
 )
 
@@ -73,6 +74,10 @@ type Handler struct {
 	// independent of Redis pub/sub.
 	// Must be safe to call concurrently. May be nil — callers must nil-check.
 	ReloadModels func(context.Context) error
+	// FeaturesRuntime holds hot-reloaded product feature toggles.
+	FeaturesRuntime *features.Runtime
+	// ApplyFeatures applies runtime feature changes (e.g. wallet enforcement).
+	ApplyFeatures func(context.Context, features.Config) error
 }
 
 // swaggerErrorResponse is the standard API error envelope used in OpenAPI docs.

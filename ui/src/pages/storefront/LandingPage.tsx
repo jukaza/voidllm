@@ -3,6 +3,7 @@ import { PublicPricingTable } from '../../components/catalog/PublicPricingTable'
 import { BrandMark } from '../../components/brand/BrandMark'
 import { SiteNoticeBell } from '../../components/site/SiteNoticeBell'
 import { Markdown } from '../../components/ui/Markdown'
+import { usePublicFeatures } from '../../hooks/useFeaturesSettings'
 import { usePublicCatalog } from '../../hooks/useProviders'
 import { useSiteConfig } from '../../hooks/useSiteConfig'
 import { contactHref } from '../../lib/contactLinks'
@@ -13,10 +14,12 @@ const dashboardLinkClass =
   'text-sm bg-accent text-white px-4 py-2 rounded-lg no-underline hover:opacity-90'
 
 export default function LandingPage() {
+  const { data: features } = usePublicFeatures()
+  const catalogEnabled = features?.modules.public_catalog !== false
   const { data, isLoading } = usePublicCatalog()
   const { data: site } = useSiteConfig()
   const { t } = useTranslation()
-  const models = data?.data ?? []
+  const models = catalogEnabled ? (data?.data ?? []) : []
 
   const isLoggedIn = Boolean(localStorage.getItem(LOCAL_STORAGE_KEY))
   const showRegister = site?.register_enabled !== false
@@ -76,12 +79,14 @@ export default function LandingPage() {
               {t('storefront.cta_signup')}
             </Link>
           )}
-          <a
-            href="#pricing"
-            className="border border-white/10 px-6 py-3 rounded-lg text-sm text-text-secondary no-underline hover:text-text-primary"
-          >
-            {t('storefront.cta_pricing')}
-          </a>
+          {catalogEnabled && (
+            <a
+              href="#pricing"
+              className="border border-white/10 px-6 py-3 rounded-lg text-sm text-text-secondary no-underline hover:text-text-primary"
+            >
+              {t('storefront.cta_pricing')}
+            </a>
+          )}
         </div>
       </section>
 
@@ -109,24 +114,26 @@ export default function LandingPage() {
         </section>
       )}
 
-      <section id="pricing" className="max-w-5xl mx-auto px-6 py-14">
-        <h2 className="text-2xl font-bold text-center">{t('storefront.pricing_title')}</h2>
-        <p className="mt-2 text-sm text-text-tertiary text-center">
-          {t('storefront.pricing_subtitle')}
-        </p>
+      {catalogEnabled && (
+        <section id="pricing" className="max-w-5xl mx-auto px-6 py-14">
+          <h2 className="text-2xl font-bold text-center">{t('storefront.pricing_title')}</h2>
+          <p className="mt-2 text-sm text-text-tertiary text-center">
+            {t('storefront.pricing_subtitle')}
+          </p>
 
-        <div className="mt-8">
-          <PublicPricingTable
-            models={models}
-            isLoading={isLoading}
-            emptyMessage={t('storefront.no_models')}
-            variant="storefront"
-          />
-        </div>
-        <p className="mt-3 text-xs text-text-tertiary text-center">
-          {t('storefront.pricing_note')}
-        </p>
-      </section>
+          <div className="mt-8">
+            <PublicPricingTable
+              models={models}
+              isLoading={isLoading}
+              emptyMessage={t('storefront.no_models')}
+              variant="storefront"
+            />
+          </div>
+          <p className="mt-3 text-xs text-text-tertiary text-center">
+            {t('storefront.pricing_note')}
+          </p>
+        </section>
+      )}
 
       <footer className="border-t border-white/5 py-8 text-center text-xs text-text-tertiary space-y-2">
         <p>{footerText}</p>

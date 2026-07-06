@@ -233,6 +233,9 @@ export function usePublicCatalog() {
     queryKey: ['public-catalog'],
     queryFn: async () => {
       const res = await fetch('/api/v1/public/catalog')
+      if (res.status === 404) {
+        return { data: [] as CatalogModelItem[] }
+      }
       if (!res.ok) throw new Error('failed to load catalog')
       return (await res.json()) as { data: CatalogModelItem[] }
     },

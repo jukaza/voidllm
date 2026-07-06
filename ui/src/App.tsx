@@ -28,6 +28,7 @@ import CatalogPage from './pages/CatalogPage'
 import SystemSettingsPage from './pages/settings/SystemSettingsPage'
 import LegalPage from './pages/storefront/LegalPage'
 import { ToastProvider } from './hooks/useToast'
+import { CatalogGate, PlaygroundGate } from './components/layout/FeatureGate'
 import { Shell } from './components/layout/Shell'
 import { PageHeader } from './components/ui/PageHeader'
 import { LOCAL_STORAGE_KEY } from './lib/constants'
@@ -75,8 +76,22 @@ export default function App() {
               <Route path="/system-settings/*" element={<Navigate to="/settings" replace />} />
               <Route element={<RequireAuth />}>
                 <Route path="/dashboard" element={<DashboardPage />} />
-                <Route path="/playground" element={<PlaygroundPage />} />
-                <Route path="/catalog" element={<CatalogPage />} />
+                <Route
+                  path="/playground"
+                  element={
+                    <PlaygroundGate>
+                      <PlaygroundPage />
+                    </PlaygroundGate>
+                  }
+                />
+                <Route
+                  path="/catalog"
+                  element={
+                    <CatalogGate>
+                      <CatalogPage />
+                    </CatalogGate>
+                  }
+                />
                 <Route path="/keys" element={<KeysPage />} />
                 <Route path="/providers" element={<ProvidersPage />} />
                 <Route path="/providers/new" element={<ProviderNewPage />} />

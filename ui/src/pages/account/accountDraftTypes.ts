@@ -13,7 +13,6 @@ export interface SessionDraft {
 
 export interface AccountDraft {
   display_name: string
-  two_fa_enabled: boolean
   oauth_google: OAuthBindingDraft
   oauth_github: OAuthBindingDraft
   record_ip: boolean
@@ -22,7 +21,6 @@ export interface AccountDraft {
 
 export const DEFAULT_ACCOUNT_DRAFT: AccountDraft = {
   display_name: '',
-  two_fa_enabled: false,
   oauth_google: { bound: false },
   oauth_github: { bound: false },
   record_ip: true,

@@ -33,6 +33,7 @@ import (
 	"github.com/voidmind-io/voidllm/internal/config"
 	"github.com/voidmind-io/voidllm/internal/db"
 	"github.com/voidmind-io/voidllm/internal/docs"
+	"github.com/voidmind-io/voidllm/internal/features"
 	"github.com/voidmind-io/voidllm/internal/health"
 	"github.com/voidmind-io/voidllm/internal/metrics"
 	voidotel "github.com/voidmind-io/voidllm/internal/otel"
@@ -513,9 +514,16 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 		return nil, fmt.Errorf("create wallet service: %w", err)
 	}
 
+	featuresCfg, err := features.LoadWithYAMLSeed(ctx, database, cfg.Settings.Wallet)
+	if err != nil {
+		return nil, fmt.Errorf("load features settings: %w", err)
+	}
+	featuresRuntime := features.NewRuntime(featuresCfg)
+	enforceBalance := featuresCfg.Wallet.EnforceBalance
+
 	// Step 8: start usage logger (always) and audit logger (if enabled).
 	usageLogger = usage.NewLogger(database, cfg.Settings.Usage, log, tokenCounter)
-	if cfg.Settings.Wallet.ShouldEnforceBalance() {
+	if enforceBalance {
 		usageLogger.SetWallet(walletService)
 		log.LogAttrs(ctx, slog.LevelInfo, "wallet billing enforcement enabled")
 	} else {
@@ -678,7 +686,7 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 	proxyHandler.LiveStats = liveStats
 	proxyHandler.RateLimiter = rateLimiter
 	proxyHandler.TokenCounter = tokenCounter
-	if cfg.Settings.Wallet.ShouldEnforceBalance() {
+	if enforceBalance {
 		proxyHandler.Wallet = walletService
 	}
 	proxyHandler.UpstreamLimiter = upstreamLimiter
@@ -706,20 +714,33 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 		publicUIOrigin = "http://localhost:5173"
 	}
 	adminHandler := &admin.Handler{
-		DB:             database,
-		DataDir:        dataDir,
-		PublicUIOrigin: publicUIOrigin,
-		HMACSecret:    hmacSecret,
-		EncryptionKey: encKey,
-		KeyCache:      keyCache,
-		Registry:      registry,
-		AliasCache: aliasCache,
-		Redis:         redisClient,
-		AuditLogger:   auditLogger,
-		Log:           log,
-		LoginThrottle: loginThrottle,
-		Wallet:        walletService,
-		LiveStats:     liveStats,
+		DB:              database,
+		DataDir:         dataDir,
+		PublicUIOrigin:  publicUIOrigin,
+		HMACSecret:      hmacSecret,
+		EncryptionKey:   encKey,
+		KeyCache:        keyCache,
+		Registry:        registry,
+		AliasCache:      aliasCache,
+		Redis:           redisClient,
+		AuditLogger:     auditLogger,
+		Log:             log,
+		LoginThrottle:   loginThrottle,
+		Wallet:          walletService,
+		LiveStats:       liveStats,
+		FeaturesRuntime: featuresRuntime,
+	}
+	adminHandler.ApplyFeatures = func(_ context.Context, cfg features.Config) error {
+		if cfg.Wallet.EnforceBalance {
+			proxyHandler.Wallet = walletService
+			usageLogger.SetWallet(walletService)
+			log.LogAttrs(ctx, slog.LevelInfo, "wallet billing enforcement enabled")
+		} else {
+			proxyHandler.Wallet = nil
+			usageLogger.SetWallet(nil)
+			log.LogAttrs(ctx, slog.LevelInfo, "wallet billing enforcement disabled — API keys work without top-up")
+		}
+		return nil
 	}
 	// Wire the in-process reload callback so deployment mutations can re-gate the
 	// model registry immediately after storing a new license, even on

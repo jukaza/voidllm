@@ -1,4 +1,5 @@
 import { Badge } from '../../../components/ui/Badge'
+import { useAdminFeaturesSettings } from '../../../hooks/useFeaturesSettings'
 import { useAdminPaymentSettings } from '../../../hooks/usePaymentSettings'
 import { useAdminSiteSettings } from '../../../hooks/useSiteConfig'
 import { useTranslation } from '../../../lib/i18n'
@@ -7,6 +8,7 @@ export function SettingsStatusStrip() {
   const { t } = useTranslation()
   const { data: site } = useAdminSiteSettings()
   const { data: payment } = useAdminPaymentSettings()
+  const { data: features } = useAdminFeaturesSettings()
 
   const chips = [
     {
@@ -16,6 +18,14 @@ export function SettingsStatusStrip() {
     {
       label: t('settings.status_payment'),
       on: payment?.sepay?.enabled === true,
+    },
+    {
+      label: t('settings.status_enforce_balance'),
+      on: features?.wallet.enforce_balance === true,
+    },
+    {
+      label: t('settings.status_playground'),
+      on: features?.modules.playground !== false,
     },
   ]
 

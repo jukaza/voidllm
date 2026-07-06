@@ -54,17 +54,6 @@ type OAuthPublic struct {
 	GitHub OAuthProviderPublic `json:"github"`
 }
 
-// TwoFAConfig holds admin policy for user-managed TOTP 2FA.
-type TwoFAConfig struct {
-	AllowUserEnable    bool `json:"allow_user_enable"`
-	RequireSystemAdmin bool `json:"require_system_admin"`
-}
-
-// TwoFAPublic is the public subset for storefront auth UI.
-type TwoFAPublic struct {
-	Available bool `json:"available"`
-}
-
 // SessionPolicyConfig controls login session lifetime and concurrency.
 type SessionPolicyConfig struct {
 	TTLHours      int  `json:"ttl_hours"`
@@ -82,7 +71,6 @@ type PasswordPolicyConfig struct {
 type Config struct {
 	Turnstile TurnstileConfig      `json:"turnstile"`
 	OAuth     OAuthConfig          `json:"oauth"`
-	TwoFA     TwoFAConfig          `json:"two_fa"`
 	Session   SessionPolicyConfig  `json:"session"`
 	Password  PasswordPolicyConfig `json:"password"`
 }
@@ -93,22 +81,14 @@ type PublicConfig struct {
 	RegisterEnabled bool            `json:"register_enabled"`
 	Turnstile       TurnstilePublic `json:"turnstile"`
 	OAuth           OAuthPublic     `json:"oauth"`
-	TwoFA           TwoFAPublic     `json:"two_fa"`
 }
 
 // UpdateInput is the admin PUT payload.
 type UpdateInput struct {
 	Turnstile *TurnstileUpdate       `json:"turnstile"`
 	OAuth     *OAuthUpdate           `json:"oauth"`
-	TwoFA     *TwoFAUpdate           `json:"two_fa"`
 	Session   *SessionPolicyUpdate   `json:"session"`
 	Password  *PasswordPolicyUpdate  `json:"password"`
-}
-
-// TwoFAUpdate accepts partial two-factor policy changes.
-type TwoFAUpdate struct {
-	AllowUserEnable    *bool `json:"allow_user_enable"`
-	RequireSystemAdmin *bool `json:"require_system_admin"`
 }
 
 // SessionPolicyUpdate accepts partial session policy changes.
@@ -190,10 +170,6 @@ func Load(ctx context.Context, store SettingsStore) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	twoFA, err := loadTwoFA(ctx, store)
-	if err != nil {
-		return Config{}, err
-	}
 	session, err := loadSessionPolicy(ctx, store)
 	if err != nil {
 		return Config{}, err
@@ -212,7 +188,6 @@ func Load(ctx context.Context, store SettingsStore) (Config, error) {
 			Google: maskProvider(google, googleSecret),
 			GitHub: maskProvider(github, githubSecret),
 		},
-		TwoFA:    twoFA,
 		Session:  session,
 		Password: password,
 	}, nil
@@ -274,9 +249,6 @@ func PublicFrom(cfg Config, registerEnabled bool) PublicConfig {
 			Google: pub(cfg.OAuth.Google),
 			GitHub: pub(cfg.OAuth.GitHub),
 		},
-		TwoFA: TwoFAPublic{
-			Available: cfg.TwoFA.AllowUserEnable,
-		},
 	}
 }
 
@@ -297,11 +269,6 @@ func Update(ctx context.Context, store SettingsStore, input UpdateInput) (Config
 			if err := applyOAuthProvider(ctx, store, "github", *input.OAuth.GitHub); err != nil {
 				return Config{}, err
 			}
-		}
-	}
-	if input.TwoFA != nil {
-		if err := applyTwoFA(ctx, store, *input.TwoFA); err != nil {
-			return Config{}, err
 		}
 	}
 	if input.Session != nil {
@@ -468,21 +435,6 @@ func loadInt(ctx context.Context, store SettingsStore, key string, fallback int)
 	return parsed, nil
 }
 
-func loadTwoFA(ctx context.Context, store SettingsStore) (TwoFAConfig, error) {
-	allowUser, err := loadBool(ctx, store, KeyTwoFAAllowUserEnable, false)
-	if err != nil {
-		return TwoFAConfig{}, err
-	}
-	requireAdmin, err := loadBool(ctx, store, KeyTwoFARequireSystemAdmin, false)
-	if err != nil {
-		return TwoFAConfig{}, err
-	}
-	return TwoFAConfig{
-		AllowUserEnable:    allowUser,
-		RequireSystemAdmin: requireAdmin,
-	}, nil
-}
-
 func loadSessionPolicy(ctx context.Context, store SettingsStore) (SessionPolicyConfig, error) {
 	ttl, err := loadInt(ctx, store, KeySessionTTLHours, DefaultSessionTTLHours)
 	if err != nil {
@@ -516,20 +468,6 @@ func loadPasswordPolicy(ctx context.Context, store SettingsStore) (PasswordPolic
 		MinLength:             clampInt(minLength, minPasswordLength, maxPasswordLength),
 		AllowOAuthSetPassword: allowOAuthSet,
 	}, nil
-}
-
-func applyTwoFA(ctx context.Context, store SettingsStore, in TwoFAUpdate) error {
-	if in.AllowUserEnable != nil {
-		if err := store.SetSetting(ctx, KeyTwoFAAllowUserEnable, strconv.FormatBool(*in.AllowUserEnable)); err != nil {
-			return err
-		}
-	}
-	if in.RequireSystemAdmin != nil {
-		if err := store.SetSetting(ctx, KeyTwoFARequireSystemAdmin, strconv.FormatBool(*in.RequireSystemAdmin)); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func applySessionPolicy(ctx context.Context, store SettingsStore, in SessionPolicyUpdate) error {

@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/voidmind-io/voidllm/internal/apierror"
 	"github.com/voidmind-io/voidllm/internal/auth"
 	"github.com/voidmind-io/voidllm/internal/db"
+	"github.com/voidmind-io/voidllm/internal/features"
 	"github.com/voidmind-io/voidllm/internal/security"
 	"github.com/voidmind-io/voidllm/internal/site"
 	"github.com/voidmind-io/voidllm/pkg/keygen"
@@ -130,6 +132,10 @@ func (h *Handler) Register(c fiber.Ctx) error {
 	}
 	if h.Wallet != nil {
 		h.Wallet.Register(user.ID)
+	}
+	if err := h.creditSignupWallet(ctx, user.ID); err != nil {
+		h.Log.ErrorContext(ctx, "register: initial wallet credit", slog.String("error", err.Error()))
+		return apierror.InternalError(c, "signup failed")
 	}
 
 	// Open a 24h session so the UI can log the customer in immediately.
@@ -323,9 +329,34 @@ func modelToCatalogItem(m db.Model) catalogModelItem {
 	}
 }
 
+// creditSignupWallet applies the configured initial balance to a new user wallet.
+func (h *Handler) creditSignupWallet(ctx context.Context, userID string) error {
+	initial := h.currentFeaturesFromCtx(ctx).Wallet.InitialBalanceVND
+	if initial <= 0 || h.Wallet == nil {
+		return nil
+	}
+	_, err := h.Wallet.Credit(ctx, userID, initial, "signup_bonus", "", "Initial wallet credit")
+	return err
+}
+
+func (h *Handler) currentFeaturesFromCtx(ctx context.Context) features.Config {
+	if h.FeaturesRuntime != nil {
+		return h.FeaturesRuntime.Get()
+	}
+	cfg, err := features.Load(ctx, h.DB)
+	if err != nil {
+		h.Log.ErrorContext(ctx, "features: load", slog.String("error", err.Error()))
+		return features.DefaultConfig()
+	}
+	return cfg
+}
+
 // PublicCatalog handles GET /api/v1/public/catalog — the unauthenticated model
 // price catalog. Returns active models with at least one configured sell price.
 func (h *Handler) PublicCatalog(c fiber.Ctx) error {
+	if !h.currentFeatures(c).Modules.PublicCatalog {
+		return apierror.NotFound(c, "feature_disabled")
+	}
 	models, err := h.DB.ListCatalogModels(c.Context())
 	if err != nil {
 		h.Log.ErrorContext(c.Context(), "public catalog", slog.String("error", err.Error()))

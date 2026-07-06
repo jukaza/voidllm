@@ -19,10 +19,6 @@ export interface SecurityConfig {
     google: OAuthProviderConfig
     github: OAuthProviderConfig
   }
-  two_fa: {
-    allow_user_enable: boolean
-    require_system_admin: boolean
-  }
   session: {
     ttl_hours: number
     allow_multiple: boolean
@@ -47,10 +43,6 @@ export type SecurityConfigUpdate = Partial<{
   oauth: Partial<{
     google: Partial<OAuthProviderConfig & { client_secret?: string }>
     github: Partial<OAuthProviderConfig & { client_secret?: string }>
-  }>
-  two_fa: Partial<{
-    allow_user_enable: boolean
-    require_system_admin: boolean
   }>
   session: Partial<{
     ttl_hours: number
@@ -95,7 +87,6 @@ export interface PublicAuthConfig {
     google: { enabled: boolean; login: boolean; signup: boolean }
     github: { enabled: boolean; login: boolean; signup: boolean }
   }
-  two_fa?: { available: boolean }
 }
 
 const AUTH_CONFIG_KEY = ['public-auth-config'] as const

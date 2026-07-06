@@ -59,8 +59,6 @@ type meResponse struct {
 	IsSystemAdmin      bool   `json:"is_system_admin"`
 	HasPassword        bool   `json:"has_password"`
 	AuthProvider       string `json:"auth_provider"`
-	TwoFAEnabled       bool   `json:"two_fa_enabled"`
-	TwoFAAvailable     bool   `json:"two_fa_available"`
 	ActiveSessionCount int    `json:"active_session_count"`
 }
 
@@ -147,20 +145,6 @@ func (h *Handler) Login(c fiber.Ctx) error {
 
 	if h.LoginThrottle != nil {
 		h.LoginThrottle.RecordSuccess(req.Email)
-	}
-
-	enabled, err := h.DB.UserHasTOTPEnabled(ctx, userID)
-	if err != nil && !errors.Is(err, db.ErrNotFound) {
-		h.Log.ErrorContext(ctx, "login: totp check", slog.String("error", err.Error()))
-		return apierror.InternalError(c, "authentication failed")
-	}
-	if enabled {
-		challenge, err := h.createLogin2FAChallenge(c, userID)
-		if err != nil {
-			h.Log.ErrorContext(ctx, "login: 2fa challenge", slog.String("error", err.Error()))
-			return apierror.InternalError(c, "authentication failed")
-		}
-		return c.Status(fiber.StatusOK).JSON(challenge)
 	}
 
 	sess, err := h.issueUserSession(c, userID, "login")

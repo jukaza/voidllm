@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { NavLink, Link } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
+import { usePublicFeatures } from '../../hooks/useFeaturesSettings'
 import { useMe } from '../../hooks/useMe'
 import { useMyWallet } from '../../hooks/useWallet'
 import { cn, formatCost } from '../../lib/utils'
@@ -217,10 +218,13 @@ function LockIcon() {
 export function Sidebar() {
   const { data } = useMe()
   const { data: wallet } = useMyWallet()
+  const { data: features } = usePublicFeatures()
   const queryClient = useQueryClient()
   const { language, setLanguage, t } = useTranslation()
 
   const userRole = data?.role ?? 'member'
+  const playgroundEnabled = features?.modules.playground !== false
+  const catalogEnabled = features?.modules.public_catalog !== false
 
   const visibleGroups = useMemo(() => {
     const navigation = buildNavigation(t)
@@ -228,11 +232,16 @@ export function Sidebar() {
       .filter(group => hasMinRole(userRole, group.minRole))
       .map(group => ({
         ...group,
-        items: group.items.filter(item => hasMinRole(userRole, item.minRole)),
+        items: group.items.filter(item => {
+          if (!hasMinRole(userRole, item.minRole)) return false
+          if (item.path === '/playground' && !playgroundEnabled) return false
+          if (item.path === '/catalog' && !catalogEnabled) return false
+          return true
+        }),
       }))
       .filter(group => group.items.length > 0)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userRole, t])
+  }, [userRole, t, playgroundEnabled, catalogEnabled])
 
   return (
     <aside
