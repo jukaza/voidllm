@@ -28,6 +28,7 @@ import (
 	apihealth "github.com/voidmind-io/voidllm/internal/api/health"
 	"github.com/voidmind-io/voidllm/internal/audit"
 	"github.com/voidmind-io/voidllm/internal/auth"
+	"github.com/voidmind-io/voidllm/internal/backup"
 	"github.com/voidmind-io/voidllm/internal/cache"
 	"github.com/voidmind-io/voidllm/internal/circuitbreaker"
 	"github.com/voidmind-io/voidllm/internal/config"
@@ -77,6 +78,7 @@ type Application struct {
 	usageLogger      *usage.Logger
 	auditLogger      *audit.Logger
 	retentionCleaner *retention.Cleaner
+	backupService    *backup.Service
 	healthChecker    *health.Checker
 
 	shutdownState *shutdown.State
@@ -748,6 +750,19 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 	adminHandler.ReloadModels = func(reloadCtx context.Context) error {
 		return loadModelsIntoRegistry(reloadCtx)
 	}
+	backupService := backup.NewService(database, cfg.Database, encKey, log, func(reloadCtx context.Context) error {
+		if err := loadModelsIntoRegistry(reloadCtx); err != nil {
+			return err
+		}
+		if aliasCache != nil {
+			aliases, aliasErr := database.LoadAllModelAliases(reloadCtx)
+			if aliasErr == nil {
+				aliasCache.Load(aliases)
+			}
+		}
+		return nil
+	})
+	adminHandler.Backup = backupService
 	// Only assign the health checker when it was actually created — a typed nil
 	// (*health.Checker)(nil) satisfies the interface but is NOT == nil when
 	// checked as ModelHealthProvider, causing nil-pointer panics.
@@ -776,6 +791,7 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 		usageLogger:      usageLogger,
 		auditLogger:      auditLogger,
 		retentionCleaner: retentionCleaner,
+		backupService:    backupService,
 		healthChecker:    healthChecker,
 		shutdownState:    shutdownState,
 		proxyHandler:     proxyHandler,
@@ -823,6 +839,10 @@ func (a *Application) Start() error {
 	// Register retention cleaner stop so it is halted during graceful shutdown.
 	// LIFO ordering ensures retention stops before the usage and audit loggers.
 	a.stopFuncs = append(a.stopFuncs, a.retentionCleaner.Stop)
+	if a.backupService != nil {
+		a.backupService.Start()
+		a.stopFuncs = append(a.stopFuncs, a.backupService.Stop)
+	}
 
 	// The in-memory rate limiter accumulates counter entries that must be
 	// periodically evicted to reclaim memory. The Redis-backed checker uses

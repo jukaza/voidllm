@@ -31,4 +31,4 @@ export const SETTINGS_TAB_I18N: Record<SettingsTabKey, TranslationKey> = {
 }
 
 /** Tabs whose primary save path is local draft (no dedicated admin API yet). */
-export const PREVIEW_TAB_KEYS = new Set<SettingsTabKey>(['backup'])
+export const PREVIEW_TAB_KEYS = new Set<SettingsTabKey>()

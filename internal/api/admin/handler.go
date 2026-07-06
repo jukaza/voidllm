@@ -12,6 +12,7 @@ import (
 	"github.com/voidmind-io/voidllm/internal/apierror"
 	"github.com/voidmind-io/voidllm/internal/audit"
 	"github.com/voidmind-io/voidllm/internal/auth"
+	"github.com/voidmind-io/voidllm/internal/backup"
 	"github.com/voidmind-io/voidllm/internal/cache"
 	"github.com/voidmind-io/voidllm/internal/db"
 	"github.com/voidmind-io/voidllm/internal/health"
@@ -78,6 +79,8 @@ type Handler struct {
 	FeaturesRuntime *features.Runtime
 	// ApplyFeatures applies runtime feature changes (e.g. wallet enforcement).
 	ApplyFeatures func(context.Context, features.Config) error
+	// Backup manages cloud backups and restores. Nil disables backup API.
+	Backup *backup.Service
 }
 
 // swaggerErrorResponse is the standard API error envelope used in OpenAPI docs.

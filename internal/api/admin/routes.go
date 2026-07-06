@@ -170,4 +170,20 @@ func RegisterRoutes(app *fiber.App, handler *Handler, keyCache *cache.Cache[stri
 	api.Get("/admin/settings/features", auth.RequireRole(auth.RoleSystemAdmin), handler.GetAdminFeaturesSettings)
 	api.Put("/admin/settings/features", auth.RequireRole(auth.RoleSystemAdmin), handler.UpdateAdminFeaturesSettings)
 
+	api.Get("/admin/settings/export", auth.RequireRole(auth.RoleSystemAdmin), handler.ExportAdminSettings)
+	api.Post("/admin/settings/import/preview", auth.RequireRole(auth.RoleSystemAdmin), handler.PreviewAdminSettingsImport)
+	api.Post("/admin/settings/import", auth.RequireRole(auth.RoleSystemAdmin), handler.ImportAdminSettings)
+
+	api.Get("/admin/backups/s3-config", auth.RequireRole(auth.RoleSystemAdmin), handler.GetBackupS3Config)
+	api.Put("/admin/backups/s3-config", auth.RequireRole(auth.RoleSystemAdmin), handler.UpdateBackupS3Config)
+	api.Post("/admin/backups/s3-config/test", auth.RequireRole(auth.RoleSystemAdmin), handler.TestBackupS3Config)
+	api.Get("/admin/backups/schedule", auth.RequireRole(auth.RoleSystemAdmin), handler.GetBackupSchedule)
+	api.Put("/admin/backups/schedule", auth.RequireRole(auth.RoleSystemAdmin), handler.UpdateBackupSchedule)
+	api.Post("/admin/backups", auth.RequireRole(auth.RoleSystemAdmin), handler.CreateBackup)
+	api.Get("/admin/backups", auth.RequireRole(auth.RoleSystemAdmin), handler.ListBackups)
+	api.Get("/admin/backups/:id", auth.RequireRole(auth.RoleSystemAdmin), handler.GetBackup)
+	api.Delete("/admin/backups/:id", auth.RequireRole(auth.RoleSystemAdmin), handler.DeleteBackup)
+	api.Get("/admin/backups/:id/download-url", auth.RequireRole(auth.RoleSystemAdmin), handler.GetBackupDownloadURL)
+	api.Post("/admin/backups/:id/restore", auth.RequireRole(auth.RoleSystemAdmin), handler.RestoreBackup)
+
 }
