@@ -55,6 +55,8 @@ export interface ModelResponse {
   route_count?: number
   bill_min_per_request?: boolean
   sell_min_per_request?: number | null
+  supports_tools?: boolean
+  supports_vision?: boolean
   rpm_limit?: number
 }
 
@@ -100,6 +102,8 @@ export interface CreateModelParams {
   routing_strategy?: string
   sticky_round_robin_limit?: number
   is_public?: boolean
+  supports_tools?: boolean
+  supports_vision?: boolean
   rpm_limit?: number
 }
 
@@ -157,6 +161,8 @@ export interface UpdateModelParams {
   routing_strategy?: string
   sticky_round_robin_limit?: number
   is_public?: boolean
+  supports_tools?: boolean
+  supports_vision?: boolean
   rpm_limit?: number
 }
 

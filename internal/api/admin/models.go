@@ -77,6 +77,8 @@ type createModelRequest struct {
 	SellPerRequest      *float64 `json:"sell_per_request"`
 	BillMinPerRequest   *bool    `json:"bill_min_per_request"`
 	SellMinPerRequest   *float64 `json:"sell_min_per_request"`
+	SupportsTools       bool     `json:"supports_tools,omitempty"`
+	SupportsVision      bool     `json:"supports_vision,omitempty"`
 	RPMLimit            *int     `json:"rpm_limit,omitempty"`
 }
 
@@ -132,6 +134,8 @@ type updateModelRequest struct {
 	SellPerRequest      *float64 `json:"sell_per_request"`
 	BillMinPerRequest   *bool    `json:"bill_min_per_request"`
 	SellMinPerRequest   *float64 `json:"sell_min_per_request"`
+	SupportsTools       *bool    `json:"supports_tools"`
+	SupportsVision      *bool    `json:"supports_vision"`
 	RoutingStrategy       *string `json:"routing_strategy"`
 	StickyRoundRobinLimit *int    `json:"sticky_round_robin_limit"`
 	RPMLimit              *int    `json:"rpm_limit"`
@@ -245,6 +249,8 @@ type modelResponse struct {
 	SellPerRequest      *float64 `json:"sell_per_request,omitempty"`
 	BillMinPerRequest   bool     `json:"bill_min_per_request"`
 	SellMinPerRequest   *float64 `json:"sell_min_per_request,omitempty"`
+	SupportsTools       bool     `json:"supports_tools"`
+	SupportsVision      bool     `json:"supports_vision"`
 	// Deployments contains the model's deployment entries when present.
 	Deployments []deploymentResponse `json:"deployments,omitempty"`
 	// RouteCount is the number of enabled combo route steps (API products only).
@@ -328,6 +334,8 @@ func modelToResponse(m *db.Model, fallbackName string) modelResponse {
 		SellPerRequest:       m.SellPerRequest,
 		BillMinPerRequest:    m.BillMinPerRequest,
 		SellMinPerRequest:    m.SellMinPerRequest,
+		SupportsTools:        m.SupportsTools,
+		SupportsVision:       m.SupportsVision,
 		RoutingStrategy:      m.RoutingStrategy,
 		StickyRoundRobinLimit: m.StickyRoundRobinLimit,
 		RPMLimit:             m.RPMLimit,
@@ -722,6 +730,8 @@ func (h *Handler) CreateModel(c fiber.Ctx) error {
 		SellPerRequest:       req.SellPerRequest,
 		BillMinPerRequest:    billMinPerRequest,
 		SellMinPerRequest:    req.SellMinPerRequest,
+		SupportsTools:        req.SupportsTools,
+		SupportsVision:       req.SupportsVision,
 	})
 	if err != nil {
 		if errors.Is(err, db.ErrConflict) {
@@ -1086,6 +1096,8 @@ func (h *Handler) UpdateModel(c fiber.Ctx) error {
 		SellPerRequest:       req.SellPerRequest,
 		BillMinPerRequest:    req.BillMinPerRequest,
 		SellMinPerRequest:    req.SellMinPerRequest,
+		SupportsTools:        req.SupportsTools,
+		SupportsVision:       req.SupportsVision,
 		RoutingStrategy:      req.RoutingStrategy,
 		StickyRoundRobinLimit: req.StickyRoundRobinLimit,
 		RPMLimit:             req.RPMLimit,

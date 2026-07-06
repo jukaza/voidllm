@@ -16,7 +16,7 @@ const dashboardLinkClass =
 export default function LandingPage() {
   const { data: features } = usePublicFeatures()
   const catalogEnabled = features?.modules.public_catalog !== false
-  const { data, isLoading } = usePublicCatalog()
+  const { data, isLoading } = usePublicCatalog('landing')
   const { data: site } = useSiteConfig()
   const { t } = useTranslation()
   const models = catalogEnabled ? (data?.data ?? []) : []

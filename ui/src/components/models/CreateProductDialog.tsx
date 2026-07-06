@@ -54,6 +54,9 @@ export function CreateProductDialog({ open, onClose }: CreateProductDialogProps)
   const [sellPerRequest, setSellPerRequest] = useState('')
   const [sellMinPerRequest, setSellMinPerRequest] = useState('')
   const [isPublic, setIsPublic] = useState(false)
+  const [maxContextTokens, setMaxContextTokens] = useState('')
+  const [supportsTools, setSupportsTools] = useState(false)
+  const [supportsVision, setSupportsVision] = useState(false)
   const [aliases, setAliases] = useState('')
   const [strategy, setStrategy] = useState('fallback')
   const [stickyLimit, setStickyLimit] = useState('')
@@ -91,6 +94,9 @@ export function CreateProductDialog({ open, onClose }: CreateProductDialogProps)
     setSellPerRequest('')
     setSellMinPerRequest('')
     setIsPublic(false)
+    setMaxContextTokens('')
+    setSupportsTools(false)
+    setSupportsVision(false)
     setAliases('')
     setStrategy('fallback')
     setStickyLimit('')
@@ -167,6 +173,17 @@ export function CreateProductDialog({ open, onClose }: CreateProductDialogProps)
     if (logo.trim()) {
       params.logo = logo.trim()
     }
+
+    const ctxParsed = maxContextTokens.trim() === '' ? 0 : Number.parseInt(maxContextTokens, 10)
+    if (maxContextTokens.trim() !== '' && (Number.isNaN(ctxParsed) || ctxParsed < 0)) {
+      toast({ variant: 'error', message: t('common.invalid_number') })
+      return
+    }
+    if (ctxParsed > 0) {
+      params.max_context_tokens = ctxParsed
+    }
+    if (supportsTools) params.supports_tools = true
+    if (supportsVision) params.supports_vision = true
 
     if (hasAnySellPrice) {
       params.bill_per_token = billingMode === 'token'
@@ -351,6 +368,30 @@ export function CreateProductDialog({ open, onClose }: CreateProductDialogProps)
                 sellPerRequest={sellPerRequest}
                 onSellPerRequestChange={setSellPerRequest}
                 disabled={isPending}
+              />
+              <Input
+                label={t('models.max_context_tokens')}
+                type="number"
+                min={0}
+                value={maxContextTokens}
+                onChange={(e) => setMaxContextTokens(e.target.value)}
+                placeholder="128000"
+                description={t('models.max_context_hint')}
+                disabled={isPending}
+              />
+              <Toggle
+                checked={supportsTools}
+                onChange={setSupportsTools}
+                label={t('models.supports_tools')}
+                disabled={isPending}
+                size="sm"
+              />
+              <Toggle
+                checked={supportsVision}
+                onChange={setSupportsVision}
+                label={t('models.supports_vision')}
+                disabled={isPending}
+                size="sm"
               />
               <Toggle checked={isPublic} onChange={setIsPublic} label={t('models.public_storefront')} disabled={isPending} size="sm" />
               <Input

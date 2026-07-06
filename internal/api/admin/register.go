@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -294,38 +295,79 @@ func (h *Handler) MyTopups(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": items, "has_more": hasMore, "cursor": cursor})
 }
 
-// catalogModelItem is one row of the public model catalog (sell prices only).
-type catalogModelItem struct {
-	Name                 string   `json:"name"`
-	Type                 string   `json:"type"`
-	Logo                 string   `json:"logo,omitempty"`
-	MaxContextTokens     int      `json:"max_context_tokens,omitempty"`
-	BillPerToken         bool     `json:"bill_per_token"`
-	BillPerRequest       bool     `json:"bill_per_request"`
-	SellInputPer1M       *float64 `json:"sell_input_per_1m,omitempty"`
-	SellOutputPer1M      *float64 `json:"sell_output_per_1m,omitempty"`
-	SellCachedInputPer1M *float64 `json:"sell_cached_input_per_1m,omitempty"`
-	SellCacheWritePer1M  *float64 `json:"sell_cache_write_per_1m,omitempty"`
-	SellPerRequest       *float64 `json:"sell_per_request,omitempty"`
+const catalogStatsWindowDays = 7
+
+// catalogModelStats holds aggregated usage metrics for a catalog card.
+type catalogModelStats struct {
+	WindowDays   int     `json:"window_days,omitempty"`
+	RequestCount int64   `json:"request_count,omitempty"`
+	SuccessRate  float64 `json:"success_rate,omitempty"`
+	AvgLatencyMs float64 `json:"avg_latency_ms,omitempty"`
+	AvgTps       float64 `json:"avg_tps,omitempty"`
 }
 
-func modelToCatalogItem(m db.Model) catalogModelItem {
+// catalogModelItem is one row of the public model catalog (sell prices only).
+type catalogModelItem struct {
+	Name                 string             `json:"name"`
+	Type                 string             `json:"type"`
+	Logo                 string             `json:"logo,omitempty"`
+	MaxContextTokens     int                `json:"max_context_tokens,omitempty"`
+	BillPerToken         bool               `json:"bill_per_token"`
+	BillPerRequest       bool               `json:"bill_per_request"`
+	BillMinPerRequest    bool               `json:"bill_min_per_request"`
+	SupportsTools        bool               `json:"supports_tools"`
+	SupportsVision       bool               `json:"supports_vision"`
+	SellInputPer1M       *float64           `json:"sell_input_per_1m,omitempty"`
+	SellOutputPer1M      *float64           `json:"sell_output_per_1m,omitempty"`
+	SellCachedInputPer1M *float64           `json:"sell_cached_input_per_1m,omitempty"`
+	SellCacheWritePer1M  *float64           `json:"sell_cache_write_per_1m,omitempty"`
+	SellPerRequest       *float64           `json:"sell_per_request,omitempty"`
+	SellMinPerRequest    *float64           `json:"sell_min_per_request,omitempty"`
+	Stats                *catalogModelStats `json:"stats,omitempty"`
+}
+
+func modelToCatalogItem(m db.Model, stats *db.CatalogModelStats) catalogModelItem {
 	modelType := m.ModelType
 	if modelType == "" {
 		modelType = "chat"
 	}
-	return catalogModelItem{
+	item := catalogModelItem{
 		Name:                 m.Name,
 		Type:                 modelType,
 		Logo:                 m.Logo,
 		MaxContextTokens:     m.MaxContextTokens,
 		BillPerToken:         m.BillPerToken,
 		BillPerRequest:       m.BillPerRequest,
+		BillMinPerRequest:    m.BillMinPerRequest,
+		SupportsTools:        m.SupportsTools,
+		SupportsVision:       m.SupportsVision,
 		SellInputPer1M:       m.SellInputPer1M,
 		SellOutputPer1M:      m.SellOutputPer1M,
 		SellCachedInputPer1M: m.SellCachedInputPer1M,
 		SellCacheWritePer1M:  m.SellCacheWritePer1M,
 		SellPerRequest:       m.SellPerRequest,
+		SellMinPerRequest:    m.SellMinPerRequest,
+	}
+	if stats != nil && stats.RequestCount > 0 {
+		item.Stats = &catalogModelStats{
+			WindowDays:   catalogStatsWindowDays,
+			RequestCount: stats.RequestCount,
+			SuccessRate:  stats.SuccessRate,
+			AvgLatencyMs: stats.AvgLatencyMs,
+			AvgTps:       stats.AvgTps,
+		}
+	}
+	return item
+}
+
+func catalogListOptsFromScope(scope string) (db.CatalogListOpts, error) {
+	switch scope {
+	case "", "member":
+		return db.CatalogListOpts{}, nil
+	case "landing":
+		return db.CatalogListOpts{PublicOnly: true}, nil
+	default:
+		return db.CatalogListOpts{}, fmt.Errorf("invalid scope %q", scope)
 	}
 }
 
@@ -353,19 +395,41 @@ func (h *Handler) currentFeaturesFromCtx(ctx context.Context) features.Config {
 
 // PublicCatalog handles GET /api/v1/public/catalog — the unauthenticated model
 // price catalog. Returns active models with at least one configured sell price.
+// Query scope: "landing" (is_public only) or "member" (default, all priced models).
 func (h *Handler) PublicCatalog(c fiber.Ctx) error {
 	if !h.currentFeatures(c).Modules.PublicCatalog {
 		return apierror.NotFound(c, "feature_disabled")
 	}
-	models, err := h.DB.ListCatalogModels(c.Context())
+	opts, err := catalogListOptsFromScope(c.Query("scope"))
 	if err != nil {
-		h.Log.ErrorContext(c.Context(), "public catalog", slog.String("error", err.Error()))
+		return apierror.BadRequest(c, err.Error())
+	}
+
+	ctx := c.Context()
+	models, err := h.DB.ListCatalogModels(ctx, opts)
+	if err != nil {
+		h.Log.ErrorContext(ctx, "public catalog", slog.String("error", err.Error()))
 		return apierror.InternalError(c, "failed to load catalog")
+	}
+
+	since := time.Now().UTC().AddDate(0, 0, -catalogStatsWindowDays)
+	modelNames := make([]string, len(models))
+	for i, m := range models {
+		modelNames[i] = m.Name
+	}
+	statsByModel, err := h.DB.GetCatalogModelStats(ctx, since, modelNames)
+	if err != nil {
+		h.Log.WarnContext(ctx, "public catalog stats unavailable", slog.String("error", err.Error()))
+		statsByModel = nil
 	}
 
 	items := make([]catalogModelItem, len(models))
 	for i, m := range models {
-		items[i] = modelToCatalogItem(m)
+		var stats *db.CatalogModelStats
+		if s, ok := statsByModel[m.Name]; ok {
+			stats = &s
+		}
+		items[i] = modelToCatalogItem(m, stats)
 	}
 	return c.JSON(fiber.Map{"data": items})
 }

@@ -26,7 +26,7 @@ const modelSelectColumns = "id, name, provider, model_type, base_url, api_key_en
 	"strategy, max_retries, fallback_model_id, pii_filter, " +
 	"is_public, sell_input_per_1m, sell_output_per_1m, sell_cached_input_per_1m, sell_cache_write_per_1m, logo, " +
 	"bill_per_token, bill_per_request, sell_per_request, bill_min_per_request, sell_min_per_request, " +
-	"routing_strategy, sticky_round_robin_limit, rpm_limit"
+	"routing_strategy, sticky_round_robin_limit, rpm_limit, supports_tools, supports_vision"
 
 // Model represents a model record in the database.
 // This is the storage layer representation; see proxy.Model for the in-memory registry type.
@@ -105,6 +105,10 @@ type Model struct {
 	StickyRoundRobinLimit int
 	// RPMLimit caps customer requests per minute for this product (0 = unlimited).
 	RPMLimit int
+	// SupportsTools marks the model as supporting tool/function calling in the catalog.
+	SupportsTools bool
+	// SupportsVision marks the model as supporting image/multimodal input in the catalog.
+	SupportsVision bool
 }
 
 // CreateModelParams holds the input for creating a model.
@@ -165,6 +169,10 @@ type CreateModelParams struct {
 	BillMinPerRequest bool
 	// SellMinPerRequest is the minimum VND per request (token billing only).
 	SellMinPerRequest *float64
+	// SupportsTools marks tool/function calling support for the catalog.
+	SupportsTools bool
+	// SupportsVision marks vision/multimodal support for the catalog.
+	SupportsVision bool
 }
 
 // UpdateModelParams holds optional fields for updating a model.
@@ -237,6 +245,10 @@ type UpdateModelParams struct {
 	StickyRoundRobinLimit *int
 	// RPMLimit replaces the product RPM cap (0 = unlimited).
 	RPMLimit *int
+	// SupportsTools, when non-nil, replaces the catalog tool-calling flag.
+	SupportsTools *bool
+	// SupportsVision, when non-nil, replaces the catalog vision flag.
+	SupportsVision *bool
 }
 
 // CreateModel inserts a new model and returns the persisted record.
@@ -279,6 +291,7 @@ func (d *DB) CreateModel(ctx context.Context, params CreateModelParams) (*Model,
 		"is_active, source, created_by, aliases, timeout, strategy, max_retries, " +
 		"fallback_model_id, pii_filter, is_public, sell_input_per_1m, sell_output_per_1m, sell_cached_input_per_1m, sell_cache_write_per_1m, logo, " +
 		"bill_per_token, bill_per_request, sell_per_request, bill_min_per_request, sell_min_per_request, " +
+		"supports_tools, supports_vision, " +
 		"created_at, updated_at) " +
 		"VALUES (" +
 		p(1) + ", " + p(2) + ", " + p(3) + ", " + p(4) + ", " + p(5) + ", " + p(6) + ", " +
@@ -287,6 +300,7 @@ func (d *DB) CreateModel(ctx context.Context, params CreateModelParams) (*Model,
 		"1, " + p(14) + ", " + p(15) + ", " + p(16) + ", " + p(17) + ", " + p(18) + ", " + p(19) + ", " +
 		p(20) + ", " + p(21) + ", " + p(22) + ", " + p(23) + ", " + p(24) + ", " + p(25) + ", " + p(26) + ", " + p(27) + ", " +
 		p(28) + ", " + p(29) + ", " + p(30) + ", " + p(31) + ", " + p(32) + ", " +
+		p(33) + ", " + p(34) + ", " +
 		"CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
 
 	selectQuery := "SELECT " + modelSelectColumns +
@@ -334,6 +348,8 @@ func (d *DB) CreateModel(ctx context.Context, params CreateModelParams) (*Model,
 			params.SellPerRequest,
 			boolToInt(billMinPerRequest),
 			params.SellMinPerRequest,
+			boolToInt(params.SupportsTools),
+			boolToInt(params.SupportsVision),
 		)
 		if execErr != nil {
 			return translateError(execErr)
@@ -603,6 +619,16 @@ func (d *DB) UpdateModel(ctx context.Context, id string, params UpdateModelParam
 		args = append(args, *params.RPMLimit)
 		argN++
 	}
+	if params.SupportsTools != nil {
+		setClauses = append(setClauses, "supports_tools = "+p(argN))
+		args = append(args, boolToInt(*params.SupportsTools))
+		argN++
+	}
+	if params.SupportsVision != nil {
+		setClauses = append(setClauses, "supports_vision = "+p(argN))
+		args = append(args, boolToInt(*params.SupportsVision))
+		argN++
+	}
 
 	if len(setClauses) == 0 {
 		return d.GetModel(ctx, id)
@@ -829,6 +855,8 @@ func scanModel(scanner interface{ Scan(...any) error }) (*Model, error) {
 	var billPerTokenInt int
 	var billPerRequestInt int
 	var billMinPerRequestInt int
+	var supportsToolsInt int
+	var supportsVisionInt int
 	err := scanner.Scan(
 		&m.ID, &m.Name, &m.Provider, &m.ModelType, &m.BaseURL, &m.APIKeyEncrypted,
 		&m.MaxContextTokens, &m.InputPricePer1M, &m.OutputPricePer1M,
@@ -841,6 +869,7 @@ func scanModel(scanner interface{ Scan(...any) error }) (*Model, error) {
 		&billPerTokenInt, &billPerRequestInt, &m.SellPerRequest,
 		&billMinPerRequestInt, &m.SellMinPerRequest,
 		&m.RoutingStrategy, &m.StickyRoundRobinLimit, &m.RPMLimit,
+		&supportsToolsInt, &supportsVisionInt,
 	)
 	if err != nil {
 		return nil, err
@@ -851,6 +880,8 @@ func scanModel(scanner interface{ Scan(...any) error }) (*Model, error) {
 	m.BillPerToken = billPerTokenInt == 1
 	m.BillPerRequest = billPerRequestInt == 1
 	m.BillMinPerRequest = billMinPerRequestInt == 1
+	m.SupportsTools = supportsToolsInt == 1
+	m.SupportsVision = supportsVisionInt == 1
 	return &m, nil
 }
 
@@ -1169,11 +1200,21 @@ const catalogWhereClause = "is_active = 1 AND deleted_at IS NULL AND (" +
 	"(bill_per_token = 1 AND (sell_input_per_1m > 0 OR sell_output_per_1m > 0 OR sell_cached_input_per_1m > 0 OR sell_cache_write_per_1m > 0)) " +
 	"OR (bill_per_request = 1 AND sell_per_request > 0))"
 
+// CatalogListOpts optionally scopes the public price catalog query.
+type CatalogListOpts struct {
+	// PublicOnly restricts results to models flagged is_public (landing scope).
+	PublicOnly bool
+}
+
 // ListCatalogModels returns active models with at least one configured sell
 // price, ordered by name. Used by the unauthenticated catalog API.
-func (d *DB) ListCatalogModels(ctx context.Context) ([]Model, error) {
+func (d *DB) ListCatalogModels(ctx context.Context, opts CatalogListOpts) ([]Model, error) {
+	where := catalogWhereClause
+	if opts.PublicOnly {
+		where += " AND is_public = 1"
+	}
 	query := "SELECT " + modelSelectColumns +
-		" FROM models WHERE " + catalogWhereClause + " ORDER BY name ASC"
+		" FROM models WHERE " + where + " ORDER BY name ASC"
 
 	rows, err := d.sql.QueryContext(ctx, query)
 	if err != nil {

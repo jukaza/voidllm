@@ -212,6 +212,14 @@ export function useImportProvider() {
 // Public storefront price list (no auth)
 // ---------------------------------------------------------------------------
 
+export interface CatalogModelStats {
+  window_days?: number
+  request_count?: number
+  success_rate?: number
+  avg_latency_ms?: number
+  avg_tps?: number
+}
+
 export interface CatalogModelItem {
   name: string
   type: string
@@ -219,20 +227,28 @@ export interface CatalogModelItem {
   max_context_tokens?: number
   bill_per_token: boolean
   bill_per_request: boolean
+  bill_min_per_request?: boolean
+  supports_tools?: boolean
+  supports_vision?: boolean
   sell_input_per_1m?: number | null
   sell_output_per_1m?: number | null
   sell_cached_input_per_1m?: number | null
   sell_per_request?: number | null
+  sell_min_per_request?: number | null
+  stats?: CatalogModelStats | null
 }
+
+export type CatalogScope = 'landing' | 'member'
 
 /** @deprecated Use CatalogModelItem */
 export type PublicModelItem = CatalogModelItem
 
-export function usePublicCatalog() {
+export function usePublicCatalog(scope: CatalogScope = 'member') {
+  const queryScope = scope === 'landing' ? 'landing' : 'member'
   return useQuery({
-    queryKey: ['public-catalog'],
+    queryKey: ['public-catalog', queryScope],
     queryFn: async () => {
-      const res = await fetch('/api/v1/public/catalog')
+      const res = await fetch(`/api/v1/public/catalog?scope=${queryScope}`)
       if (res.status === 404) {
         return { data: [] as CatalogModelItem[] }
       }
@@ -241,6 +257,11 @@ export function usePublicCatalog() {
     },
     staleTime: 60_000,
   })
+}
+
+/** Full member catalog (all priced active models). */
+export function useMemberCatalog() {
+  return usePublicCatalog('member')
 }
 
 /** @deprecated Use usePublicCatalog */

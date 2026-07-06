@@ -57,6 +57,11 @@ export function EditProductDialog({ model, onClose }: EditProductDialogProps) {
     model.sell_min_per_request != null ? String(model.sell_min_per_request) : '',
   )
   const [logo, setLogo] = useState(model.logo ?? '')
+  const [maxContextTokens, setMaxContextTokens] = useState(
+    model.max_context_tokens > 0 ? String(model.max_context_tokens) : '',
+  )
+  const [supportsTools, setSupportsTools] = useState(model.supports_tools === true)
+  const [supportsVision, setSupportsVision] = useState(model.supports_vision === true)
   const [isPublic, setIsPublic] = useState(model.is_public === true)
   const [timeout, setTimeout] = useState(model.timeout ?? '')
   const [rpmLimit, setRpmLimit] = useState(
@@ -99,6 +104,17 @@ export function EditProductDialog({ model, onClose }: EditProductDialogProps) {
       params.bill_min_per_request = false
     }
     if (isPublic !== (model.is_public === true)) params.is_public = isPublic
+    if (supportsTools !== (model.supports_tools === true)) params.supports_tools = supportsTools
+    if (supportsVision !== (model.supports_vision === true)) params.supports_vision = supportsVision
+
+    const ctxParsed = maxContextTokens.trim() === '' ? 0 : Number.parseInt(maxContextTokens, 10)
+    if (maxContextTokens.trim() !== '' && (Number.isNaN(ctxParsed) || ctxParsed < 0)) {
+      toast({ variant: 'error', message: t('common.invalid_number') })
+      return
+    }
+    if (ctxParsed !== model.max_context_tokens) {
+      params.max_context_tokens = ctxParsed
+    }
 
     if (sellInputPer1m.trim()) {
       const parsed = parseFloat(sellInputPer1m)
@@ -189,6 +205,16 @@ export function EditProductDialog({ model, onClose }: EditProductDialogProps) {
           disabled={isPending || isYaml}
         />
         <Input
+          label={t('models.max_context_tokens')}
+          type="number"
+          min={0}
+          value={maxContextTokens}
+          onChange={(e) => setMaxContextTokens(e.target.value)}
+          placeholder="128000"
+          description={t('models.max_context_hint')}
+          disabled={isPending || isYaml}
+        />
+        <Input
           label={t('models.col_aliases')}
           value={aliases}
           onChange={(e) => setAliases(e.target.value)}
@@ -245,6 +271,27 @@ export function EditProductDialog({ model, onClose }: EditProductDialogProps) {
             sellPerRequest={sellPerRequest}
             onSellPerRequestChange={setSellPerRequest}
             disabled={isPending || isYaml}
+          />
+        </div>
+
+        <div className="rounded-lg border border-border/60 bg-bg-secondary/30 p-4 space-y-3">
+          <div>
+            <p className="text-sm font-medium text-text-primary">{t('models.capabilities_section')}</p>
+            <p className="text-xs text-text-tertiary mt-0.5">{t('models.capabilities_desc')}</p>
+          </div>
+          <Toggle
+            checked={supportsTools}
+            onChange={setSupportsTools}
+            label={t('models.supports_tools')}
+            disabled={isPending || isYaml}
+            size="sm"
+          />
+          <Toggle
+            checked={supportsVision}
+            onChange={setSupportsVision}
+            label={t('models.supports_vision')}
+            disabled={isPending || isYaml}
+            size="sm"
           />
         </div>
 
