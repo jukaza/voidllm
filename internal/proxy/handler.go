@@ -30,6 +30,7 @@ import (
 	"github.com/jukaza/tavo/internal/pii"
 	"github.com/jukaza/tavo/internal/ratelimit"
 	"github.com/jukaza/tavo/internal/shutdown"
+	"github.com/jukaza/tavo/internal/tokens"
 	"github.com/jukaza/tavo/internal/upstream"
 	"github.com/jukaza/tavo/internal/usage"
 )
@@ -93,6 +94,9 @@ type ProxyHandler struct {
 	PIIEngine *pii.Engine
 	// UpstreamStore selects provider connections for combo product models.
 	UpstreamStore *upstream.Store
+	// TokenEstimateEnabled fills missing usage token counts locally when
+	// upstream responses omit usage metadata (see settings.token_counting).
+	TokenEstimateEnabled bool
 }
 
 // NewProxyHandler constructs a ProxyHandler with a pre-configured HTTP client.
@@ -513,18 +517,23 @@ func (p *ProxyHandler) Handle(c fiber.Ctx) error {
 		return apierror.Send(c, fiber.StatusBadGateway, "upstream_unavailable", "upstream provider is unavailable")
 	}
 
+	// Copy the request body before handing off to the streaming goroutine.
+	// c.Body() is backed by fasthttp's per-request arena which is recycled
+	// after Handle returns — well before the stream finishes and usage is logged.
+	usageRequestBody := append([]byte(nil), body...)
+
 	if isStreamingResponse(resp) {
 		var breaker *circuitbreaker.Breaker
 		if p.CircuitBreakers != nil {
 			breaker = p.CircuitBreakers.Get(deploymentKey(currentModel.Name, usedDep.Name))
 		}
 		return p.handleStreamingResponse(c, resp, cancelUpstream, currentModel,
-			keyInfo, adapter, startTime, requestID, requestedModelName, usedDep, effectiveStreamDur, maxRespBody, trackDone, breaker, piiFilter)
+			keyInfo, adapter, startTime, requestID, requestedModelName, usedDep, effectiveStreamDur, maxRespBody, trackDone, breaker, piiFilter, usageRequestBody)
 	}
 
 	defer cancelUpstream()
 	return p.handleBufferedResponse(c, resp, currentModel, keyInfo, adapter,
-		startTime, requestID, requestedModelName, usedDep, maxRespBody, piiFilter)
+		startTime, requestID, requestedModelName, usedDep, maxRespBody, piiFilter, usageRequestBody)
 }
 
 // tryModel attempts to forward the request to the given model using its
@@ -1092,7 +1101,7 @@ func writeStreamAbortEvent(w *bufio.Writer, code string) {
 // maxRespBody is the aggregate byte cap for the PII-buffered streaming path;
 // it is the same limit used for non-streaming responses.
 // filter may be nil when PII anonymization is disabled.
-func (p *ProxyHandler) handleStreamingResponse(c fiber.Ctx, resp *http.Response, cancelUpstream context.CancelFunc, model Model, keyInfo *auth.KeyInfo, adapter Adapter, startTime time.Time, requestID string, requestedModelName string, usedDep Deployment, maxStreamDuration time.Duration, maxRespBody int, trackDone func(), breaker *circuitbreaker.Breaker, filter *pii.Filter) error {
+func (p *ProxyHandler) handleStreamingResponse(c fiber.Ctx, resp *http.Response, cancelUpstream context.CancelFunc, model Model, keyInfo *auth.KeyInfo, adapter Adapter, startTime time.Time, requestID string, requestedModelName string, usedDep Deployment, maxStreamDuration time.Duration, maxRespBody int, trackDone func(), breaker *circuitbreaker.Breaker, filter *pii.Filter, requestBody []byte) error {
 	if p.LiveStats != nil && requestID != "" {
 		p.LiveStats.Begin(requestID, model.Name, model.Provider, deploymentLogID(usedDep))
 	}
@@ -1134,6 +1143,7 @@ func (p *ProxyHandler) handleStreamingResponse(c fiber.Ctx, resp *http.Response,
 		defer streamTimer.Stop()
 
 		extractor := &streamUsageExtractor{}
+		outputAcc := &streamOutputAccumulator{}
 		// rewriteLine masks the upstream model name with the customer-facing
 		// product name on cross-model routes. Nil when no rewrite is needed.
 		rewriteLine := newStreamModelRewriter(model.UpstreamModel, requestedModelName)
@@ -1285,6 +1295,7 @@ func (p *ProxyHandler) handleStreamingResponse(c fiber.Ctx, resp *http.Response,
 					}
 					for i, al := range adaptedLines {
 						extractor.observe(al)
+						outputAcc.observe(al)
 
 						// Inject a blank SSE event separator into the restorer before
 						// each adapter output line after the first. An adapter may return
@@ -1462,6 +1473,7 @@ func (p *ProxyHandler) handleStreamingResponse(c fiber.Ctx, resp *http.Response,
 							continue
 						}
 						extractor.observe(al)
+						outputAcc.observe(al)
 						if rewriteLine != nil {
 							al = rewriteLine(al)
 						}
@@ -1482,6 +1494,7 @@ func (p *ProxyHandler) handleStreamingResponse(c fiber.Ctx, resp *http.Response,
 				// and raw passthrough lines are already OpenAI-shaped, so the
 				// extractor can parse usage from all of them.
 				extractor.observe(line)
+				outputAcc.observe(line)
 
 				if rewriteLine != nil {
 					line = rewriteLine(line)
@@ -1528,6 +1541,13 @@ func (p *ProxyHandler) handleStreamingResponse(c fiber.Ctx, resp *http.Response,
 			if streamUI.PromptTokens == 0 && streamUI.CompletionTokens == 0 {
 				streamUI = extractor.lastUsage
 			}
+			streamUI = fillEstimatedUsage(
+				p.TokenEstimateEnabled,
+				streamUI,
+				requestBody,
+				outputAcc.text(),
+				estimateModelName(model, requestedModelName),
+			)
 			durationMS := int(time.Since(startTime).Milliseconds())
 			// Use the upstream HTTP status for successful, complete streams. For
 			// aborted or truncated streams (no clean [DONE]) log StatusBadGateway
@@ -1551,7 +1571,7 @@ func (p *ProxyHandler) handleStreamingResponse(c fiber.Ctx, resp *http.Response,
 // requestedModelName is the canonical name the client originally asked for;
 // it may differ from model.Name when a fallback was activated.
 // filter may be nil when PII anonymization is disabled.
-func (p *ProxyHandler) handleBufferedResponse(c fiber.Ctx, resp *http.Response, model Model, keyInfo *auth.KeyInfo, adapter Adapter, startTime time.Time, requestID string, requestedModelName string, usedDep Deployment, maxResponseBody int, filter *pii.Filter) error {
+func (p *ProxyHandler) handleBufferedResponse(c fiber.Ctx, resp *http.Response, model Model, keyInfo *auth.KeyInfo, adapter Adapter, startTime time.Time, requestID string, requestedModelName string, usedDep Deployment, maxResponseBody int, filter *pii.Filter, requestBody []byte) error {
 	if p.LiveStats != nil && requestID != "" {
 		p.LiveStats.Begin(requestID, model.Name, model.Provider, deploymentLogID(usedDep))
 	}
@@ -1639,6 +1659,13 @@ func (p *ProxyHandler) handleBufferedResponse(c fiber.Ctx, resp *http.Response, 
 
 	if p.UsageLogger != nil {
 		ui := extractUsage(usageBody)
+		ui = fillEstimatedUsage(
+			p.TokenEstimateEnabled,
+			ui,
+			requestBody,
+			tokens.OutputTextFromResponse(usageBody),
+			estimateModelName(model, requestedModelName),
+		)
 		durationMS := int(time.Since(startTime).Milliseconds())
 		// For non-streaming responses TTFT equals total duration: the entire
 		// response body is the first (and only) "token delivery".
@@ -1743,6 +1770,7 @@ func (p *ProxyHandler) logUsageEvent(keyInfo *auth.KeyInfo, model Model, ui Usag
 		model.Provider,
 		usage.BillingModeFromFlags(billPerToken, billPerRequest, hasRevenue),
 		revenue, sellBD,
+		ui.Estimated,
 	)
 
 	if p.LiveStats != nil && requestID != "" {

@@ -698,6 +698,7 @@ func New(cfg *config.Config, log *slog.Logger, devMode bool) (*Application, erro
 	proxyHandler.MaxResponseBody = cfg.Server.Proxy.MaxResponseBody
 	proxyHandler.MaxStreamDuration = cfg.Server.Proxy.MaxStreamDuration
 	proxyHandler.FallbackMaxDepth = cfg.Settings.FallbackMaxDepth
+	proxyHandler.TokenEstimateEnabled = cfg.Settings.TokenCounting.IsEnabled()
 
 	if cfg.Settings.PII.IsEnabled() {
 		piiEngine, piiErr := buildPIIEngine(encKey, cfg.Settings.PII, log)

@@ -91,6 +91,14 @@ func (h *Handler) resolveDiscoverTarget(ctx context.Context, req *discoverModels
 				return "", "", "", nil, errors.New("stored api key cannot be decrypted")
 			}
 		}
+		// Keys are usually stored on provider connections (Connections tab), not on
+		// the provider row itself — reuse the first active connection by priority.
+		if apiKey == "" {
+			apiKey, err = h.firstActiveConnectionAPIKey(ctx, req.ProviderID)
+			if err != nil {
+				return "", "", "", nil, err
+			}
+		}
 	}
 
 	if preset != nil {
@@ -116,6 +124,29 @@ func (h *Handler) resolveDiscoverTarget(ctx context.Context, req *discoverModels
 		return "", "", "", nil, errors.New("base_url must begin with http:// or https://")
 	}
 	return baseURL, protocol, apiKey, preset, nil
+}
+
+// firstActiveConnectionAPIKey returns the decrypted key from the highest-priority
+// active connection that has a stored API key.
+func (h *Handler) firstActiveConnectionAPIKey(ctx context.Context, providerID string) (string, error) {
+	conns, err := h.DB.ListProviderConnections(ctx, providerID, true)
+	if err != nil {
+		return "", errors.New("failed to load provider connections")
+	}
+	for i := range conns {
+		c := &conns[i]
+		if c.APIKeyEncrypted == nil {
+			continue
+		}
+		key, decErr := crypto.DecryptString(*c.APIKeyEncrypted, h.EncryptionKey, connectionAAD(c.ID))
+		if decErr != nil {
+			return "", errors.New("stored api key cannot be decrypted")
+		}
+		if key != "" {
+			return key, nil
+		}
+	}
+	return "", nil
 }
 
 // modelsEndpointFor returns the absolute model-listing URL for the target.

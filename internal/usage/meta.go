@@ -7,6 +7,7 @@ type EventMeta struct {
 	ProviderSlug  string              `json:"provider_slug,omitempty"`
 	BillingMode   string              `json:"billing_mode,omitempty"`
 	SellBreakdown *TokenCostBreakdown `json:"sell_breakdown,omitempty"`
+	Estimated     bool                `json:"estimated,omitempty"`
 }
 
 // TokenCostBreakdown holds per-category sell charges in VND.
@@ -19,11 +20,12 @@ type TokenCostBreakdown struct {
 }
 
 // BuildEventMeta constructs the metadata blob for a usage event.
-func BuildEventMeta(provider, billingMode string, revenue *float64, sellBD *TokenCostBreakdown) json.RawMessage {
+func BuildEventMeta(provider, billingMode string, revenue *float64, sellBD *TokenCostBreakdown, estimated bool) json.RawMessage {
 	meta := EventMeta{
 		ProviderSlug:  provider,
 		BillingMode:   billingMode,
 		SellBreakdown: sellBD,
+		Estimated:     estimated,
 	}
 	_ = revenue
 	b, err := json.Marshal(meta)

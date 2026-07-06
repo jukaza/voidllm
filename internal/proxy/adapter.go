@@ -63,6 +63,9 @@ type UsageInfo struct {
 	// prompt cache (Anthropic usage.cache_creation_input_tokens). Zero when
 	// the provider does not report cache writes.
 	CacheWriteTokens int
+	// Estimated is true when token counts were filled locally because the
+	// upstream response carried no usage metadata.
+	Estimated bool
 }
 
 // Adapter transforms requests and responses between the client's OpenAI-compatible
