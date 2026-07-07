@@ -164,10 +164,31 @@ func TestCountTokensHandler(t *testing.T) {
 	}
 }
 
-func TestMessagesHandler_RejectsStreaming(t *testing.T) {
+func TestMessagesHandler_Streaming(t *testing.T) {
 	t.Parallel()
 
-	handler := NewProxyHandler(testRegistry(t, "http://127.0.0.1:1"), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	// Mock upstream that speaks OpenAI chat/completions SSE.
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		flusher, _ := w.(http.Flusher)
+		lines := []string{
+			`data: {"id":"chatcmpl-1","object":"chat.completion.chunk","model":"test-model","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}`,
+			`data: {"id":"chatcmpl-1","object":"chat.completion.chunk","model":"test-model","choices":[{"index":0,"delta":{"content":"Hel"},"finish_reason":null}]}`,
+			`data: {"id":"chatcmpl-1","object":"chat.completion.chunk","model":"test-model","choices":[{"index":0,"delta":{"content":"lo"},"finish_reason":null}]}`,
+			`data: {"id":"chatcmpl-1","object":"chat.completion.chunk","model":"test-model","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}`,
+			`data: [DONE]`,
+		}
+		for _, l := range lines {
+			_, _ = io.WriteString(w, l+"\n\n")
+			if flusher != nil {
+				flusher.Flush()
+			}
+		}
+	}))
+	t.Cleanup(upstream.Close)
+
+	handler := NewProxyHandler(testRegistry(t, upstream.URL), slog.New(slog.NewTextHandler(io.Discard, nil)))
 	app := fiber.New()
 	app.Post("/v1/messages", handler.MessagesHandler)
 
@@ -185,8 +206,78 @@ func TestMessagesHandler_RejectsStreaming(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); !strings.Contains(ct, "text/event-stream") {
+		t.Fatalf("content-type = %q, want text/event-stream", ct)
+	}
+
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	body := string(raw)
+
+	// The stream must be re-skinned into Anthropic Messages API SSE events.
+	for _, want := range []string{
+		"event: message_start",
+		"event: content_block_start",
+		`"type":"text_delta"`,
+		`"text":"Hel"`,
+		`"text":"lo"`,
+		"event: content_block_stop",
+		"event: message_delta",
+		`"stop_reason":"end_turn"`,
+		"event: message_stop",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("stream body missing %q\n---\n%s", want, body)
+		}
+	}
+	// No OpenAI-shaped leakage.
+	if strings.Contains(body, "chat.completion.chunk") {
+		t.Errorf("stream body leaked OpenAI chunk shape:\n%s", body)
+	}
+	if strings.Contains(body, "[DONE]") {
+		t.Errorf("stream body leaked OpenAI [DONE] sentinel:\n%s", body)
+	}
+}
+
+func TestAnthropicStreamConverter_ToolCall(t *testing.T) {
+	t.Parallel()
+
+	conv := newAnthropicStreamConverter("test-model")
+	var b strings.Builder
+	write := func(lines [][]byte) {
+		for _, l := range lines {
+			if l == nil {
+				b.WriteByte('\n')
+				continue
+			}
+			b.Write(l)
+			b.WriteByte('\n')
+		}
+	}
+
+	write(conv.Convert([]byte(`data: {"choices":[{"index":0,"delta":{"role":"assistant"}}]}`)))
+	write(conv.Convert([]byte(`data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"get_weather","arguments":""}}]}}]}`)))
+	write(conv.Convert([]byte(`data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"city\":"}}]}}]}`)))
+	write(conv.Convert([]byte(`data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"SF\"}"}}]}}]}`)))
+	write(conv.Convert([]byte(`data: {"choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}`)))
+	write(conv.Convert([]byte(`data: [DONE]`)))
+
+	out := b.String()
+	for _, want := range []string{
+		`"type":"tool_use"`,
+		`"name":"get_weather"`,
+		`"type":"input_json_delta"`,
+		`"stop_reason":"tool_use"`,
+		"event: message_stop",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("tool-call stream missing %q\n---\n%s", want, out)
+		}
 	}
 }
 

@@ -1246,6 +1246,17 @@ func (p *ProxyHandler) handleStreamingResponse(c fiber.Ctx, resp *http.Response,
 	streamBillingPath := billingPathFromCtx(c)
 	streamSubscriptionID := subscriptionIDFromCtx(c)
 
+	// Capture the response skin BEFORE the streaming closure: the Fiber
+	// context c is recycled by fasthttp after Handle returns, but the closure
+	// runs afterwards. When the skin is Anthropic, each OpenAI-shaped SSE line
+	// is converted into Anthropic Messages API SSE events for Claude-compatible
+	// clients (e.g. Claude Code, which always streams).
+	streamSkin := responseSkinFromCtx(c)
+	var anthConv *anthropicStreamConverter
+	if streamSkin == SkinAnthropic {
+		anthConv = newAnthropicStreamConverter(requestedModelName)
+	}
+
 	// upstreamCancel, resp.Body.Close, and the drain tracking call are all
 	// handled inside the closure. SendStreamWriter's goroutine outlives
 	// Handle's return, so none of them must be deferred at Handle scope —
@@ -1279,6 +1290,47 @@ func (p *ProxyHandler) handleStreamingResponse(c fiber.Ctx, resp *http.Response,
 		rewriteLine := newStreamModelRewriter(model.UpstreamModel, requestedModelName)
 		scanner := bufio.NewScanner(resp.Body)
 		scanner.Buffer(make([]byte, 64*1024), 4*1024*1024) // up to 4MB per SSE line
+
+		// writeConvertedLines writes a slice of Anthropic SSE lines produced by
+		// the stream converter. A nil element means "write a blank line" (the
+		// SSE event terminator). Returns false when the client disconnected.
+		writeConvertedLines := func(lines [][]byte) bool {
+			for _, b := range lines {
+				if b == nil {
+					if err := w.WriteByte('\n'); err != nil {
+						return false
+					}
+					continue
+				}
+				if _, err := w.Write(b); err != nil {
+					return false
+				}
+				if err := w.WriteByte('\n'); err != nil {
+					return false
+				}
+			}
+			if err := w.Flush(); err != nil {
+				return false
+			}
+			return true
+		}
+
+		// emitOpenAILine writes one OpenAI-shaped SSE line to the client. When
+		// the Anthropic skin is active it converts the line into Anthropic SSE
+		// events first; otherwise it passes the line through with SSE framing.
+		// Returns false when the client disconnected.
+		emitOpenAILine := func(b []byte) bool {
+			if anthConv != nil {
+				return writeConvertedLines(anthConv.Convert(b))
+			}
+			if _, err := w.Write(b); err != nil {
+				return false
+			}
+			if _, err := w.WriteString("\n\n"); err != nil {
+				return false
+			}
+			return w.Flush() == nil
+		}
 
 		// needsContentRestore is true when PII was detected in the request: the
 		// response must be processed through pii.StreamRestorer so that pseudonyms
@@ -1356,6 +1408,11 @@ func (p *ProxyHandler) handleStreamingResponse(c fiber.Ctx, resp *http.Response,
 			writeSSELines := func(lines [][]byte) bool {
 				for _, b := range lines {
 					if b == nil {
+						if anthConv != nil {
+							// The converter produces its own SSE framing; drop
+							// the restorer's blank-line separators.
+							continue
+						}
 						if err := w.WriteByte('\n'); err != nil {
 							return false
 						}
@@ -1363,6 +1420,14 @@ func (p *ProxyHandler) handleStreamingResponse(c fiber.Ctx, resp *http.Response,
 					}
 					if rewriteLine != nil {
 						b = rewriteLine(b)
+					}
+					if anthConv != nil {
+						// Anthropic skin: convert each restored OpenAI SSE line
+						// into Anthropic Messages API SSE events.
+						if !writeConvertedLines(anthConv.Convert(b)) {
+							return false
+						}
+						continue
 					}
 					if _, err := w.Write(b); err != nil {
 						return false
@@ -1607,13 +1672,7 @@ func (p *ProxyHandler) handleStreamingResponse(c fiber.Ctx, resp *http.Response,
 						if rewriteLine != nil {
 							al = rewriteLine(al)
 						}
-						if _, err := w.Write(al); err != nil {
-							break plainScanLoop
-						}
-						if _, err := w.WriteString("\n\n"); err != nil {
-							break plainScanLoop
-						}
-						if err := w.Flush(); err != nil {
+						if !emitOpenAILine(al) {
 							break plainScanLoop
 						}
 					}
@@ -1628,6 +1687,14 @@ func (p *ProxyHandler) handleStreamingResponse(c fiber.Ctx, resp *http.Response,
 
 				if rewriteLine != nil {
 					line = rewriteLine(line)
+				}
+				if anthConv != nil {
+					// Anthropic skin: convert each OpenAI SSE line into
+					// Anthropic Messages API SSE events.
+					if !writeConvertedLines(anthConv.Convert(line)) {
+						break // client disconnected
+					}
+					continue
 				}
 				if _, err := w.Write(line); err != nil {
 					break // client disconnected
@@ -1658,6 +1725,14 @@ func (p *ProxyHandler) handleStreamingResponse(c fiber.Ctx, resp *http.Response,
 					breaker.RecordSuccess()
 				}
 			}
+		}
+
+		// Anthropic skin: flush any pending closing events (content_block_stop,
+		// message_delta, message_stop). Finish is idempotent — if the upstream
+		// already sent [DONE], the converter emitted these events during the
+		// scan loop and Finish is a no-op.
+		if anthConv != nil {
+			_ = writeConvertedLines(anthConv.Finish())
 		}
 
 		if p.UsageLogger != nil {

@@ -26,12 +26,11 @@ func (p *ProxyHandler) MessagesHandler(c fiber.Ctx) error {
 			"invalid_request_error", err.Error())
 	}
 
-	if envelope.Stream {
-		return sendAnthropicError(c, fiber.StatusBadRequest,
-			"invalid_request_error", "streaming is not supported yet")
-	}
-
 	// The proxy pipeline speaks OpenAI chat/completions to upstream providers.
+	// When the client requested streaming, the streaming path converts the
+	// OpenAI SSE stream back into Anthropic SSE events (see
+	// anthropicStreamConverter). Non-streaming responses are converted by the
+	// buffered path (openAIResponseToAnthropic).
 	c.Locals(upstreamPathOverrideKey, "chat/completions")
 	return p.handleCompat(c, openaiBody, envelope, time.Now())
 }
