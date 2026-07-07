@@ -74,7 +74,7 @@ func TestCliSetupClaudeBash(t *testing.T) {
 	for _, want := range []string{
 		"#!/bin/bash",
 		"$HOME/.claude/settings.json",
-		"https://api.example.com/v1",
+		"https://api.example.com",
 		key,
 		"claude-haiku-test",
 		"claude-sonnet-test",

@@ -187,7 +187,7 @@ func generateCliSetupBash(tool, key, provider, baseWithV1, baseNoV1, mainModel s
     "ANTHROPIC_DEFAULT_OPUS_MODEL": "%s"
   }
 }
-`, baseWithV1, key, haiku, sonnet, opus))
+`, baseNoV1, key, haiku, sonnet, opus))
 		sb.WriteString("EOF\n")
 		sb.WriteString("echo \"[tavo] Claude Code configured.\"\n")
 
@@ -383,7 +383,7 @@ func generateCliSetupPowerShell(tool, key, provider, baseWithV1, baseNoV1, mainM
 }
 "@
 Set-Content -Path (Join-Path $dir "settings.json") -Value $json -Force
-`, baseWithV1, key, haiku, sonnet, opus))
+`, baseNoV1, key, haiku, sonnet, opus))
 		sb.WriteString("Write-Host \"[tavo] Claude Code configured.\"\n")
 
 	case "kilo":

@@ -53,7 +53,7 @@ export function getManualConfigs(params: ManualConfigParams): ManualConfigFile[]
             {
               hasCompletedOnboarding: true,
               env: {
-                ANTHROPIC_BASE_URL: baseUrlV1,
+                ANTHROPIC_BASE_URL: baseUrlNoV1,
                 ANTHROPIC_AUTH_TOKEN: key,
                 ANTHROPIC_DEFAULT_HAIKU_MODEL: haiku,
                 ANTHROPIC_DEFAULT_SONNET_MODEL: sonnet,
