@@ -440,7 +440,7 @@ func loadSessionPolicy(ctx context.Context, store SettingsStore) (SessionPolicyC
 	if err != nil {
 		return SessionPolicyConfig{}, err
 	}
-	allowMultiple, err := loadBool(ctx, store, KeySessionAllowMultiple, false)
+	allowMultiple, err := loadBool(ctx, store, KeySessionAllowMultiple, true)
 	if err != nil {
 		return SessionPolicyConfig{}, err
 	}

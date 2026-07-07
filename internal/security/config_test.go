@@ -44,8 +44,8 @@ func TestLoadPolicyDefaults(t *testing.T) {
 	if cfg.Session.TTLHours != security.DefaultSessionTTLHours {
 		t.Fatalf("session ttl_hours = %d, want %d", cfg.Session.TTLHours, security.DefaultSessionTTLHours)
 	}
-	if cfg.Session.AllowMultiple {
-		t.Fatal("expected session.allow_multiple default false")
+	if !cfg.Session.AllowMultiple {
+		t.Fatal("expected session.allow_multiple default true")
 	}
 	if cfg.Session.MaxConcurrent != security.DefaultSessionMaxConcurrent {
 		t.Fatalf("session max_concurrent = %d, want %d", cfg.Session.MaxConcurrent, security.DefaultSessionMaxConcurrent)

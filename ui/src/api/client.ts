@@ -1,5 +1,4 @@
 import { LOCAL_STORAGE_KEY } from '../lib/constants'
-import { handleUnauthorized } from '../lib/authSession'
 
 async function parseJSON<T>(res: Response): Promise<T> {
   const text = await res.text()
@@ -27,8 +26,7 @@ const apiClient = async <T>(endpoint: string, options?: RequestInit): Promise<T>
   })
 
   if (res.status === 401) {
-    handleUnauthorized()
-    throw new Error('Session expired')
+    throw new Error('Session expired — please log in again')
   }
 
   if (!res.ok) {

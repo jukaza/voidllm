@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import apiClient from '../api/client'
-import { handleUnauthorized } from '../lib/authSession'
+
 import type { SiteAnnouncement } from '../lib/announcements'
 import { LOCAL_STORAGE_KEY } from '../lib/constants'
 
@@ -87,8 +87,7 @@ async function siteLogoRequest<T>(endpoint: string, init?: RequestInit): Promise
   })
 
   if (res.status === 401) {
-    handleUnauthorized()
-    throw new Error('Session expired')
+    throw new Error('Session expired — please log in again')
   }
 
   if (!res.ok) {

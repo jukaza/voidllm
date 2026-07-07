@@ -1,6 +1,4 @@
-import React, { useEffect, useId, useRef } from 'react'
-import ReactDOM from 'react-dom'
-import { getPortalRoot } from '../../lib/portalRoot'
+import React, { useEffect, useId } from 'react'
 import { cn } from '../../lib/utils'
 
 export interface DrawerProps {
@@ -26,8 +24,6 @@ export function Drawer({
   closeOnBackdrop = true,
 }: DrawerProps) {
   const titleId = useId()
-  const panelRef = useRef<HTMLDivElement>(null)
-  const previousFocusRef = useRef<Element | null>(null)
 
   useEffect(() => {
     if (!open) return
@@ -40,26 +36,6 @@ export function Drawer({
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [open, onClose, closeOnEscape])
-
-  useEffect(() => {
-    if (open) {
-      previousFocusRef.current = document.activeElement
-      const rafId = requestAnimationFrame(() => {
-        const focusable = panelRef.current?.querySelectorAll<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-        )
-        focusable?.[0]?.focus()
-      })
-      return () => cancelAnimationFrame(rafId)
-    }
-    const prev = previousFocusRef.current
-    previousFocusRef.current = null
-    if (prev instanceof HTMLElement && prev.isConnected) {
-      requestAnimationFrame(() => {
-        if (prev.isConnected) prev.focus()
-      })
-    }
-  }, [open])
 
   useEffect(() => {
     if (!open) return
@@ -76,13 +52,12 @@ export function Drawer({
     if (closeOnBackdrop && e.target === e.currentTarget) onClose()
   }
 
-  return ReactDOM.createPortal(
+  return (
     <div
       className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-sm"
       onMouseDown={handleBackdropMouseDown}
     >
       <div
-        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -117,8 +92,7 @@ export function Drawer({
           <div className="shrink-0 border-t border-border px-6 py-4">{footer}</div>
         )}
       </div>
-    </div>,
-    getPortalRoot(),
+    </div>
   )
 }
 

@@ -1,6 +1,4 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
-import ReactDOM from 'react-dom'
-import { getPortalRoot } from '../../lib/portalRoot'
 import { cn } from '../../lib/utils'
 
 interface ColumnHintProps {
@@ -91,8 +89,7 @@ export function ColumnHint({ text, label }: ColumnHintProps) {
         ?
       </button>
 
-      {open &&
-        ReactDOM.createPortal(
+      {open && (
           <div
             ref={panelRef}
             id={`${id}-panel`}
@@ -101,9 +98,8 @@ export function ColumnHint({ text, label }: ColumnHintProps) {
             className="popover-enter rounded-lg border border-white/10 bg-bg-secondary px-3 py-2 text-[11px] normal-case font-normal leading-relaxed tracking-normal text-text-secondary shadow-xl shadow-black/40"
           >
             {text}
-          </div>,
-          getPortalRoot(),
-        )}
+          </div>
+      )}
     </div>
   )
 }

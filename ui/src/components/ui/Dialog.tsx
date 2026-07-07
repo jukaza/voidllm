@@ -1,6 +1,4 @@
-import React, { useEffect, useId, useRef } from 'react'
-import ReactDOM from 'react-dom'
-import { getPortalRoot } from '../../lib/portalRoot'
+import React, { useEffect, useId } from 'react'
 import { cn } from '../../lib/utils'
 import { Button } from './Button'
 
@@ -30,10 +28,7 @@ export function Dialog({
   closeOnBackdrop = true,
 }: DialogProps) {
   const titleId = useId()
-  const panelRef = useRef<HTMLDivElement>(null)
-  const previousFocusRef = useRef<Element | null>(null)
 
-  // Escape key closes dialog — respects nested consumers via defaultPrevented
   useEffect(() => {
     if (!open) return
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -46,29 +41,6 @@ export function Dialog({
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [open, onClose, closeOnEscape])
 
-  // Focus management: save previous focus, focus first focusable on open, restore on close
-  useEffect(() => {
-    if (open) {
-      previousFocusRef.current = document.activeElement
-      const rafId = requestAnimationFrame(() => {
-        const focusable = panelRef.current?.querySelectorAll<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-        )
-        focusable?.[0]?.focus()
-      })
-      return () => cancelAnimationFrame(rafId)
-    } else {
-      const prev = previousFocusRef.current
-      previousFocusRef.current = null
-      if (prev instanceof HTMLElement && prev.isConnected) {
-        requestAnimationFrame(() => {
-          if (prev.isConnected) prev.focus()
-        })
-      }
-    }
-  }, [open])
-
-  // Lock body scroll while dialog is open
   useEffect(() => {
     if (!open) return
     const prev = document.body.style.overflow
@@ -84,24 +56,7 @@ export function Dialog({
     if (closeOnBackdrop && e.target === e.currentTarget) onClose()
   }
 
-  const handlePanelKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key !== 'Tab') return
-    const focusable = panelRef.current?.querySelectorAll<HTMLElement>(
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-    )
-    if (!focusable?.length) return
-    const first = focusable[0]
-    const last = focusable[focusable.length - 1]
-    if (e.shiftKey && document.activeElement === first) {
-      e.preventDefault()
-      last.focus()
-    } else if (!e.shiftKey && document.activeElement === last) {
-      e.preventDefault()
-      first.focus()
-    }
-  }
-
-  return ReactDOM.createPortal(
+  return (
     <div
       className={cn(
         'fixed inset-0 flex items-center justify-center bg-black/70',
@@ -110,7 +65,6 @@ export function Dialog({
       onMouseDown={handleBackdropMouseDown}
     >
       <div
-        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -118,7 +72,6 @@ export function Dialog({
           'rounded-2xl shadow-2xl max-w-xl w-full mx-4 p-6 border border-border bg-bg-secondary max-h-[90vh] flex flex-col',
           panelClassName,
         )}
-        onKeyDown={handlePanelKeyDown}
       >
         <div className="flex items-center justify-between mb-4">
           <h2 id={titleId} className="text-lg font-semibold text-text-primary">
@@ -149,8 +102,7 @@ export function Dialog({
 
         {footer != null && <div className="mt-6">{footer}</div>}
       </div>
-    </div>,
-    getPortalRoot(),
+    </div>
   )
 }
 
