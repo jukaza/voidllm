@@ -260,12 +260,18 @@ EOF
 	case "hermes":
 		sb.WriteString("mkdir -p \"$HOME/.hermes\"\n")
 		sb.WriteString(fmt.Sprintf(`cat << 'EOF' > "$HOME/.hermes/config.yaml"
+custom_providers:
+  - name: tavo
+    base_url: "%s"
+    api_key: "%s"
+    model: "%s"
+
 model:
   default: "%s"
-  provider: "custom"
+  provider: "custom:tavo"
   base_url: "%s"
 EOF
-`, mainModel, baseWithV1))
+`, baseWithV1, key, mainModel, mainModel, baseWithV1))
 		sb.WriteString("cat << 'EOF' > \"$HOME/.hermes/.env\"\n")
 		sb.WriteString(fmt.Sprintf("OPENAI_API_KEY=%s\n", key))
 		if tgToken != "" {

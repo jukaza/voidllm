@@ -143,6 +143,9 @@ func TestCliSetupHermesTelegram(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	script := string(body)
 	for _, want := range []string{
+		"custom_providers:",
+		"provider: \"custom:tavo\"",
+		"api_key:",
 		"TELEGRAM_BOT_TOKEN=123:ABC",
 		"TELEGRAM_ALLOWED_USERS=987654321",
 		"hermes gateway",
