@@ -1,5 +1,6 @@
 import React, { useEffect, useId, useRef } from 'react'
 import ReactDOM from 'react-dom'
+import { getPortalRoot } from '../../lib/portalRoot'
 import { cn } from '../../lib/utils'
 import { Button } from './Button'
 
@@ -56,9 +57,14 @@ export function Dialog({
         focusable?.[0]?.focus()
       })
       return () => cancelAnimationFrame(rafId)
-    } else if (previousFocusRef.current instanceof HTMLElement) {
-      previousFocusRef.current.focus()
+    } else {
+      const prev = previousFocusRef.current
       previousFocusRef.current = null
+      if (prev instanceof HTMLElement && prev.isConnected) {
+        requestAnimationFrame(() => {
+          if (prev.isConnected) prev.focus()
+        })
+      }
     }
   }, [open])
 
@@ -144,7 +150,7 @@ export function Dialog({
         {footer != null && <div className="mt-6">{footer}</div>}
       </div>
     </div>,
-    document.body,
+    getPortalRoot(),
   )
 }
 

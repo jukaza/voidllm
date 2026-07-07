@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { NavLink, Link } from 'react-router-dom'
+import { NavLink, Link, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { usePublicFeatures } from '../../hooks/useFeaturesSettings'
 import { useMe } from '../../hooks/useMe'
@@ -247,6 +247,7 @@ export function Sidebar() {
   const { data: wallet } = useMyWallet()
   const { data: features } = usePublicFeatures()
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const { language, setLanguage, t } = useTranslation()
 
   const userRole = data?.role ?? 'member'
@@ -394,8 +395,8 @@ export function Sidebar() {
             type="button"
             onClick={() => {
               localStorage.removeItem(LOCAL_STORAGE_KEY)
-              queryClient.clear()
-              window.location.href = '/login'
+              navigate('/login', { replace: true })
+              queueMicrotask(() => queryClient.clear())
             }}
             className="flex-1 py-1 rounded-md border border-white/10 text-[10px] text-text-secondary cursor-pointer transition-colors hover:border-error hover:text-error"
           >

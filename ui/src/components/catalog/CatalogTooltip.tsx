@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react'
 import ReactDOM from 'react-dom'
+import { getPortalRoot } from '../../lib/portalRoot'
 import { cn } from '../../lib/utils'
 
 interface CatalogTooltipProps {
@@ -75,7 +76,7 @@ export function CatalogTooltip({ content, children, className }: CatalogTooltipP
           >
             {content}
           </div>,
-          document.body,
+          getPortalRoot(),
         )}
     </>
   )

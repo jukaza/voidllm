@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import ReactDOM from 'react-dom'
+import { getPortalRoot } from '../lib/portalRoot'
 import { cn } from '../lib/utils'
 
 export interface ToastMessage {
@@ -185,7 +186,7 @@ function ToastContainer({ toasts, onDismiss }: ToastContainerProps) {
         <ToastItem key={t.id} toast={t} onDismiss={onDismiss} />
       ))}
     </div>,
-    document.body,
+    getPortalRoot(),
   )
 }
 

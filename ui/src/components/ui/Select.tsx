@@ -7,6 +7,7 @@ import React, {
   useState,
 } from 'react'
 import ReactDOM from 'react-dom'
+import { getPortalRoot } from '../../lib/portalRoot'
 import { cn } from '../../lib/utils'
 
 const DROPDOWN_MAX_HEIGHT = 240
@@ -395,7 +396,7 @@ export const Select = React.forwardRef<HTMLButtonElement, SelectProps>(
                 <div className="px-3 py-2 text-sm text-text-tertiary">No results</div>
               )}
             </div>,
-            document.body,
+            getPortalRoot(),
           )}
 
         {error != null && (

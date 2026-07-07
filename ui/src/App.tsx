@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { useEffect } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import LoginPage from './pages/auth/LoginPage'
 import AuthCallbackPage from './pages/auth/AuthCallbackPage'
@@ -41,6 +42,8 @@ import { Shell } from './components/layout/Shell'
 import { PageHeader } from './components/ui/PageHeader'
 import { LOCAL_STORAGE_KEY } from './lib/constants'
 import { TranslationProvider } from './lib/i18n.tsx'
+import { setUnauthorizedHandler } from './lib/authSession'
+import { ErrorBoundary } from './components/ui/ErrorBoundary'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -65,17 +68,30 @@ function PlaceholderPage({ title, description }: { title: string; description?: 
 
 function RequireAuth() {
   const token = localStorage.getItem(LOCAL_STORAGE_KEY)
-  if (!token) return <Navigate to="/" replace />
+  if (!token) return <Navigate to="/login" replace />
   return <Shell />
+}
+
+function AuthSessionSync() {
+  const navigate = useNavigate()
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      navigate('/login', { replace: true })
+    })
+    return () => setUnauthorizedHandler(null)
+  }, [navigate])
+  return null
 }
 
 export default function App() {
   return (
-    <TranslationProvider>
-      <QueryClientProvider client={queryClient}>
-        <ToastProvider>
-          <BrowserRouter>
-            <Routes>
+    <ErrorBoundary>
+      <TranslationProvider>
+        <QueryClientProvider client={queryClient}>
+          <ToastProvider>
+            <BrowserRouter>
+              <AuthSessionSync />
+              <Routes>
               <Route path="/" element={<LandingPage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
@@ -146,10 +162,11 @@ export default function App() {
                   }
                 />
               </Route>
-            </Routes>
-          </BrowserRouter>
-        </ToastProvider>
-      </QueryClientProvider>
-    </TranslationProvider>
+              </Routes>
+            </BrowserRouter>
+          </ToastProvider>
+        </QueryClientProvider>
+      </TranslationProvider>
+    </ErrorBoundary>
   )
 }

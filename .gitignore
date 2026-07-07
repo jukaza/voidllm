@@ -8,6 +8,7 @@ ui/dist/
 # Config (never commit secrets)
 tavo.yaml
 tavo.dev.yaml
+tavo.production.local.yaml
 *.license.jwt
 
 # Uploaded site assets (custom logos, etc.)
@@ -17,10 +18,38 @@ data/uploads/
 *.db
 *.db-shm
 *.db-wal
+*.db-journal
+*.sqlite
+*.sqlite3
+*.bak
+*.bak-*
+*.db.bak*
+*.backup
 
-# Environment
+# Environment / secrets
 .env
 .env.*
+!.env.example
+!**/.env.example
+deploy/.env
+deploy/ecosystem.config.cjs
+deploy/*.local.*
+credentials.json
+secrets.json
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+*.ppk
+
+# Logs
+logs/
+*.log
 
 # IDE
 .idea/

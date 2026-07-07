@@ -1,5 +1,6 @@
 import React, { useEffect, useId, useRef } from 'react'
 import ReactDOM from 'react-dom'
+import { getPortalRoot } from '../../lib/portalRoot'
 import { cn } from '../../lib/utils'
 
 export interface DrawerProps {
@@ -51,9 +52,12 @@ export function Drawer({
       })
       return () => cancelAnimationFrame(rafId)
     }
-    if (previousFocusRef.current instanceof HTMLElement) {
-      previousFocusRef.current.focus()
-      previousFocusRef.current = null
+    const prev = previousFocusRef.current
+    previousFocusRef.current = null
+    if (prev instanceof HTMLElement && prev.isConnected) {
+      requestAnimationFrame(() => {
+        if (prev.isConnected) prev.focus()
+      })
     }
   }, [open])
 
@@ -114,7 +118,7 @@ export function Drawer({
         )}
       </div>
     </div>,
-    document.body,
+    getPortalRoot(),
   )
 }
 

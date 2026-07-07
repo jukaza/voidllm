@@ -1,4 +1,5 @@
 import { LOCAL_STORAGE_KEY } from '../lib/constants'
+import { handleUnauthorized } from '../lib/authSession'
 
 async function parseJSON<T>(res: Response): Promise<T> {
   const text = await res.text()
@@ -26,8 +27,7 @@ const apiClient = async <T>(endpoint: string, options?: RequestInit): Promise<T>
   })
 
   if (res.status === 401) {
-    localStorage.removeItem(LOCAL_STORAGE_KEY)
-    window.location.href = '/login'
+    handleUnauthorized()
     throw new Error('Session expired')
   }
 

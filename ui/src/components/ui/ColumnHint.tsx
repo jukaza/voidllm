@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import ReactDOM from 'react-dom'
+import { getPortalRoot } from '../../lib/portalRoot'
 import { cn } from '../../lib/utils'
 
 interface ColumnHintProps {
@@ -101,7 +102,7 @@ export function ColumnHint({ text, label }: ColumnHintProps) {
           >
             {text}
           </div>,
-          document.body,
+          getPortalRoot(),
         )}
     </div>
   )

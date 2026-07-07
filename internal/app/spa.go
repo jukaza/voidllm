@@ -69,6 +69,11 @@ func registerSPAHandler(fiberApp *fiber.App, log *slog.Logger) {
 				}
 				_ = f.Close() // embedded fs; close error is irrelevant
 			}
+			// Missing hashed bundles must 404 — returning index.html breaks module load
+			// (browser parses HTML as JS → blank screen until hard refresh).
+			if isImmutableAssetPath(cleanPath) {
+				return c.SendStatus(fiber.StatusNotFound)
+			}
 		}
 
 		// SPA fallback: let the React router handle the path.
@@ -78,4 +83,16 @@ func registerSPAHandler(fiberApp *fiber.App, log *slog.Logger) {
 		c.Set("X-Content-Type-Options", "nosniff")
 		return c.Send(indexData)
 	})
+}
+
+func isImmutableAssetPath(cleanPath string) bool {
+	if strings.HasPrefix(cleanPath, "assets/") {
+		return true
+	}
+	switch filepath.Ext(cleanPath) {
+	case ".js", ".mjs", ".css", ".map", ".woff", ".woff2", ".ttf", ".svg", ".png", ".webp", ".ico":
+		return true
+	default:
+		return false
+	}
 }
