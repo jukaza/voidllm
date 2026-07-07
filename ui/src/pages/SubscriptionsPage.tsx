@@ -516,6 +516,25 @@ function PlanFormDialog({
   const [forSale, setForSale] = useState(plan?.for_sale ?? true)
 
   const isEdit = plan !== null
+  const pending = create.isPending || update.isPending
+
+  useEffect(() => {
+    if (!open) return
+    setName(plan?.name ?? '')
+    setDescription(plan?.description ?? '')
+    setPrice(plan != null ? String(plan.price) : '')
+    setValidityDays(plan != null ? String(plan.validity_days) : '30')
+    setMaxSlots(plan != null ? String(plan.max_concurrent_bindings) : '0')
+    setDailyTokens(plan != null && plan.daily_token_limit > 0 ? String(plan.daily_token_limit) : '')
+    setMonthlyTokens(plan != null && plan.monthly_token_limit > 0 ? String(plan.monthly_token_limit) : '')
+    setDailyReq(plan != null && plan.daily_request_limit > 0 ? String(plan.daily_request_limit) : '')
+    setMonthlyReq(plan != null && plan.monthly_request_limit > 0 ? String(plan.monthly_request_limit) : '')
+    setRpm(plan != null && plan.requests_per_minute > 0 ? String(plan.requests_per_minute) : '')
+    setRpd(plan != null && plan.requests_per_day > 0 ? String(plan.requests_per_day) : '')
+    setModels(plan?.allowed_models ?? [])
+    setPolicy(plan?.quota_exceeded_policy ?? 'fallback_wallet')
+    setForSale(plan?.for_sale ?? true)
+  }, [plan, open])
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -538,8 +557,9 @@ function PlanFormDialog({
       for_sale: forSale,
     }
     if (isEdit && plan) {
+      const { package_id: _pkg, ...patch } = body
       update.mutate(
-        { id: plan.id, ...body },
+        { id: plan.id, ...patch },
         {
           onSuccess: () => {
             toast({ variant: 'success', message: t('subscriptions.saved') })
@@ -566,6 +586,15 @@ function PlanFormDialog({
       title={isEdit ? t('subscriptions.edit_plan') : t('subscriptions.add_plan')}
       panelClassName="max-w-2xl"
     >
+      {isEdit && plan && (
+        <p className="mb-4 text-sm text-text-secondary">
+          <span className="font-medium text-text-primary">{plan.name}</span>
+          {' · '}
+          {formatCost(plan.price)}
+          {' · '}
+          {plan.validity_days}d
+        </p>
+      )}
       <form onSubmit={handleSubmit} className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
         <div className="grid grid-cols-2 gap-4">
           <Input label={t('subscriptions.field_name')} value={name} onChange={(e) => setName(e.target.value)} required />
@@ -615,7 +644,7 @@ function PlanFormDialog({
         </div>
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="secondary" onClick={onClose} type="button">{t('common.cancel')}</Button>
-          <Button type="submit" loading={create.isPending || update.isPending}>{t('common.save')}</Button>
+          <Button type="submit" loading={pending}>{t('common.save')}</Button>
         </div>
       </form>
     </Dialog>
