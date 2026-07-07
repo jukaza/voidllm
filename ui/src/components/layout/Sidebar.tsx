@@ -31,7 +31,9 @@ interface NavGroup {
 
 const roleLevel: Record<string, number> = {
   member: 0,
-  system_admin: 1,
+  admin: 1,
+  root: 2,
+  system_admin: 2, // backward compat
 }
 
 function hasMinRole(userRole: string, minRole?: string): boolean {
@@ -210,14 +212,14 @@ function buildNavigation(t: any): NavGroup[] {
     },
     {
       label: t('sidebar.system'),
-      minRole: 'system_admin',
+      minRole: 'admin',
       items: [
-        { label: t('sidebar.users'), path: '/users', icon: <IconPersonPlus /> },
-        { label: t('sidebar.providers'), path: '/providers', icon: <IconBuilding /> },
-        { label: t('sidebar.models'), path: '/models', icon: <IconCube /> },
-        { label: t('sidebar.finance'), path: '/finance', icon: <IconWallet /> },
-        { label: t('sidebar.subscriptions'), path: '/subscriptions', icon: <IconSubscription /> },
-        { label: t('sidebar.settings'), path: '/settings', icon: <IconSettings /> },
+        { label: t('sidebar.users'), path: '/users', icon: <IconPersonPlus />, minRole: 'admin' },
+        { label: t('sidebar.finance'), path: '/finance', icon: <IconWallet />, minRole: 'admin' },
+        { label: t('sidebar.subscriptions'), path: '/subscriptions', icon: <IconSubscription />, minRole: 'root' },
+        { label: t('sidebar.providers'), path: '/providers', icon: <IconBuilding />, minRole: 'root' },
+        { label: t('sidebar.models'), path: '/models', icon: <IconCube />, minRole: 'root' },
+        { label: t('sidebar.settings'), path: '/settings', icon: <IconSettings />, minRole: 'root' },
       ],
     },
   ]

@@ -96,20 +96,22 @@ func Bootstrap(ctx context.Context, sqlDB *sql.DB, dialect db.Dialect,
 		return nil, nil
 	}
 
-	insertUser := "INSERT INTO users (id, email, display_name, password_hash, auth_provider, is_system_admin, created_at, updated_at) VALUES (" +
+	insertUser := "INSERT INTO users (id, email, display_name, password_hash, auth_provider, role, status, created_at, updated_at) VALUES (" +
 		dialect.Placeholder(1) + ", " +
 		dialect.Placeholder(2) + ", " +
 		dialect.Placeholder(3) + ", " +
 		dialect.Placeholder(4) + ", " +
 		dialect.Placeholder(5) + ", " +
-		dialect.Placeholder(6) + ", CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+		dialect.Placeholder(6) + ", " +
+		dialect.Placeholder(7) + ", CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
 	if _, err = tx.ExecContext(ctx, insertUser,
 		userID.String(),
 		adminEmail,
 		"Admin",
 		string(passwordHash),
 		"local",
-		1,
+		RoleRoot,
+		db.UserStatusActive,
 	); err != nil {
 		return nil, fmt.Errorf("bootstrap: insert user: %w", err)
 	}
@@ -152,7 +154,7 @@ func Bootstrap(ctx context.Context, sqlDB *sql.DB, dialect db.Dialect,
 	keyCache.Set(keyHash, KeyInfo{
 		ID:      keyID.String(),
 		KeyType: keygen.KeyTypeUser,
-		Role:    RoleSystemAdmin,
+		Role:    RoleRoot,
 		UserID:  userID.String(),
 		Name:    "Bootstrap Admin Key",
 	})

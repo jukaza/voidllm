@@ -152,17 +152,17 @@ func TestBootstrap_CreatesEntities(t *testing.T) {
 	}
 
 	var email string
-	var isAdmin int
+	var role string
 	if err := sqlDB.QueryRowContext(context.Background(),
-		"SELECT email, is_system_admin FROM users WHERE deleted_at IS NULL").
-		Scan(&email, &isAdmin); err != nil {
+		"SELECT email, role FROM users WHERE deleted_at IS NULL").
+		Scan(&email, &role); err != nil {
 		t.Fatalf("query user: %v", err)
 	}
 	if email != "admin@tavo.local" {
 		t.Errorf("user email = %q, want %q", email, "admin@tavo.local")
 	}
-	if isAdmin != 1 {
-		t.Errorf("is_system_admin = %d, want 1", isAdmin)
+	if role != RoleRoot {
+		t.Errorf("role = %q, want %q", role, RoleRoot)
 	}
 	if got := countRows(t, sqlDB, "users"); got != 1 {
 		t.Errorf("users count = %d, want 1", got)

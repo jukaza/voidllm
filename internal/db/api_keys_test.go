@@ -154,12 +154,12 @@ func TestGetUserRole(t *testing.T) {
 		t.Errorf("GetUserRole = %q, want %q", role, "member")
 	}
 
-	adminUser := mustCreateUser(t, d, CreateUserParams{Email: "roleadmin@example.com", DisplayName: "RA", IsSystemAdmin: true})
+	adminUser := mustCreateUser(t, d, CreateUserParams{Email: "roleadmin@example.com", DisplayName: "RA", Role: UserRoleRoot})
 	adminRole, err := d.GetUserRole(context.Background(), adminUser.ID)
 	if err != nil {
 		t.Fatalf("GetUserRole failed for admin: %v", err)
 	}
-	if adminRole != "system_admin" {
-		t.Errorf("GetUserRole admin = %q, want %q", adminRole, "system_admin")
+	if adminRole != UserRoleRoot {
+		t.Errorf("GetUserRole admin = %q, want %q", adminRole, UserRoleRoot)
 	}
 }

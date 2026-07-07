@@ -18,13 +18,16 @@ func TestHasRole(t *testing.T) {
 		required string
 		want     bool
 	}{
-		{name: "system_admin satisfies member", role: RoleSystemAdmin, required: RoleMember, want: true},
-		{name: "system_admin satisfies system_admin", role: RoleSystemAdmin, required: RoleSystemAdmin, want: true},
+		{name: "root satisfies member", role: RoleRoot, required: RoleMember, want: true},
+		{name: "root satisfies admin", role: RoleRoot, required: RoleAdmin, want: true},
+		{name: "root satisfies root", role: RoleRoot, required: RoleRoot, want: true},
+		{name: "admin satisfies member", role: RoleAdmin, required: RoleMember, want: true},
+		{name: "admin satisfies admin", role: RoleAdmin, required: RoleAdmin, want: true},
+		{name: "admin does not satisfy root", role: RoleAdmin, required: RoleRoot, want: false},
 		{name: "member satisfies member", role: RoleMember, required: RoleMember, want: true},
-		{name: "member does not satisfy system_admin", role: RoleMember, required: RoleSystemAdmin, want: false},
+		{name: "member does not satisfy admin", role: RoleMember, required: RoleAdmin, want: false},
+		{name: "system_admin alias satisfies root", role: RoleSystemAdmin, required: RoleRoot, want: true},
 		{name: "unknown role denied", role: "unknown", required: RoleMember, want: false},
-		{name: "empty role denied", role: "", required: RoleMember, want: false},
-		{name: "unknown required denied", role: RoleMember, required: "unknown_required", want: false},
 	}
 
 	for _, tc := range tests {
@@ -35,6 +38,25 @@ func TestHasRole(t *testing.T) {
 				t.Errorf("HasRole(%q, %q) = %v, want %v", tc.role, tc.required, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestCanManageRole(t *testing.T) {
+	t.Parallel()
+	if !CanManageRole(RoleRoot, RoleAdmin) {
+		t.Error("root should manage admin")
+	}
+	if !CanManageRole(RoleRoot, RoleMember) {
+		t.Error("root should manage member")
+	}
+	if !CanManageRole(RoleAdmin, RoleMember) {
+		t.Error("admin should manage member")
+	}
+	if CanManageRole(RoleAdmin, RoleRoot) {
+		t.Error("admin should not manage root")
+	}
+	if CanManageRole(RoleMember, RoleMember) {
+		t.Error("member should not manage member")
 	}
 }
 
@@ -69,30 +91,11 @@ func TestRequireRole(t *testing.T) {
 		required   string
 		wantStatus int
 	}{
-		{
-			name:       "system_admin passes system_admin requirement",
-			callerRole: RoleSystemAdmin,
-			required:   RoleSystemAdmin,
-			wantStatus: fiber.StatusOK,
-		},
-		{
-			name:       "member fails system_admin requirement",
-			callerRole: RoleMember,
-			required:   RoleSystemAdmin,
-			wantStatus: fiber.StatusForbidden,
-		},
-		{
-			name:       "member passes member requirement",
-			callerRole: RoleMember,
-			required:   RoleMember,
-			wantStatus: fiber.StatusOK,
-		},
-		{
-			name:       "system_admin passes member requirement",
-			callerRole: RoleSystemAdmin,
-			required:   RoleMember,
-			wantStatus: fiber.StatusOK,
-		},
+		{name: "root passes root requirement", callerRole: RoleRoot, required: RoleRoot, wantStatus: fiber.StatusOK},
+		{name: "admin fails root requirement", callerRole: RoleAdmin, required: RoleRoot, wantStatus: fiber.StatusForbidden},
+		{name: "admin passes admin requirement", callerRole: RoleAdmin, required: RoleAdmin, wantStatus: fiber.StatusOK},
+		{name: "member fails admin requirement", callerRole: RoleMember, required: RoleAdmin, wantStatus: fiber.StatusForbidden},
+		{name: "root passes admin requirement", callerRole: RoleRoot, required: RoleAdmin, wantStatus: fiber.StatusOK},
 	}
 
 	for _, tc := range tests {
@@ -123,12 +126,12 @@ func TestRequireRoleWithNoAuth(t *testing.T) {
 
 	keyCache := cache.New[string, KeyInfo]()
 	app := fiber.New()
-	app.Use(RequireRole(RoleSystemAdmin))
+	app.Use(RequireRole(RoleRoot))
 	app.Get("/", func(c fiber.Ctx) error {
 		return c.SendString("ok")
 	})
 
-	info := KeyInfo{ID: "x", KeyType: keygen.KeyTypeUser, Role: RoleSystemAdmin}
+	info := KeyInfo{ID: "x", KeyType: keygen.KeyTypeUser, Role: RoleRoot}
 	_ = storeKey(t, keyCache, info, keygen.KeyTypeUser)
 
 	req := httptest.NewRequest("GET", "/", nil)

@@ -5,7 +5,7 @@ export interface MeResponse {
   id: string
   email: string
   display_name: string
-  role: string
+  role: 'member' | 'admin' | 'root' | string
   is_system_admin: boolean
   has_password: boolean
   auth_provider: string

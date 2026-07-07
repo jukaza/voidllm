@@ -110,11 +110,15 @@ func mustCreateUserWithPassword(t *testing.T, database *db.DB, email, displayNam
 		t.Fatalf("bcrypt.GenerateFromPassword: %v", err)
 	}
 	h := string(hash)
+	role := db.UserRoleMember
+	if isSystemAdmin {
+		role = db.UserRoleRoot
+	}
 	user, err := database.CreateUser(context.Background(), db.CreateUserParams{
-		Email:         email,
-		DisplayName:   displayName,
-		PasswordHash:  &h,
-		IsSystemAdmin: isSystemAdmin,
+		Email:        email,
+		DisplayName:  displayName,
+		PasswordHash: &h,
+		Role:         role,
 	})
 	if err != nil {
 		t.Fatalf("mustCreateUserWithPassword(%q): %v", email, err)

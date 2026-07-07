@@ -443,11 +443,7 @@ func (h *Handler) oauthLoginOrSignup(c fiber.Ctx, profile oauthProfile, isSignup
 
 	user, err := h.DB.GetUserByEmail(ctx, profile.Email)
 	if err == nil {
-		if _, _, hashErr := h.DB.GetUserPasswordHashByID(ctx, user.ID); hashErr == nil {
-			return loginResponse{}, fmt.Errorf("account exists — sign in with password and link this provider from Account settings")
-		} else if !errors.Is(hashErr, db.ErrNoPassword) {
-			return loginResponse{}, fmt.Errorf("authentication failed")
-		}
+		// Email verified by the OAuth provider — safe to sign in and auto-link.
 		if _, linkErr := h.DB.UpsertOAuthConnection(ctx, user.ID, profile.Provider, profile.ExternalID, profile.Label); linkErr != nil {
 			return loginResponse{}, fmt.Errorf("failed to link account")
 		}

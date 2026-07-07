@@ -61,9 +61,8 @@ func LoadKeysIntoCache(ctx context.Context, database *db.DB, keyCache *cache.Cac
 			ki.UserID = *r.UserID
 		}
 
-		// Resolve role inline from IsSystemAdmin flag.
-		if r.IsSystemAdmin == 1 {
-			ki.Role = RoleSystemAdmin
+		if r.UserRole != "" {
+			ki.Role = r.UserRole
 		} else {
 			ki.Role = RoleMember
 		}

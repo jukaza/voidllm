@@ -58,6 +58,30 @@ kubectl logs deploy/tavo | grep "BOOTSTRAP"
 
 If you missed them, delete the database and restart to re-bootstrap.
 
+## Claude Desktop (Anthropic Gateway)
+
+Tavo exposes an Anthropic-compatible gateway for Claude Desktop **Developer → Configure Third-Party Inference**:
+
+| Field | Value |
+|-------|-------|
+| Backend | Gateway (Anthropic-compatible) |
+| Base URL | `http://your-host:8080` (proxy port) |
+| API key | Your Tavo key (`vl_uk_...` or `vl_sk_...`) |
+| Auth scheme | `bearer` |
+
+Endpoints: `POST /v1/messages`, `POST /v1/messages/count_tokens`, `GET /v1/models`.
+
+Phase 1 supports non-streaming text chat. Streaming and advanced tool flows require a later release (or use 9router as a bridge).
+
+Verify:
+
+```bash
+curl -X POST http://localhost:8080/v1/messages/count_tokens \
+  -H "Authorization: Bearer vl_uk_YOUR_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"your-model","messages":[{"role":"user","content":"hi"}]}'
+```
+
 ## Proxy Issues
 
 ### 401 Unauthorized

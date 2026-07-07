@@ -548,19 +548,14 @@ func (d *DB) RotateKeyTx(ctx context.Context, oldID string, oldExpiresAt string,
 
 // GetUserRole resolves the effective RBAC role for a user.
 func (d *DB) GetUserRole(ctx context.Context, userID string) (string, error) {
-	p := d.dialect.Placeholder
-
-	var isAdmin int
-	err := d.sql.QueryRowContext(ctx,
-		"SELECT is_system_admin FROM users WHERE id = "+p(1)+" AND deleted_at IS NULL",
-		userID).Scan(&isAdmin)
+	role, status, err := d.GetUserAuthState(ctx, userID)
 	if err != nil {
-		return "", fmt.Errorf("get user role user %s: %w", userID, translateError(err))
+		return "", fmt.Errorf("get user role user %s: %w", userID, err)
 	}
-	if isAdmin == 1 {
-		return "system_admin", nil
+	if status == UserStatusDisabled {
+		return "", ErrNotFound
 	}
-	return "member", nil
+	return role, nil
 }
 
 type apiKeyScanner interface {

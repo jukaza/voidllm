@@ -20,7 +20,7 @@ func (h *Handler) buildMeResponse(ctx context.Context, user *db.User, role strin
 		Email:              user.Email,
 		DisplayName:        user.DisplayName,
 		Role:               role,
-		IsSystemAdmin:      user.IsSystemAdmin,
+		IsSystemAdmin:      user.Role == db.UserRoleRoot || user.Role == db.UserRoleAdmin,
 		HasPassword:        profile.HasPassword,
 		AuthProvider:       profile.AuthProvider,
 		ActiveSessionCount: count,

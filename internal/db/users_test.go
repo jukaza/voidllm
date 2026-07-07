@@ -119,13 +119,13 @@ func TestCreateUser(t *testing.T) {
 			params: CreateUserParams{
 				Email:         "admin@example.com",
 				DisplayName:   "Admin User",
-				IsSystemAdmin: true,
+				Role: UserRoleRoot,
 			},
 			wantErr: nil,
 			checkFunc: func(t *testing.T, got *User, _ CreateUserParams) {
 				t.Helper()
-				if !got.IsSystemAdmin {
-					t.Error("IsSystemAdmin = false, want true")
+				if got.Role != UserRoleRoot {
+					t.Errorf("Role = %q, want %q", got.Role, UserRoleRoot)
 				}
 			},
 		},
@@ -191,7 +191,7 @@ func TestGetUser(t *testing.T) {
 					Email:         "getuser@example.com",
 					DisplayName:   "Get User",
 					PasswordHash:  testPasswordHash(t),
-					IsSystemAdmin: true,
+					Role: UserRoleRoot,
 				})
 				return u.ID
 			},
@@ -243,8 +243,8 @@ func TestGetUser(t *testing.T) {
 				if got.Email != "getuser@example.com" {
 					t.Errorf("GetUser().Email = %q, want %q", got.Email, "getuser@example.com")
 				}
-				if !got.IsSystemAdmin {
-					t.Error("GetUser().IsSystemAdmin = false, want true")
+				if got.Role != UserRoleRoot {
+					t.Errorf("GetUser().Role = %q, want %q", got.Role, UserRoleRoot)
 				}
 			}
 		})
@@ -322,7 +322,7 @@ func TestListUsers_Pagination(t *testing.T) {
 	}
 
 	// First page: limit=2.
-	page1, err := d.ListUsers(ctx, "", 2, false)
+	page1, err := d.ListUsers(ctx, ListUsersFilter{Limit: 2})
 	if err != nil {
 		t.Fatalf("ListUsers page1 error = %v", err)
 	}
@@ -331,7 +331,7 @@ func TestListUsers_Pagination(t *testing.T) {
 	}
 
 	// Second page: use last ID from page1 as cursor.
-	page2, err := d.ListUsers(ctx, page1[len(page1)-1].ID, 2, false)
+	page2, err := d.ListUsers(ctx, ListUsersFilter{Cursor: page1[len(page1)-1].ID, Limit: 2})
 	if err != nil {
 		t.Fatalf("ListUsers page2 error = %v", err)
 	}
@@ -369,7 +369,7 @@ func TestListUsers_ExcludesSoftDeleted(t *testing.T) {
 		t.Fatalf("DeleteUser(): %v", err)
 	}
 
-	users, err := d.ListUsers(ctx, "", 100, false)
+	users, err := d.ListUsers(ctx, ListUsersFilter{Limit: 100})
 	if err != nil {
 		t.Fatalf("ListUsers(includeDeleted=false) error = %v", err)
 	}
@@ -401,7 +401,7 @@ func TestListUsers_IncludeDeleted(t *testing.T) {
 		t.Fatalf("DeleteUser(): %v", err)
 	}
 
-	users, err := d.ListUsers(ctx, "", 100, true)
+	users, err := d.ListUsers(ctx, ListUsersFilter{Limit: 100, IncludeDeleted: true})
 	if err != nil {
 		t.Fatalf("ListUsers(includeDeleted=true) error = %v", err)
 	}
@@ -487,15 +487,15 @@ func TestUpdateUser(t *testing.T) {
 					Email:         "promote@example.com",
 					DisplayName:   "Promote Me",
 					PasswordHash:  testPasswordHash(t),
-					IsSystemAdmin: false,
+					Role: UserRoleMember,
 				})
 			},
-			params:  UpdateUserParams{IsSystemAdmin: ptr(true)},
+			params:  UpdateUserParams{Role: ptr(UserRoleRoot)},
 			wantErr: nil,
 			checkFunc: func(t *testing.T, _, got *User) {
 				t.Helper()
-				if !got.IsSystemAdmin {
-					t.Error("IsSystemAdmin = false, want true after update")
+				if got.Role != UserRoleRoot {
+					t.Errorf("Role = %q, want %q after update", got.Role, UserRoleRoot)
 				}
 			},
 		},

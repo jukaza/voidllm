@@ -40,11 +40,15 @@ func openLoaderDB(t *testing.T) *db.DB {
 
 func createUser(t *testing.T, d *db.DB, email string, isSystemAdmin bool) string {
 	t.Helper()
+	role := db.UserRoleMember
+	if isSystemAdmin {
+		role = db.UserRoleRoot
+	}
 	user, err := d.CreateUser(context.Background(), db.CreateUserParams{
-		Email:         email,
-		DisplayName:   "Test User",
-		AuthProvider:  "local",
-		IsSystemAdmin: isSystemAdmin,
+		Email:        email,
+		DisplayName:  "Test User",
+		AuthProvider: "local",
+		Role:         role,
 	})
 	if err != nil {
 		t.Fatalf("CreateUser(%q): %v", email, err)

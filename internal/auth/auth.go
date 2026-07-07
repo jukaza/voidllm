@@ -150,8 +150,8 @@ func keyInfoFromRecord(r db.KeyRecord) KeyInfo {
 	if r.UserID != nil {
 		ki.UserID = *r.UserID
 	}
-	if r.IsSystemAdmin == 1 {
-		ki.Role = RoleSystemAdmin
+	if r.UserRole != "" {
+		ki.Role = r.UserRole
 	} else {
 		ki.Role = RoleMember
 	}

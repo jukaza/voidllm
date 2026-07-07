@@ -8,7 +8,8 @@ export default function FinanceLayout() {
   const { data: me } = useMe()
   const { t } = useTranslation()
 
-  if (me && !me.is_system_admin) {
+  const canAccess = me?.role === 'admin' || me?.role === 'root' || me?.is_system_admin
+  if (me && !canAccess) {
     return (
       <>
         <PageHeader title={t('finance.title')} description={t('finance.subtitle')} />

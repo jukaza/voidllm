@@ -7,7 +7,7 @@ export default function ModelsLayout() {
   const { data: me } = useMe()
   const { t } = useTranslation()
 
-  if (me && !me.is_system_admin) {
+  if (me && me.role !== 'root') {
     return (
       <>
         <PageHeader title={t('models.title')} description={t('models.desc')} />

@@ -6,25 +6,37 @@ import (
 )
 
 const (
-	RoleSystemAdmin = "system_admin"
-	RoleMember      = "member"
+	RoleMember = "member"
+	RoleAdmin  = "admin"
+	RoleRoot   = "root"
+
+	// RoleSystemAdmin is a backward-compatible alias for RoleRoot.
+	RoleSystemAdmin = RoleRoot
 )
 
 var roleRank = map[string]int{
-	RoleMember:      0,
-	RoleSystemAdmin: 1,
+	RoleMember: 0,
+	RoleAdmin:  1,
+	RoleRoot:   2,
+}
+
+// RoleRank returns the privilege level for a role string. Unknown roles map to -1.
+func RoleRank(role string) int {
+	r, ok := roleRank[role]
+	if !ok {
+		return -1
+	}
+	return r
 }
 
 func HasRole(role string, required string) bool {
-	r, ok := roleRank[role]
-	if !ok {
-		return false
-	}
-	req, reqOK := roleRank[required]
-	if !reqOK {
-		return false
-	}
-	return r >= req
+	return RoleRank(role) >= RoleRank(required)
+}
+
+// CanManageRole reports whether actor may manage a user with targetRole.
+// Actors can only manage strictly lower-privilege users.
+func CanManageRole(actorRole, targetRole string) bool {
+	return RoleRank(actorRole) > RoleRank(targetRole)
 }
 
 func RequireRole(required string) fiber.Handler {

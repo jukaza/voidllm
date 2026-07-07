@@ -218,11 +218,7 @@ func (p *ProxyHandler) Handle(c fiber.Ctx) error {
 			"service_unavailable", "server is shutting down")
 	}
 
-	trackDone := p.initShutdownTracking()
-	defer trackDone()
-
-	maxReqBody, maxRespBody, maxStreamDur := p.resolveEffectiveLimits()
-
+	maxReqBody, _, _ := p.resolveEffectiveLimits()
 	body, envelope, err := p.readAndValidateBody(c, maxReqBody)
 	if err != nil {
 		if errors.Is(err, errResponseSent) {
@@ -230,6 +226,27 @@ func (p *ProxyHandler) Handle(c fiber.Ctx) error {
 		}
 		return err
 	}
+
+	return p.handleCompat(c, body, envelope, startTime)
+}
+
+// handleCompat runs the proxy pipeline with a pre-parsed request body and
+// envelope. It is shared by the OpenAI hot path (Handle) and the Anthropic
+// gateway skin (MessagesHandler).
+func (p *ProxyHandler) handleCompat(c fiber.Ctx, body []byte, envelope requestEnvelope, startTime time.Time) error {
+	if p.ShutdownState != nil && p.ShutdownState.Draining() {
+		if responseSkinFromCtx(c) == SkinAnthropic {
+			return sendAnthropicError(c, fiber.StatusServiceUnavailable,
+				"api_error", "server is shutting down")
+		}
+		return apierror.Send(c, fiber.StatusServiceUnavailable,
+			"service_unavailable", "server is shutting down")
+	}
+
+	trackDone := p.initShutdownTracking()
+	defer trackDone()
+
+	_, maxRespBody, maxStreamDur := p.resolveEffectiveLimits()
 
 	keyInfo := auth.KeyInfoFromCtx(c)
 	requestID := apierror.RequestIDFromCtx(c)
@@ -1054,6 +1071,9 @@ func (p *ProxyHandler) resolveModel(c fiber.Ctx, keyInfo *auth.KeyInfo, modelNam
 // transformation), or an API error response and error for Handle to propagate.
 func (p *ProxyHandler) buildUpstreamRequest(c fiber.Ctx, model Model, body []byte, envelope requestEnvelope) (*http.Request, context.CancelFunc, Adapter, error) {
 	upstreamPath := path.Clean(strings.TrimPrefix(c.Path(), "/v1/"))
+	if override, ok := c.Locals(upstreamPathOverrideKey).(string); ok && override != "" {
+		upstreamPath = override
+	}
 
 	if !isAllowedPath(upstreamPath) {
 		if err := apierror.Send(c, fiber.StatusBadRequest,
@@ -1761,6 +1781,18 @@ func (p *ProxyHandler) handleBufferedResponse(c fiber.Ctx, resp *http.Response, 
 	// requests where no PII was detected.
 	if filter != nil && filter.Touched() {
 		finalBody = filter.Restore(finalBody)
+	}
+
+	if responseSkinFromCtx(c) == SkinAnthropic && resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		anthropicBody, skinErr := openAIResponseToAnthropic(finalBody, requestedModelName)
+		if skinErr != nil {
+			p.Log.LogAttrs(c.Context(), slog.LevelWarn, "anthropic skin response transform failed",
+				slog.String("error", skinErr.Error()),
+			)
+			return sendAnthropicError(c, fiber.StatusBadGateway, "api_error", "failed to transform response")
+		}
+		finalBody = anthropicBody
+		c.Set("Content-Type", "application/json")
 	}
 
 	if err := c.Send(finalBody); err != nil {

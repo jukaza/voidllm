@@ -70,14 +70,17 @@ func RegisterRoutes(app *fiber.App, handler *Handler, keyCache *cache.Cache[stri
 	// Dashboard stats — no role restriction.
 	api.Get("/dashboard/stats", handler.DashboardStats)
 
-	// Users — managed by system admins.
-	api.Post("/users", auth.RequireRole(auth.RoleSystemAdmin), handler.CreateUser)
-	api.Get("/users", auth.RequireRole(auth.RoleSystemAdmin), handler.ListUsers)
-	api.Get("/users/:user_id", auth.RequireRole(auth.RoleSystemAdmin), handler.GetUser)
-	api.Patch("/users/:user_id", auth.RequireRole(auth.RoleSystemAdmin), handler.UpdateUser)
-	api.Delete("/users/:user_id", auth.RequireRole(auth.RoleSystemAdmin), handler.DeleteUser)
-	api.Get("/admin/users/:user_id/keys", auth.RequireRole(auth.RoleSystemAdmin), handler.ListUserAPIKeys)
-	api.Post("/admin/users/:user_id/keys/revoke-all", auth.RequireRole(auth.RoleSystemAdmin), handler.RevokeAllUserAPIKeys)
+	// Users — managed by admins and root.
+	api.Post("/users", auth.RequireRole(auth.RoleAdmin), handler.CreateUser)
+	api.Get("/users", auth.RequireRole(auth.RoleAdmin), handler.ListUsers)
+	api.Get("/users/:user_id", auth.RequireRole(auth.RoleAdmin), handler.GetUser)
+	api.Patch("/users/:user_id", auth.RequireRole(auth.RoleAdmin), handler.UpdateUser)
+	api.Post("/users/:user_id/manage", auth.RequireRole(auth.RoleAdmin), handler.ManageUser)
+	api.Delete("/users/:user_id", auth.RequireRole(auth.RoleAdmin), handler.DeleteUser)
+	api.Get("/admin/users/:user_id/keys", auth.RequireRole(auth.RoleAdmin), handler.ListUserAPIKeys)
+	api.Post("/admin/users/:user_id/keys/revoke-all", auth.RequireRole(auth.RoleAdmin), handler.RevokeAllUserAPIKeys)
+	api.Get("/admin/users/:user_id/connections", auth.RequireRole(auth.RoleAdmin), handler.AdminUserConnections)
+	api.Delete("/admin/users/:user_id/sessions", auth.RequireRole(auth.RoleAdmin), handler.AdminRevokeUserSessions)
 
 	// API Keys
 	api.Post("/keys/batch", auth.RequireRole(auth.RoleMember), handler.BatchCreateAPIKeys)
@@ -99,24 +102,24 @@ func RegisterRoutes(app *fiber.App, handler *Handler, keyCache *cache.Cache[stri
 	// Static sub-paths (health, test-connection) are registered before
 	// /:model_id so Fiber does not treat them as model_id parameter values.
 	api.Get("/models/health", auth.RequireRole(auth.RoleMember), handler.GetModelHealth)
-	api.Post("/models/test-connection", auth.RequireRole(auth.RoleSystemAdmin), handler.TestModelConnection)
-	api.Post("/models", auth.RequireRole(auth.RoleSystemAdmin), handler.CreateModel)
-	api.Get("/models", auth.RequireRole(auth.RoleSystemAdmin), handler.ListModels)
-	api.Get("/models/:model_id", auth.RequireRole(auth.RoleSystemAdmin), handler.GetModel)
-	api.Patch("/models/:model_id", auth.RequireRole(auth.RoleSystemAdmin), handler.UpdateModel)
-	api.Delete("/models/:model_id", auth.RequireRole(auth.RoleSystemAdmin), handler.DeleteModel)
-	api.Patch("/models/:model_id/activate", auth.RequireRole(auth.RoleSystemAdmin), handler.ActivateModel)
-	api.Patch("/models/:model_id/deactivate", auth.RequireRole(auth.RoleSystemAdmin), handler.DeactivateModel)
+	api.Post("/models/test-connection", auth.RequireRole(auth.RoleRoot), handler.TestModelConnection)
+	api.Post("/models", auth.RequireRole(auth.RoleRoot), handler.CreateModel)
+	api.Get("/models", auth.RequireRole(auth.RoleRoot), handler.ListModels)
+	api.Get("/models/:model_id", auth.RequireRole(auth.RoleRoot), handler.GetModel)
+	api.Patch("/models/:model_id", auth.RequireRole(auth.RoleRoot), handler.UpdateModel)
+	api.Delete("/models/:model_id", auth.RequireRole(auth.RoleRoot), handler.DeleteModel)
+	api.Patch("/models/:model_id/activate", auth.RequireRole(auth.RoleRoot), handler.ActivateModel)
+	api.Patch("/models/:model_id/deactivate", auth.RequireRole(auth.RoleRoot), handler.DeactivateModel)
 
 	// Model Deployments — sub-resources of a model, managed by system admins.
-	api.Post("/models/:model_id/deployments", auth.RequireRole(auth.RoleSystemAdmin), handler.createDeployment)
-	api.Get("/models/:model_id/deployments", auth.RequireRole(auth.RoleSystemAdmin), handler.listDeployments)
-	api.Patch("/models/:model_id/deployments/:deployment_id", auth.RequireRole(auth.RoleSystemAdmin), handler.updateDeployment)
-	api.Delete("/models/:model_id/deployments/:deployment_id", auth.RequireRole(auth.RoleSystemAdmin), handler.deleteDeployment)
+	api.Post("/models/:model_id/deployments", auth.RequireRole(auth.RoleRoot), handler.createDeployment)
+	api.Get("/models/:model_id/deployments", auth.RequireRole(auth.RoleRoot), handler.listDeployments)
+	api.Patch("/models/:model_id/deployments/:deployment_id", auth.RequireRole(auth.RoleRoot), handler.updateDeployment)
+	api.Delete("/models/:model_id/deployments/:deployment_id", auth.RequireRole(auth.RoleRoot), handler.deleteDeployment)
 
 	// Model combo routes (product → upstream hops).
-	api.Get("/models/:model_id/routes", auth.RequireRole(auth.RoleSystemAdmin), handler.ListModelRoutes)
-	api.Put("/models/:model_id/routes", auth.RequireRole(auth.RoleSystemAdmin), handler.ReplaceModelRoutes)
+	api.Get("/models/:model_id/routes", auth.RequireRole(auth.RoleRoot), handler.ListModelRoutes)
+	api.Put("/models/:model_id/routes", auth.RequireRole(auth.RoleRoot), handler.ReplaceModelRoutes)
 
 	// Model Aliases
 	api.Post("/model-aliases", auth.RequireRole(auth.RoleMember), handler.CreateModelAlias)
@@ -124,11 +127,11 @@ func RegisterRoutes(app *fiber.App, handler *Handler, keyCache *cache.Cache[stri
 	api.Delete("/model-aliases/:alias_id", auth.RequireRole(auth.RoleMember), handler.DeleteModelAlias)
 
 	// Usage
-	api.Get("/usage", auth.RequireRole(auth.RoleSystemAdmin), handler.SystemAdminUsage)
-	api.Get("/usage/logs", auth.RequireRole(auth.RoleSystemAdmin), handler.SystemUsageLogs)
-	api.Get("/usage/logs/:request_id", auth.RequireRole(auth.RoleSystemAdmin), handler.SystemUsageLogDetail)
-	api.Get("/usage/profit", auth.RequireRole(auth.RoleSystemAdmin), handler.UsageProfit)
-	api.Get("/usage/channels", auth.RequireRole(auth.RoleSystemAdmin), handler.UsageChannels)
+	api.Get("/usage", auth.RequireRole(auth.RoleAdmin), handler.SystemAdminUsage)
+	api.Get("/usage/logs", auth.RequireRole(auth.RoleAdmin), handler.SystemUsageLogs)
+	api.Get("/usage/logs/:request_id", auth.RequireRole(auth.RoleAdmin), handler.SystemUsageLogDetail)
+	api.Get("/usage/profit", auth.RequireRole(auth.RoleAdmin), handler.UsageProfit)
+	api.Get("/usage/channels", auth.RequireRole(auth.RoleAdmin), handler.UsageChannels)
 
 	// Providers (upstream partners) — system_admin only.
 	// Static sub-paths (presets, discover-models, import) are registered before
@@ -167,22 +170,22 @@ func RegisterRoutes(app *fiber.App, handler *Handler, keyCache *cache.Cache[stri
 	api.Patch("/admin/subscription-plans/:id", auth.RequireRole(auth.RoleSystemAdmin), handler.UpdateSubscriptionPlan)
 	api.Delete("/admin/subscription-plans/:id", auth.RequireRole(auth.RoleSystemAdmin), handler.DeleteSubscriptionPlan)
 
-	api.Get("/admin/user-subscriptions", auth.RequireRole(auth.RoleSystemAdmin), handler.ListAdminUserSubscriptions)
-	api.Post("/admin/user-subscriptions", auth.RequireRole(auth.RoleSystemAdmin), handler.GrantUserSubscription)
+	api.Get("/admin/user-subscriptions", auth.RequireRole(auth.RoleAdmin), handler.ListAdminUserSubscriptions)
+	api.Post("/admin/user-subscriptions", auth.RequireRole(auth.RoleAdmin), handler.GrantUserSubscription)
 
 	api.Get("/my-subscriptions", handler.MySubscriptions)
 	api.Post("/me/subscription-orders", handler.CreateSubscriptionOrder)
 
 	// Finance monitoring — system_admin only.
-	api.Get("/admin/finance/summary", auth.RequireRole(auth.RoleSystemAdmin), handler.FinanceSummary)
-	api.Get("/admin/finance/topups", auth.RequireRole(auth.RoleSystemAdmin), handler.FinanceTopups)
-	api.Post("/admin/finance/topups/:topup_id/review", auth.RequireRole(auth.RoleSystemAdmin), handler.FinanceReviewTopup)
-	api.Get("/admin/finance/transactions", auth.RequireRole(auth.RoleSystemAdmin), handler.FinanceTransactions)
+	api.Get("/admin/finance/summary", auth.RequireRole(auth.RoleAdmin), handler.FinanceSummary)
+	api.Get("/admin/finance/topups", auth.RequireRole(auth.RoleAdmin), handler.FinanceTopups)
+	api.Post("/admin/finance/topups/:topup_id/review", auth.RequireRole(auth.RoleAdmin), handler.FinanceReviewTopup)
+	api.Get("/admin/finance/transactions", auth.RequireRole(auth.RoleAdmin), handler.FinanceTransactions)
 
 	// Top-up list (deprecated — use /admin/finance/topups).
-	api.Get("/topups", auth.RequireRole(auth.RoleSystemAdmin), handler.ListTopups)
-	api.Get("/users/:user_id/wallet", auth.RequireRole(auth.RoleSystemAdmin), handler.GetUserWallet)
-	api.Post("/users/:user_id/wallet/adjust", auth.RequireRole(auth.RoleSystemAdmin), handler.AdjustWallet)
+	api.Get("/topups", auth.RequireRole(auth.RoleAdmin), handler.ListTopups)
+	api.Get("/users/:user_id/wallet", auth.RequireRole(auth.RoleAdmin), handler.GetUserWallet)
+	api.Post("/users/:user_id/wallet/adjust", auth.RequireRole(auth.RoleAdmin), handler.AdjustWallet)
 
 	// Update check — any authenticated user may read the cached update status.
 	// Version info is not sensitive; no additional role gate required.

@@ -9,52 +9,79 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+	UserRoleMember = "member"
+	UserRoleAdmin  = "admin"
+	UserRoleRoot   = "root"
+
+	UserStatusActive   = "active"
+	UserStatusDisabled = "disabled"
+)
+
 // userSelectColumns is the ordered column list used in all user SELECT queries.
-// It must match the scan order in scanUser.
-// password_hash and external_id are intentionally excluded — they are never
-// returned to the API layer.
-const userSelectColumns = "id, email, display_name, auth_provider, is_system_admin, " +
+const userSelectColumns = "id, email, display_name, auth_provider, role, status, " +
 	"created_at, updated_at, deleted_at"
 
 // User represents a user record in the database.
-// PasswordHash and ExternalID are not included; they are internal fields
-// that must never appear in API responses.
 type User struct {
-	ID            string
-	Email         string
-	DisplayName   string
-	AuthProvider  string
-	IsSystemAdmin bool
-	CreatedAt     string
-	UpdatedAt     string
-	DeletedAt     *string
+	ID           string
+	Email        string
+	DisplayName  string
+	AuthProvider string
+	Role         string
+	Status       string
+	CreatedAt    string
+	UpdatedAt    string
+	DeletedAt    *string
 }
 
 // CreateUserParams holds the input for creating a user.
-// If AuthProvider is empty it defaults to "local".
-// PasswordHash must already be a bcrypt digest when provided.
 type CreateUserParams struct {
-	Email         string
-	DisplayName   string
-	PasswordHash  *string
-	AuthProvider  string
-	ExternalID    *string
-	IsSystemAdmin bool
+	Email        string
+	DisplayName  string
+	PasswordHash *string
+	AuthProvider string
+	ExternalID   *string
+	Role         string
+	Status       string
 }
 
 // UpdateUserParams holds optional fields for updating a user.
-// A nil pointer means the field is not changed.
-// PasswordHash, when non-nil, must already be a bcrypt digest.
 type UpdateUserParams struct {
-	Email         *string
-	DisplayName   *string
-	PasswordHash  *string
-	IsSystemAdmin *bool
+	Email        *string
+	DisplayName  *string
+	PasswordHash *string
+	Role         *string
+	Status       *string
+}
+
+// ListUsersFilter holds optional list/search filters.
+type ListUsersFilter struct {
+	Cursor         string
+	Limit          int
+	IncludeDeleted bool
+	Search         string
+	Role           string
+	Status         string
+}
+
+func normalizeUserRole(role string) string {
+	switch role {
+	case UserRoleAdmin, UserRoleRoot:
+		return role
+	default:
+		return UserRoleMember
+	}
+}
+
+func normalizeUserStatus(status string) string {
+	if status == UserStatusDisabled {
+		return UserStatusDisabled
+	}
+	return UserStatusActive
 }
 
 // CreateUser inserts a new user and returns the persisted record.
-// It returns ErrConflict if the email is already taken.
-// If params.AuthProvider is empty, "local" is used.
 func (d *DB) CreateUser(ctx context.Context, params CreateUserParams) (*User, error) {
 	id, err := uuid.NewV7()
 	if err != nil {
@@ -65,22 +92,19 @@ func (d *DB) CreateUser(ctx context.Context, params CreateUserParams) (*User, er
 	if authProvider == "" {
 		authProvider = "local"
 	}
+	role := normalizeUserRole(params.Role)
+	status := normalizeUserStatus(params.Status)
 
 	p := d.dialect.Placeholder
 	insertQuery := "INSERT INTO users " +
-		"(id, email, display_name, password_hash, auth_provider, external_id, is_system_admin, created_at, updated_at) " +
+		"(id, email, display_name, password_hash, auth_provider, external_id, role, status, created_at, updated_at) " +
 		"VALUES (" +
 		p(1) + ", " + p(2) + ", " + p(3) + ", " + p(4) + ", " +
-		p(5) + ", " + p(6) + ", " + p(7) + ", " +
+		p(5) + ", " + p(6) + ", " + p(7) + ", " + p(8) + ", " +
 		"CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
 
 	selectQuery := "SELECT " + userSelectColumns +
 		" FROM users WHERE id = " + p(1) + " AND deleted_at IS NULL"
-
-	isSystemAdminInt := 0
-	if params.IsSystemAdmin {
-		isSystemAdminInt = 1
-	}
 
 	var user *User
 	err = d.WithTx(ctx, func(q Querier) error {
@@ -91,7 +115,8 @@ func (d *DB) CreateUser(ctx context.Context, params CreateUserParams) (*User, er
 			params.PasswordHash,
 			authProvider,
 			params.ExternalID,
-			isSystemAdminInt,
+			role,
+			status,
 		)
 		if execErr != nil {
 			return translateError(execErr)
@@ -109,15 +134,11 @@ func (d *DB) CreateUser(ctx context.Context, params CreateUserParams) (*User, er
 }
 
 // CreateUserWithMembership is a compatibility wrapper around CreateUser.
-// The orgID and role parameters are ignored after the marketplace pivot.
-//
-// Returns ErrConflict if the email is already taken.
 func (d *DB) CreateUserWithMembership(ctx context.Context, userParams CreateUserParams, orgID, role string) (*User, error) {
 	return d.CreateUser(ctx, userParams)
 }
 
 // GetUser retrieves an active user by their ID.
-// It returns ErrNotFound if the user does not exist or has been soft-deleted.
 func (d *DB) GetUser(ctx context.Context, id string) (*User, error) {
 	query := "SELECT " + userSelectColumns +
 		" FROM users WHERE id = " + d.dialect.Placeholder(1) + " AND deleted_at IS NULL"
@@ -130,10 +151,7 @@ func (d *DB) GetUser(ctx context.Context, id string) (*User, error) {
 	return user, nil
 }
 
-// GetUserByExternalID retrieves an active user by their identity provider and
-// external subject identifier. provider is the auth_provider value (e.g. "oidc")
-// and externalID is the subject claim from the ID token.
-// It returns ErrNotFound if no matching active user exists.
+// GetUserByExternalID retrieves an active user by provider + external ID.
 func (d *DB) GetUserByExternalID(ctx context.Context, provider, externalID string) (*User, error) {
 	query := "SELECT " + userSelectColumns +
 		" FROM users WHERE auth_provider = " + d.dialect.Placeholder(1) +
@@ -149,7 +167,6 @@ func (d *DB) GetUserByExternalID(ctx context.Context, provider, externalID strin
 }
 
 // GetUserByEmail retrieves an active user by their email address.
-// It returns ErrNotFound if no active user with that email exists.
 func (d *DB) GetUserByEmail(ctx context.Context, email string) (*User, error) {
 	query := "SELECT " + userSelectColumns +
 		" FROM users WHERE email = " + d.dialect.Placeholder(1) + " AND deleted_at IS NULL"
@@ -162,23 +179,36 @@ func (d *DB) GetUserByEmail(ctx context.Context, email string) (*User, error) {
 	return user, nil
 }
 
-// ListUsers returns a page of users ordered by ID ascending.
-// cursor is an exclusive lower bound on ID for keyset pagination; pass "" to start from the beginning.
-// limit controls the maximum number of records returned.
-// includeDeleted controls whether soft-deleted users are included.
-func (d *DB) ListUsers(ctx context.Context, cursor string, limit int, includeDeleted bool) ([]User, error) {
+// ListUsers returns a page of users with optional search/filter.
+func (d *DB) ListUsers(ctx context.Context, filter ListUsersFilter) ([]User, error) {
 	p := d.dialect.Placeholder
 	argN := 1
 	var conditions []string
 	var args []any
 
-	if !includeDeleted {
+	if !filter.IncludeDeleted {
 		conditions = append(conditions, "deleted_at IS NULL")
 	}
-	if cursor != "" {
+	if filter.Cursor != "" {
 		conditions = append(conditions, "id > "+p(argN))
-		args = append(args, cursor)
+		args = append(args, filter.Cursor)
 		argN++
+	}
+	if filter.Role != "" {
+		conditions = append(conditions, "role = "+p(argN))
+		args = append(args, filter.Role)
+		argN++
+	}
+	if filter.Status != "" {
+		conditions = append(conditions, "status = "+p(argN))
+		args = append(args, filter.Status)
+		argN++
+	}
+	if search := strings.TrimSpace(filter.Search); search != "" {
+		like := "%" + search + "%"
+		conditions = append(conditions, "(email LIKE "+p(argN)+" OR display_name LIKE "+p(argN+1)+" OR id = "+p(argN+2)+")")
+		args = append(args, like, like, search)
+		argN += 3
 	}
 
 	query := "SELECT " + userSelectColumns + " FROM users"
@@ -186,7 +216,7 @@ func (d *DB) ListUsers(ctx context.Context, cursor string, limit int, includeDel
 		query += " WHERE " + strings.Join(conditions, " AND ")
 	}
 	query += " ORDER BY id ASC LIMIT " + p(argN)
-	args = append(args, limit)
+	args = append(args, filter.Limit)
 
 	rows, err := d.sql.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -196,17 +226,11 @@ func (d *DB) ListUsers(ctx context.Context, cursor string, limit int, includeDel
 
 	var users []User
 	for rows.Next() {
-		var u User
-		var isSystemAdminInt int
-		if err := rows.Scan(
-			&u.ID, &u.Email, &u.DisplayName, &u.AuthProvider,
-			&isSystemAdminInt,
-			&u.CreatedAt, &u.UpdatedAt, &u.DeletedAt,
-		); err != nil {
+		u, err := scanUserFromRows(rows)
+		if err != nil {
 			return nil, fmt.Errorf("ListUsers scan: %w", err)
 		}
-		u.IsSystemAdmin = isSystemAdminInt != 0
-		users = append(users, u)
+		users = append(users, *u)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("ListUsers rows: %w", err)
@@ -216,10 +240,6 @@ func (d *DB) ListUsers(ctx context.Context, cursor string, limit int, includeDel
 }
 
 // UpdateUser applies a partial update to an active user.
-// Only non-nil fields in params are written. If all fields are nil the record
-// is returned unchanged without issuing an UPDATE.
-// It returns ErrNotFound if the user does not exist or has been soft-deleted,
-// and ErrConflict if the new email collides with an existing one.
 func (d *DB) UpdateUser(ctx context.Context, id string, params UpdateUserParams) (*User, error) {
 	p := d.dialect.Placeholder
 	argN := 1
@@ -241,13 +261,14 @@ func (d *DB) UpdateUser(ctx context.Context, id string, params UpdateUserParams)
 		args = append(args, *params.PasswordHash)
 		argN++
 	}
-	if params.IsSystemAdmin != nil {
-		isAdminInt := 0
-		if *params.IsSystemAdmin {
-			isAdminInt = 1
-		}
-		setClauses = append(setClauses, "is_system_admin = "+p(argN))
-		args = append(args, isAdminInt)
+	if params.Role != nil {
+		setClauses = append(setClauses, "role = "+p(argN))
+		args = append(args, normalizeUserRole(*params.Role))
+		argN++
+	}
+	if params.Status != nil {
+		setClauses = append(setClauses, "status = "+p(argN))
+		args = append(args, normalizeUserStatus(*params.Status))
 		argN++
 	}
 
@@ -291,7 +312,6 @@ func (d *DB) UpdateUser(ctx context.Context, id string, params UpdateUserParams)
 }
 
 // DeleteUser soft-deletes an active user by setting deleted_at.
-// It returns ErrNotFound if the user does not exist or is already deleted.
 func (d *DB) DeleteUser(ctx context.Context, id string) error {
 	p := d.dialect.Placeholder
 	query := "UPDATE users SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP " +
@@ -313,12 +333,10 @@ func (d *DB) DeleteUser(ctx context.Context, id string) error {
 	return nil
 }
 
-// GetUserPasswordHash retrieves the user ID and bcrypt password hash for login
-// verification. Returns ErrNotFound if the user does not exist or is deleted.
-// Returns ErrNoPassword if password_hash is NULL, indicating an external-auth account.
+// GetUserPasswordHash retrieves user ID and bcrypt hash for login.
 func (d *DB) GetUserPasswordHash(ctx context.Context, email string) (string, string, error) {
 	query := "SELECT id, password_hash FROM users WHERE email = " +
-		d.dialect.Placeholder(1) + " AND deleted_at IS NULL"
+		d.dialect.Placeholder(1) + " AND deleted_at IS NULL AND status = 'active'"
 
 	var id string
 	var passwordHash *string
@@ -332,11 +350,7 @@ func (d *DB) GetUserPasswordHash(ctx context.Context, email string) (string, str
 	return id, *passwordHash, nil
 }
 
-// GetUserPasswordHashByID retrieves the auth_provider and bcrypt password hash
-// for a user identified by their ID. It is used by the self-service password
-// change endpoint to verify the current password before accepting a new one.
-// Returns ErrNotFound if the user does not exist or is deleted.
-// Returns ErrNoPassword if password_hash is NULL, indicating an external-auth account.
+// GetUserPasswordHashByID retrieves auth_provider and bcrypt hash by user ID.
 func (d *DB) GetUserPasswordHashByID(ctx context.Context, userID string) (authProvider string, hash string, err error) {
 	query := "SELECT auth_provider, password_hash FROM users WHERE id = " +
 		d.dialect.Placeholder(1) + " AND deleted_at IS NULL"
@@ -352,37 +366,52 @@ func (d *DB) GetUserPasswordHashByID(ctx context.Context, userID string) (authPr
 	return authProvider, *passwordHash, nil
 }
 
-func (d *DB) ResolveUserRole(ctx context.Context, userID string) (role string, orgID string, err error) {
+// GetUserAuthState returns role and status for auth checks.
+func (d *DB) GetUserAuthState(ctx context.Context, userID string) (role string, status string, err error) {
 	p := d.dialect.Placeholder
-
-	var isAdmin int
 	err = d.sql.QueryRowContext(ctx,
-		"SELECT is_system_admin FROM users WHERE id = "+p(1)+" AND deleted_at IS NULL",
+		"SELECT role, status FROM users WHERE id = "+p(1)+" AND deleted_at IS NULL",
 		userID,
-	).Scan(&isAdmin)
+	).Scan(&role, &status)
 	if err != nil {
-		return "", "", fmt.Errorf("ResolveUserRole get admin flag: %w", translateError(err))
+		return "", "", fmt.Errorf("GetUserAuthState: %w", translateError(err))
 	}
-
-	if isAdmin == 1 {
-		return "system_admin", "", nil
-	}
-	return "member", "", nil
+	return role, status, nil
 }
 
-// scanUser scans a single user row returned by QueryRowContext.
-// It handles the is_system_admin INTEGER→bool conversion for SQLite compatibility.
+func (d *DB) ResolveUserRole(ctx context.Context, userID string) (role string, orgID string, err error) {
+	role, status, err := d.GetUserAuthState(ctx, userID)
+	if err != nil {
+		return "", "", fmt.Errorf("ResolveUserRole: %w", err)
+	}
+	if status == UserStatusDisabled {
+		return "", "", ErrNotFound
+	}
+	return role, "", nil
+}
+
 func scanUser(row *sql.Row) (*User, error) {
 	var u User
-	var isSystemAdminInt int
 	err := row.Scan(
 		&u.ID, &u.Email, &u.DisplayName, &u.AuthProvider,
-		&isSystemAdminInt,
+		&u.Role, &u.Status,
 		&u.CreatedAt, &u.UpdatedAt, &u.DeletedAt,
 	)
 	if err != nil {
 		return nil, err
 	}
-	u.IsSystemAdmin = isSystemAdminInt != 0
+	return &u, nil
+}
+
+func scanUserFromRows(rows *sql.Rows) (*User, error) {
+	var u User
+	err := rows.Scan(
+		&u.ID, &u.Email, &u.DisplayName, &u.AuthProvider,
+		&u.Role, &u.Status,
+		&u.CreatedAt, &u.UpdatedAt, &u.DeletedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
 	return &u, nil
 }

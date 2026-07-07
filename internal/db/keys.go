@@ -40,8 +40,8 @@ type KeyRecord struct {
 	// ExpiresAt is the optional key expiry, stored as RFC3339 in the DB.
 	ExpiresAt *time.Time
 
-	// IsSystemAdmin is 1 when the owning user has users.is_system_admin set.
-	IsSystemAdmin int
+	// UserRole is the RBAC role of the owning user (member, admin, root).
+	UserRole string
 }
 
 // LoadAllActiveKeys returns all non-deleted, non-expired API keys with their
@@ -63,7 +63,7 @@ SELECT
     k.status, k.spend_cap, k.spend_used, k.ip_whitelist, k.ip_blacklist,
     k.model_limits_enabled, k.model_limits,
     k.expires_at,
-    COALESCE(u.is_system_admin, 0)
+    COALESCE(u.role, 'member')
 FROM api_keys k
 LEFT JOIN users u ON u.id = k.user_id AND u.deleted_at IS NULL
 WHERE k.deleted_at IS NULL
@@ -96,7 +96,7 @@ ORDER BY k.id ASC`, d.dialect.Placeholder(1))
 			&r.IPWhitelist, &r.IPBlacklist,
 			&modelLimitsEnabled, &r.ModelLimits,
 			&expiresAtRaw,
-			&r.IsSystemAdmin,
+			&r.UserRole,
 		); err != nil {
 			skipErrors = append(skipErrors, fmt.Errorf("scan row: %w", err))
 			continue
@@ -133,7 +133,7 @@ SELECT
     k.status, k.spend_cap, k.spend_used, k.ip_whitelist, k.ip_blacklist,
     k.model_limits_enabled, k.model_limits,
     k.expires_at,
-    COALESCE(u.is_system_admin, 0)
+    COALESCE(u.role, 'member')
 FROM api_keys k
 LEFT JOIN users u ON u.id = k.user_id AND u.deleted_at IS NULL
 WHERE k.deleted_at IS NULL
@@ -156,7 +156,7 @@ WHERE k.deleted_at IS NULL
 		&r.IPWhitelist, &r.IPBlacklist,
 		&modelLimitsEnabled, &r.ModelLimits,
 		&expiresAtRaw,
-		&r.IsSystemAdmin,
+		&r.UserRole,
 	)
 	if err != nil {
 		return KeyRecord{}, fmt.Errorf("lookup active key: %w", translateError(err))
