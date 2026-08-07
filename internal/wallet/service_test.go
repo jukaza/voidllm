@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/jukaza/tavo/internal/config"
 	"github.com/jukaza/tavo/internal/db"
@@ -181,5 +182,37 @@ func TestRegister(t *testing.T) {
 	svc.Register("new-user")
 	if err := svc.Check("new-user"); err != ErrInsufficientBalance {
 		t.Errorf("Check after Register = %v, want ErrInsufficientBalance (zero balance)", err)
+	}
+}
+
+func TestCacheKeyNotAliased(t *testing.T) {
+	t.Parallel()
+	database := openTestDB(t, "TestWalletKeyAlias")
+	svc := newTestService(t, database)
+
+	// Fiber returns request params as strings that alias a reused buffer
+	// (via unsafe.String). If the wallet cache stores such a string directly,
+	// reusing the buffer for a later request silently mutates the map key and
+	// every subsequent Check lookup misses — the "insufficient balance" bug.
+	buf := []byte("019fdd04-e73b-71e1-b920-f6995be49e9b")
+	userID := unsafe.String(&buf[0], len(buf))
+
+	svc.Register(userID)
+	svc.SetBalance(userID, 100.0)
+
+	// A separate request resolves the same user from the auth cache — the
+	// canonical, non-aliased ID used for the balance check.
+	canonical := "019fdd04-e73b-71e1-b920-f6995be49e9b"
+
+	// The caller's buffer is reused by the next request (e.g. the proxy path
+	// "/v1/chat/completions" whose tail corrupts the aliased key).
+	copy(buf, "/v1/chat/completions")
+
+	if err := svc.Check(canonical); err != nil {
+		t.Errorf("Check after buffer reuse = %v, want nil", err)
+	}
+	balance, ok := svc.Balance(canonical)
+	if !ok || balance != 100.0 {
+		t.Errorf("balance = %v (ok=%v), want 100", balance, ok)
 	}
 }

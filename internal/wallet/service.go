@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 
 	"github.com/jukaza/tavo/internal/db"
@@ -46,6 +47,15 @@ func NewService(ctx context.Context, database *db.DB, log *slog.Logger) (*Servic
 		db:       database,
 		log:      log,
 	}, nil
+}
+
+// cloneKey copies a userID that is about to become a long-lived map key.
+// Callers may pass strings that alias a reused buffer (e.g. a Fiber request
+// path param); storing such a string directly would let the key be mutated
+// in place when the buffer is reused by a later request, silently corrupting
+// the balance cache.
+func cloneKey(userID string) string {
+	return strings.Clone(userID)
 }
 
 // Check returns nil when the user has a wallet with positive balance.
@@ -106,6 +116,7 @@ func (s *Service) PersistDebit(ctx context.Context, userID string, amount float6
 	if amount <= 0 {
 		return
 	}
+	userID = cloneKey(userID)
 
 	newBalance, err := s.db.ApplyTransaction(ctx, db.ApplyTransactionParams{
 		UserID:      userID,
@@ -132,6 +143,7 @@ func (s *Service) PersistDebit(ctx context.Context, userID string, amount float6
 // entry of the given type ('topup' | 'adjustment' | 'refund') and updating
 // the cache. Used by top-up approval and admin adjustments.
 func (s *Service) Credit(ctx context.Context, userID string, amount float64, txType, refID, description string) (float64, error) {
+	userID = cloneKey(userID)
 	newBalance, err := s.db.ApplyTransaction(ctx, db.ApplyTransactionParams{
 		UserID:      userID,
 		Type:        txType,
@@ -151,6 +163,7 @@ func (s *Service) Credit(ctx context.Context, userID string, amount float64, txT
 // SetBalance overwrites the cached balance for a user. Used after flows that
 // update the DB outside this service (e.g. ReviewTopupRequest).
 func (s *Service) SetBalance(userID string, balance float64) {
+	userID = cloneKey(userID)
 	s.mu.Lock()
 	s.balances[userID] = balance
 	s.mu.Unlock()
@@ -159,6 +172,7 @@ func (s *Service) SetBalance(userID string, balance float64) {
 // Register adds a zero-balance cache entry for a newly created wallet so
 // that hot-path checks stop returning ErrNoWallet.
 func (s *Service) Register(userID string) {
+	userID = cloneKey(userID)
 	s.mu.Lock()
 	if _, ok := s.balances[userID]; !ok {
 		s.balances[userID] = 0

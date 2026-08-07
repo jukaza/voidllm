@@ -50,7 +50,7 @@ id_ed25519.*
 # Logs
 logs/
 *.log
-
+docs/
 # IDE
 .idea/
 .vscode/
